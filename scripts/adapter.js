@@ -377,9 +377,12 @@ export class Pf2eAdapter extends SystemAdapter {
             heal = heal.map((p, i) => i === 0 ? { ...p, flat: p.flat + 8 * (spell.rank ?? 1) } : p);
           }
           const animalOnly = /animal/i.test(spell.system.target?.value ?? "");
+          // One-action heal is a touch; two actions reach 30 feet.
+          const touch = /touch/i.test(spell.system.range?.value ?? "") || (cost === 1 && HEAL_SPELLS_TWO_ACTION_BONUS.has(spell.slug));
+          const reach = touch ? { reach: 5 } : rangeFeet ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
           out.push({
             id, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank,
-            targetTrait: animalOnly ? "animal" : null
+            targetTrait: animalOnly ? "animal" : null, ...reach
           });
           continue;
         }
@@ -472,7 +475,8 @@ export class Pf2eAdapter extends SystemAdapter {
         cost: 1,
         heal: [{ dice: [{ n: 2, faces: 8, mult: 1 }], flat: bonus, type: "healing", persistent: false, category: null }],
         healCheck: { mod: medicine.mod, dc },
-        oncePerTarget: true
+        oncePerTarget: true,
+        reach: 5 // yourself or an adjacent creature
       });
     }
     return out;

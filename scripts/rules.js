@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike } from "./core.js";
 
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
@@ -28,6 +28,23 @@ const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ??
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
+
+  /**
+   * Reactive Strike: only creatures that have it strike a foe leaving their reach (one reaction a round). A Step
+   * (an action, five feet) gets out of reach without triggering it.
+   */
+  reactions() {
+    return 1;
+  },
+  opportunity(reactor) {
+    if ( !reactor.spec.flags?.reactiveStrike ) return null;
+    const c = reactor.conds ?? {};
+    if ( c.incapacitated || c.paralyzed || c.stunned ) return null;
+    return bestReactionStrike(reactor);
+  },
+  disengage() {
+    return { cost: { actions: 1 }, label: "Steps carefully out of reach" };
+  },
   /** A hit always deals at least 1 damage before resistances, however large the penalties. */
   minimumDamage: 1,
 

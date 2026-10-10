@@ -49,6 +49,8 @@ export function derivePf2eTraits(d) {
     reasons.tactical += ", hunts in packs";
   }
   if ( abilities.has("sneak-attack") ) flags.sneakAttack = true;
+  // Not everyone can punish a foe for moving: only those with Reactive Strike (Attack of Opportunity, before the remaster).
+  if ( abilities.has("reactive-strike") || abilities.has("attack-of-opportunity") ) flags.reactiveStrike = true;
 
   // Brave ------------------------------------------------------------
   let brave;

@@ -9,7 +9,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - spells (spell attacks, basic and non-basic saves, auto-hit spells such as Force Barrage)
   - crowd-control spells, read degree by degree from their text (Fear, Slow, Sleep, Paralyze, Command, Tangle Vine ...), and damage spells' critical-failure riders (Daze's stunned 1)
   - prepared and spontaneous slots, focus points
-  - healing spells, potions and elixirs, Battle Medicine
+  - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet)
   - sneak attack and pack attack, knockdown and grab
   - poisons and diseases parsed stage by stage from their text
   - immunities, weaknesses and resistances
@@ -24,7 +24,8 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - range increments, and Steal at −5 in combat;
   - persistent damage with flat checks;
   - dying, wounded and doomed with recovery checks, and Administer First Aid (DC 15 + dying);
-  - immunity by trait (mental, fear, emotion, sleep and others; the mindless shrug off mental effects), and incapacitation.
+  - immunity by trait (mental, fear, emotion, sleep and others; the mindless shrug off mental effects), and incapacitation;
+  - Reactive Strike: only creatures that have it (Attack of Opportunity, before the remaster) strike a foe leaving their reach, once a round. A careful creature Steps out of reach first.
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities.
 - **Difficulty cross-check:** compares the simulation with the PF2e encounter XP budget.
 - **Make it So for PF2e:** writes:

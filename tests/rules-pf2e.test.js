@@ -70,3 +70,20 @@ describe("pf2e dying", () => {
     expect(a.status).toBe(STATUS.DEAD);
   });
 });
+
+describe("pf2e Reactive Strike", () => {
+  test("only creatures that have it react; a Step gets clear", async () => {
+    const { derivePf2eTraits } = await import("../scripts/traits.js");
+    const fighter = derivePf2eTraits({ type: "character", level: 1, traits: [], int: 0, wis: 1, will: 5, abilities: ["reactive-strike"] });
+    const wizard = derivePf2eTraits({ type: "character", level: 1, traits: [], int: 4, wis: 1, will: 7, abilities: [] });
+    const legacy = derivePf2eTraits({ type: "npc", level: 2, traits: ["humanoid"], int: 0, wis: 0, will: 6, abilities: ["attack-of-opportunity"] });
+    expect(fighter.flags.reactiveStrike).toBe(true);
+    expect(wizard.flags.reactiveStrike).toBeUndefined();
+    expect(legacy.flags.reactiveStrike).toBe(true);
+    const sword = { kind: "strike", melee: true, damage: [{ dice: [{ n: 1, faces: 8, mult: 1 }], flat: 4, type: "slashing" }], bonus: 7 };
+    const unit = flags => ({ spec: { flags }, conds: {}, prep: { offense: [sword] } });
+    expect(pf2eRules.opportunity(unit({ reactiveStrike: true }))).toBe(sword);
+    expect(pf2eRules.opportunity(unit({}))).toBeNull();
+    expect(pf2eRules.disengage().cost).toEqual({ actions: 1 });
+  });
+});
