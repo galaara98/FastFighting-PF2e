@@ -142,20 +142,30 @@ export class Pf2eAdapter extends SystemAdapter {
       // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
       creatureTraits: traits,
-      social: {
-        diplomacy: actor.skills?.diplomacy?.mod,
-        intimidation: actor.skills?.intimidation?.mod,
-        deception: actor.skills?.deception?.mod,
-        willDC: actor.saves?.will?.dc?.value ?? (level + 15),
-        perceptionDC: actor.perception?.dc?.value ?? (level + 15),
-        languages: [...(sys.details?.languages?.value ?? [])],
-        mindless: traits.includes("mindless")
-      },
+      social: this.#social(actor, level, traits),
       leadership: this.#leadershipEntry(actor, tokenDoc.id)
     };
   }
 
   /* -------------------------------------------- */
+
+  /** Talking in PF2e: Diplomacy persuades, Intimidation threatens, Deception bluffs; Will and Perception DCs resist. */
+  #social(actor, level, traits) {
+    const skill = slug => {
+      const s = actor.skills?.[slug];
+      return typeof s?.mod === "number" ? { skill: s.label ?? slug, mod: s.mod } : null;
+    };
+    const will = actor.saves?.will;
+    const willDC = { dc: will?.dc?.value ?? level + 15, label: will?.label ?? "Will" };
+    return {
+      pitches: { persuade: skill("diplomacy"), intimidate: skill("intimidation"), deceive: skill("deception") },
+      resist: { persuade: willDC, intimidate: willDC, deceive: { dc: actor.perception?.dc?.value ?? level + 15, label: actor.perception?.label ?? "Perception" } },
+      // How strong-willed it is next to a typical creature of its level (moderate Will is about level × 1.15 + 5).
+      resolve: (will?.mod ?? Math.round(level * 1.15 + 5)) - Math.round(level * 1.15 + 5),
+      languages: [...(actor.system.details?.languages?.value ?? [])],
+      mindless: traits.includes("mindless")
+    };
+  }
 
   #conditions(actor) {
     const out = {};
@@ -469,6 +479,12 @@ export class Pf2eAdapter extends SystemAdapter {
 
   async commitOutcome(tokenDoc, spec, final, options) {
     return commitPf2eOutcome(tokenDoc, spec, final, options);
+  }
+
+  resourceLabel(key) {
+    if ( key === "focus" ) return game.i18n.localize("FFPF2E.FocusPoint");
+    if ( key.startsWith("slots:") ) return game.i18n.format("FFPF2E.SlotRank", { rank: key.split(":")[2] });
+    return null;
   }
 
   describeOutcome(spec, final) {
