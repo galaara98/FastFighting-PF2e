@@ -45,6 +45,14 @@ export const pf2eRules = {
   disengage() {
     return { cost: { actions: 1 }, label: "Steps carefully out of reach" };
   },
+  /** A wooden door (Hardness 5, 20 HP), a simple lock (DC 20 to Force Open or Pick a Lock). */
+  door: { ac: 10, hp: 20, hardness: 5, forceDC: 20, pickDC: 20 },
+  /** Opening a door is an Interact action; Force Open one action; Pick a Lock two. */
+  doorCosts: { open: { actions: 1 }, force: { actions: 1 }, pick: { actions: 2 } },
+  /** Hardness comes off every blow. */
+  doorDamage(door, damage) {
+    return damage - (door.hardness ?? 0);
+  },
   /** A hit always deals at least 1 damage before resistances, however large the penalties. */
   minimumDamage: 1,
 

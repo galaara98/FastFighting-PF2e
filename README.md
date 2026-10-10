@@ -25,6 +25,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - persistent damage with flat checks;
   - dying, wounded and doomed with recovery checks, and Administer First Aid (DC 15 + dying);
   - immunity by trait (mental, fear, emotion, sleep and others; the mindless shrug off mental effects), and incapacitation;
+  - doors: a wooden door (Hardness 5, 20 HP) with a simple lock: Force Open (Athletics, one action) or Pick a Lock (trained Thievery and a thieves' toolkit, two actions), DC 20; opening one is an Interact action;
   - Reactive Strike: only creatures that have it (Attack of Opportunity, before the remaster) strike a foe leaving their reach, once a round. A careful creature Steps out of reach first.
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities.
 - **Difficulty cross-check:** compares the simulation with the PF2e encounter XP budget.

@@ -144,6 +144,12 @@ export class Pf2eAdapter extends SystemAdapter {
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
       // Steal: Thievery, for those trained in it.
       theft: actor.skills?.thievery?.proficient ? { skill: actor.skills.thievery.label ?? "Thievery", mod: actor.skills.thievery.mod } : null,
+      // A locked door: Force Open (Athletics), or Pick a Lock (trained in Thievery, with a thieves' toolkit for a PC).
+      doorWork: {
+        force: { mod: actor.skills?.athletics?.mod ?? 0 },
+        pick: actor.skills?.thievery?.proficient && (actor.type !== "character" || actor.items.some(i => /thieves-?(tool|toolkit)/.test(i.slug ?? "")))
+          ? { mod: actor.skills.thievery.mod } : null
+      },
       creatureTraits: traits,
       social: this.#social(actor, level, traits),
       valuables: this.#valuables(actor),
