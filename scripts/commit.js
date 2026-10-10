@@ -23,6 +23,7 @@ export function describePf2eOutcome(spec, final) {
   if ( final.status === STATUS.DEAD ) lines.push(spec.kind === "pc" ? "DIES" : "Dead");
   else if ( final.status === STATUS.FLED ) lines.push(spec.kind === "pc" ? "Retreated from the battle" : final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
   else if ( final.status === STATUS.SURRENDERED ) lines.push("Surrenders");
+  else if ( final.status === STATUS.STOOD_DOWN ) lines.push("Stands down (talked out of fighting)");
   if ( final.swayed === "switched" ) lines.push(`Switches sides (now ${final.side})`);
   else if ( final.status === STATUS.DOWN ) lines.push(final.dying > 0 ? `Dying ${final.dying}` : "Unconscious (stable)");
   if ( final.wounded > (spec.wounded ?? 0) ) lines.push(`Wounded ${final.wounded}`);
