@@ -7,6 +7,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
 - **Reading actors:**
   - strikes (multiple attack penalty, agile, reach, reload, drawing unready weapons)
   - spells (spell attacks, basic and non-basic saves, auto-hit spells such as Force Barrage)
+  - crowd-control spells, read degree by degree from their text (Fear, Slow, Sleep, Paralyze, Command, Tangle Vine ...), and damage spells' critical-failure riders (Daze's stunned 1)
   - prepared and spontaneous slots, focus points
   - healing spells, potions and elixirs, Battle Medicine
   - sneak attack and pack attack, knockdown and grab
@@ -14,10 +15,28 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - immunities, weaknesses and resistances
   - speeds by movement type
   - languages, Diplomacy, Intimidation, Deception, Will and Perception DCs (for talking)
-- **Rules:** four degrees of success, natural 20/1, basic saves, persistent damage with flat checks, and dying, wounded and doomed with recovery checks.
+  - Thievery (for theft, against Perception DC), Medicine (for first aid after the fight), coins and gear (for what a creature could be talked into giving up or have stolen)
+  - conditions, persistent damage and dying already on a creature (a fight resumed mid-way)
+- **Rules:**
+  - four degrees of success, natural 20/1, basic saves, and a minimum of 1 damage per hit;
+  - the multiple attack penalty and three actions a turn;
+  - off-guard, frightened, sickened, clumsy, enfeebled, prone, slowed, stunned, paralyzed and fleeing;
+  - range increments, and Steal at −5 in combat;
+  - persistent damage with flat checks;
+  - dying, wounded and doomed with recovery checks, and Administer First Aid (DC 15 + dying);
+  - immunity by trait (mental, fear, emotion, sleep and others; the mindless shrug off mental effects), and incapacitation.
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities.
 - **Difficulty cross-check:** compares the simulation with the PF2e encounter XP budget.
-- **Make it So for PF2e:** writes HP and temp HP, dying, wounded, unconscious, prone and lingering conditions, persistent damage conditions, affliction effects, death, lootable corpses or loot piles, expended slots and focus, used consumables, surrender, and side switches (alliance and disposition).
+- **Make it So for PF2e:** writes:
+  - HP and temp HP;
+  - dying, wounded, unconscious, prone and lingering conditions;
+  - persistent damage conditions, and affliction effects (noting any onset still to come);
+  - death, and lootable corpses or loot piles (gear moves off the corpse);
+  - expended slots and focus, and used consumables;
+  - surrender and side switches (alliance and disposition);
+  - coins (with change made) and items handed over by someone talked into it or robbed.
+
+  A retreating PC stays on the map.
 
 ## Installation
 
