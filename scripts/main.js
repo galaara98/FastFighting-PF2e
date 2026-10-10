@@ -1,0 +1,18 @@
+/**
+ * FastFighting PF2e: teaches FastFighting Core how Pathfinder Second Edition works.
+ * Registers the PF2e adapter (actor data, rules, personality defaults, leadership, afflictions,
+ * Make it So) through the core's public API.
+ */
+import { Pf2eAdapter } from "./adapter.js";
+
+export const MODULE_ID = "fast-fighting-pf2e";
+
+Hooks.once("fastFighting.init", api => {
+  api.registerAdapter("pf2e", Pf2eAdapter, { priority: 10, source: MODULE_ID });
+});
+
+Hooks.once("ready", () => {
+  if ( !game.modules.get("fast-fighting")?.active && game.user.isGM ) {
+    ui.notifications.warn(game.i18n.localize("FFPF2E.NeedsCore"));
+  }
+});

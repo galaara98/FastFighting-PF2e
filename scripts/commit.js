@@ -1,0 +1,260 @@
+/**
+ * PF2e "Make it So": write one simulated outcome onto a token's actor, returning an undo record.
+ *
+ * Undo record shape (consumed by foundry/make-it-so.js):
+ *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
+ *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
+ */
+import { MODULE_ID, STATUS } from "./core.js";
+
+const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
+const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed" };
+
+function partFormula(p) {
+  const dice = p.dice.map(d => `${d.mult && d.mult !== 1 ? `${d.mult}*` : ""}${d.n}d${d.faces}`);
+  const flat = p.flat ? [String(p.flat)] : [];
+  return [...dice, ...flat].join("+").replace(/\+-/g, "-") || "1";
+}
+
+/** Human-readable list of what will change, for the confirmation dialog. */
+export function describePf2eOutcome(spec, final) {
+  const lines = [];
+  if ( final.hp !== spec.hp.value ) lines.push(`HP ${spec.hp.value} → ${final.hp}`);
+  if ( final.status === STATUS.DEAD ) lines.push(spec.kind === "pc" ? "DIES" : "Dead");
+  else if ( final.status === STATUS.FLED ) lines.push(final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
+  else if ( final.status === STATUS.SURRENDERED ) lines.push("Surrenders");
+  if ( final.swayed === "switched" ) lines.push(`Switches sides (now ${final.side})`);
+  else if ( final.status === STATUS.DOWN ) lines.push(final.dying > 0 ? `Dying ${final.dying}` : "Unconscious (stable)");
+  if ( final.wounded > (spec.wounded ?? 0) ) lines.push(`Wounded ${final.wounded}`);
+  for ( const p of final.persistent ?? [] ) lines.push(`Persistent ${partFormula(p.part)} ${p.type}`);
+  for ( const a of final.afflictions ?? [] ) lines.push(`${a.name} (stage ${a.stage})`);
+  for ( const [k, v] of Object.entries(final.conditions ?? {}) ) if ( LINGERING[k] ) lines.push(`${k} ${v === true ? "" : v}`.trim());
+  for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
+    const used = start - (final.resources?.[key] ?? start);
+    if ( used > 0 ) lines.push(`Uses ${used}× ${resourceLabel(spec, key)}`);
+  }
+  return lines;
+}
+
+function resourceLabel(spec, key) {
+  const action = spec.actions.find(a => a.resource === key);
+  if ( key === "focus" ) return "Focus Point";
+  if ( key.startsWith("slots:") ) return `rank ${key.split(":")[2]} spell slot`;
+  return action?.name ?? key;
+}
+
+async function setCondition(actor, slug, value, undo) {
+  const existing = actor.itemTypes.condition.find(c => c.slug === slug && !c.isLocked);
+  if ( existing ) {
+    const before = existing.value;
+    if ( before === value ) return;
+    undo.itemUpdates.push({ id: existing.id, update: { "system.value.value": before } });
+    await game.pf2e.ConditionManager.updateConditionValue(existing.id, actor, value);
+    return;
+  }
+  const created = await actor.increaseCondition(slug, typeof value === "number" ? { value, max: value } : {});
+  if ( created ) undo.createdItems.push(created.id);
+}
+
+/**
+ * @param {TokenDocument} tokenDoc
+ * @param {object} spec
+ * @param {object} final
+ * @param {object} options  {lootMode: "corpse"|"pile"|"none", corpseMode: "keep"|"remove", fledMode: "hide"|"leave", sourceNames}
+ */
+export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
+  const actor = tokenDoc.actor;
+  const undo = {
+    tokenUuid: tokenDoc.uuid, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [],
+    deletedItems: [], tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
+  };
+  const sys = actor.system;
+  // PF2e adds linked conditions on its own (dying → unconscious → prone), so undo tracks every new item.
+  const itemsBefore = new Set(actor.items.map(i => i.id));
+  const update = {};
+  const hp = sys.attributes.hp;
+  if ( hp.value !== final.hp ) {
+    update["system.attributes.hp.value"] = final.hp;
+    undo.actorUpdate["system.attributes.hp.value"] = hp.value;
+  }
+  if ( (hp.temp ?? 0) !== final.temp ) {
+    update["system.attributes.hp.temp"] = final.temp;
+    undo.actorUpdate["system.attributes.hp.temp"] = hp.temp ?? 0;
+  }
+  // Focus points and spontaneous slots
+  for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
+    const left = final.resources?.[key] ?? start;
+    if ( left === start ) continue;
+    if ( key === "focus" ) {
+      update["system.resources.focus.value"] = left;
+      undo.actorUpdate["system.resources.focus.value"] = sys.resources?.focus?.value ?? start;
+    }
+  }
+  if ( Object.keys(update).length ) await actor.update(update);
+
+  await commitSpellsAndItems(actor, spec, final, undo);
+
+  // Conditions
+  if ( final.status === STATUS.DOWN ) {
+    if ( final.dying > 0 ) await setCondition(actor, "dying", final.dying, undo);
+    else await setCondition(actor, "unconscious", null, undo);
+  }
+  if ( final.wounded > (sys.attributes?.wounded?.value ?? 0) ) await setCondition(actor, "wounded", final.wounded, undo);
+  if ( final.prone && final.status === STATUS.STANDING ) await setCondition(actor, "prone", null, undo);
+  for ( const [k, v] of Object.entries(final.conditions ?? {}) ) {
+    const slug = LINGERING[k];
+    if ( slug && final.status !== STATUS.DEAD ) await setCondition(actor, slug, typeof v === "number" ? v : 1, undo);
+  }
+
+  // Persistent damage and afflictions (only matter for the living)
+  if ( final.status !== STATUS.DEAD ) {
+    const toCreate = [];
+    for ( const p of final.persistent ?? [] ) {
+      const cond = game.pf2e.ConditionManager.getCondition("persistent-damage").toObject();
+      cond.system.persistent = { formula: partFormula(p.part), damageType: p.type, dc: 15, criticalHit: false };
+      toCreate.push(cond);
+    }
+    for ( const a of final.afflictions ?? [] ) {
+      toCreate.push({
+        type: "effect",
+        name: `${a.name} (Stage ${a.stage})`,
+        img: "icons/svg/poison.svg",
+        system: {
+          description: { value: `<p>Afflicted during a FastFighting battle. Stage ${a.stage}; ${a.save} DC ${a.dc}. Continue tracking stages per the affliction's rules.</p>` },
+          badge: { type: "counter", value: a.stage },
+          duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
+          tokenIcon: { show: true }
+        },
+        flags: { [MODULE_ID]: { affliction: a } }
+      });
+    }
+    if ( toCreate.length ) {
+      const created = await actor.createEmbeddedDocuments("Item", toCreate);
+      undo.createdItems.push(...created.map(i => i.id));
+    }
+  }
+
+  // Death, loot, fleeing
+  if ( final.status === STATUS.DEAD ) {
+    await actor.toggleStatusEffect("dead", { active: true, overlay: true });
+    undo.statuses.push({ id: "dead", active: false, overlay: true });
+    const combatant = game.combat?.getCombatantsByToken?.(tokenDoc)?.[0];
+    if ( combatant && !combatant.defeated ) {
+      await combatant.update({ defeated: true });
+      undo.combatant = { uuid: combatant.uuid, defeated: false };
+    }
+    if ( spec.kind !== "pc" ) await handleLoot(tokenDoc, actor, options, undo);
+  } else if ( final.status === STATUS.FLED && options.fledMode !== "leave" ) {
+    undo.tokenUpdate = { hidden: tokenDoc.hidden };
+    await tokenDoc.update({ hidden: true });
+  } else if ( final.status === STATUS.SURRENDERED ) {
+    const [effect] = await actor.createEmbeddedDocuments("Item", [{
+      type: "effect",
+      name: game.i18n.localize("FASTFIGHTING.MakeItSo.Surrendered"),
+      img: "icons/svg/cancel.svg",
+      system: {
+        description: { value: `<p>${game.i18n.localize("FASTFIGHTING.MakeItSo.SurrenderedHint")}</p>` },
+        duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
+        tokenIcon: { show: true }
+      }
+    }]);
+    if ( effect ) undo.createdItems.push(effect.id);
+  }
+  if ( final.swayed === "switched" ) {
+    const friendly = final.side === "friendly";
+    undo.actorUpdate["system.details.alliance"] = actor.system.details?.alliance ?? null;
+    undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
+    await actor.update({ "system.details.alliance": friendly ? "party" : "opposition" });
+    await tokenDoc.update({ disposition: friendly ? CONST.TOKEN_DISPOSITIONS.FRIENDLY : CONST.TOKEN_DISPOSITIONS.HOSTILE });
+  }
+  const live = tokenDoc.actor ?? actor;
+  for ( const item of live.items ) {
+    if ( !itemsBefore.has(item.id) && !undo.createdItems.includes(item.id) ) undo.createdItems.push(item.id);
+  }
+  return undo;
+}
+
+async function commitSpellsAndItems(actor, spec, final, undo) {
+  const entryUpdates = new Map();
+  for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
+    const left = final.resources?.[key] ?? start;
+    const used = start - left;
+    if ( used <= 0 ) continue;
+    const [kind, a, b] = key.split(":");
+    if ( kind === "prep" ) {
+      const entry = actor.items.get(a);
+      if ( !entry ) continue;
+      const slots = foundry.utils.deepClone(entryUpdates.get(a) ?? entry._source.system.slots);
+      let remaining = used;
+      for ( const [slotKey, slot] of Object.entries(slots) ) {
+        if ( slotKey === "slot0" ) continue;
+        for ( const p of slot.prepared ?? [] ) {
+          if ( remaining > 0 && p.id === b && !p.expended ) { p.expended = true; remaining -= 1; }
+        }
+      }
+      entryUpdates.set(a, slots);
+    } else if ( kind === "slots" ) {
+      const entry = actor.items.get(a);
+      if ( !entry ) continue;
+      const slots = foundry.utils.deepClone(entryUpdates.get(a) ?? entry._source.system.slots);
+      if ( slots[`slot${b}`] ) slots[`slot${b}`].value = left;
+      entryUpdates.set(a, slots);
+    } else if ( kind === "item" ) {
+      const item = actor.items.get(a);
+      if ( !item ) continue;
+      const perItem = Math.max(1, item.system.uses?.max ?? 1);
+      const quantity = Math.max(0, Math.ceil(left / perItem));
+      if ( quantity <= 0 ) {
+        undo.deletedItems.push(item.toObject());
+        await item.delete();
+      } else {
+        undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
+        await item.update({ "system.quantity": quantity });
+      }
+    }
+  }
+  for ( const [entryId, slots] of entryUpdates ) {
+    const entry = actor.items.get(entryId);
+    undo.itemUpdates.push({ id: entryId, update: { "system.slots": foundry.utils.deepClone(entry._source.system.slots) } });
+    await entry.update({ "system.slots": slots });
+  }
+}
+
+async function handleLoot(tokenDoc, actor, options, undo) {
+  const mode = options.lootMode ?? "corpse";
+  if ( mode === "none" ) return;
+  if ( mode === "corpse" ) {
+    undo.actorUpdate["flags.pf2e.lootable"] = actor.flags.pf2e?.lootable ?? false;
+    await actor.update({ "flags.pf2e.lootable": true });
+    return;
+  }
+  // Loot pile: a PF2e loot actor at the corpse's position holding its physical gear.
+  const items = actor.items.filter(i => PHYSICAL.has(i.type)).map(i => {
+    const data = i.toObject();
+    delete data._id;
+    if ( data.system?.equipped ) data.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
+    return data;
+  });
+  if ( !items.length ) return;
+  const pileActor = await Actor.create({
+    name: game.i18n.format("FASTFIGHTING.MakeItSo.Remains", { name: tokenDoc.name }),
+    type: "loot",
+    img: "icons/containers/bags/sack-leather-brown.webp",
+    system: { lootSheetType: "Loot" },
+    ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED },
+    items
+  });
+  undo.createdActors.push(pileActor.uuid);
+  const [pileToken] = await tokenDoc.parent.createEmbeddedDocuments("Token", [{
+    ...(await pileActor.getTokenDocument({ x: tokenDoc.x, y: tokenDoc.y, elevation: tokenDoc.elevation, level: tokenDoc.level }))
+      .toObject(),
+    actorLink: true,
+    disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL
+  }]);
+  undo.createdTokens.push(pileToken.uuid);
+  if ( options.corpseMode === "remove" ) {
+    undo.deletedTokens.push({ parentUuid: tokenDoc.parent.uuid, data: tokenDoc.toObject() });
+    await tokenDoc.delete();
+  }
+}
+

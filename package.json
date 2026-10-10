@@ -1,0 +1,13 @@
+{
+  "name": "fast-fighting-pf2e",
+  "private": true,
+  "type": "module",
+  "description": "Development tooling for the FastFighting PF2e Foundry VTT module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "4.1.11"
+  }
+}
