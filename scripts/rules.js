@@ -14,6 +14,14 @@ function iwrMatches(key, type) {
   return false;
 }
 
+/** Spell traits that PF2e immunities name differently. */
+const TRAIT_IMMUNITY = { fear: "fear-effects", death: "death-effects" };
+/** Engine conditions -> PF2e condition immunities. */
+const CONDITION_IMMUNITY = {
+  offGuard: "off-guard", incapacitated: "unconscious", immobilized: "immobilized", paralyzed: "paralyzed", slowed: "slowed",
+  stunned: "stunned", frightened: "frightened", sickened: "sickened", clumsy: "clumsy", enfeebled: "enfeebled", fleeing: "fleeing", prone: "prone"
+};
+
 /** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
 const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
 
@@ -70,6 +78,41 @@ export const pf2eRules = {
   /** Administer First Aid takes two actions. */
   firstAidCost: 2,
 
+  /**
+   * Immune to an effect by its traits (mental, fear, emotion, sleep, visual, auditory ...; the mindless shrug off
+   * mental effects) or because every condition it would impose is one the creature is immune to.
+   */
+  isImmune(target, action) {
+    const immune = new Set(target.spec.iwr?.immune ?? []);
+    const traits = action.traits ?? [];
+    if ( traits.some(t => immune.has(TRAIT_IMMUNITY[t] ?? t)) ) return true;
+    if ( traits.includes("mental") && target.spec.creatureTraits?.includes("mindless") ) return true;
+    const keys = [...new Set([...(action.onSave ?? []), ...(action.onHit ?? [])].filter(Boolean).flatMap(o => Object.keys(o.conditions ?? {})))];
+    return keys.length > 0 && keys.every(k => immune.has(CONDITION_IMMUNITY[k] ?? k));
+  },
+
+  /** Incapacitation: a target more than twice the spell's rank in level treats its result as one degree better. */
+  controlShift({ target, action }) {
+    if ( !(action.traits ?? []).includes("incapacitation") || !action.rank ) return 0;
+    return (target.spec.level ?? 0) > 2 * action.rank ? 1 : 0;
+  },
+
+  /** Share of a creature's fighting a condition takes away each round. */
+  conditionWeight(key, value) {
+    switch ( key ) {
+      case "slowed": return value / 3;
+      case "stunned": return Math.min(1, value / 3);
+      case "paralyzed": return 1;
+      case "fleeing": return 0.8;
+      case "frightened":
+      case "sickened": return 0.08 * value;
+      case "clumsy": return 0.04 * value;
+      case "enfeebled": return 0.05 * value;
+      case "offGuard": return 0.08;
+      default: return undefined;
+    }
+  },
+
   /** Typical numbers for a creature of a level (moderate PF2e guidelines). */
   typical: {
     ac: level => 15 + level,
@@ -110,8 +153,12 @@ export const pf2eRules = {
     check() {
       return { bonus: 0, advantage: 0 };
     },
+    /** Steal in combat: -5 to the Thievery check. */
+    steal() {
+      return { bonus: -5, advantage: 0 };
+    },
     actionsLost(u) {
-      if ( u.conds.paralyzed ) return 99;
+      if ( u.conds.paralyzed || u.conds.fleeing ) return 99; // fleeing spends every action getting away
       return (u.conds.slowed ?? 0) + (u.conds.stunned ?? 0);
     }
   },

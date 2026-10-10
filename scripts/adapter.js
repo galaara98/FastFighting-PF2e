@@ -8,6 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
+import { parseControl, parseCritRider } from "./control.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -141,6 +142,8 @@ export class Pf2eAdapter extends SystemAdapter {
       darkvision: !!actor.hasDarkvision,
       // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
+      // Steal: Thievery, for those trained in it.
+      theft: actor.skills?.thievery?.proficient ? { skill: actor.skills.thievery.label ?? "Thievery", mod: actor.skills.thievery.mod } : null,
       creatureTraits: traits,
       social: this.#social(actor, level, traits),
       valuables: this.#valuables(actor),
@@ -160,7 +163,12 @@ export class Pf2eAdapter extends SystemAdapter {
     const willDC = { dc: will?.dc?.value ?? level + 15, label: will?.label ?? "Will" };
     return {
       pitches: { persuade: skill("diplomacy"), intimidate: skill("intimidation"), deceive: skill("deception") },
-      resist: { persuade: willDC, intimidate: willDC, deceive: { dc: actor.perception?.dc?.value ?? level + 15, label: actor.perception?.label ?? "Perception" } },
+      resist: {
+        persuade: willDC,
+        intimidate: willDC,
+        deceive: { dc: actor.perception?.dc?.value ?? level + 15, label: actor.perception?.label ?? "Perception" },
+        steal: { dc: actor.perception?.dc?.value ?? level + 15, label: actor.perception?.label ?? "Perception" }
+      },
       // How strong-willed it is next to a typical creature of its level (moderate Will is about level × 1.15 + 5).
       resolve: (will?.mod ?? Math.round(level * 1.15 + 5)) - Math.round(level * 1.15 + 5),
       languages: [...(actor.system.details?.languages?.value ?? [])],
@@ -325,13 +333,16 @@ export class Pf2eAdapter extends SystemAdapter {
         try {
           roll = (await spell.getDamage())?.template?.damage?.roll ?? null;
         } catch ( err ) {
-          continue;
+          roll = null;
         }
-        if ( !roll ) continue;
-        const kinds = roll.kinds ?? new Set();
+        const kinds = roll?.kinds ?? new Set();
         const traits = spell.system.traits?.value ?? [];
-        const parts = parseTypedFormula(roll.formula);
-        if ( !parts.length ) continue;
+        const parts = roll ? parseTypedFormula(roll.formula) : [];
+        // No damage: maybe it's crowd control, conditions by degree of the target's save or of a spell attack.
+        const control = !parts.length && (spell.system.defense?.save || spell.isAttack)
+          ? parseControl({ description: spell.system.description?.value, duration: spell.system.duration?.value })
+          : null;
+        if ( !parts.length && !control ) continue;
 
         // Resource
         let resource = null;
@@ -372,9 +383,27 @@ export class Pf2eAdapter extends SystemAdapter {
           });
           continue;
         }
-        if ( !kinds.has?.("damage") ) continue;
-
         const defense = spell.system.defense;
+        if ( control ) {
+          const action = {
+            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits,
+            melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
+          };
+          if ( defense?.save ) {
+            action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: false };
+            action.onSave = control;
+          } else {
+            // A spell attack: the degrees are the caster's (critical success, success ...).
+            action.bonus = stat.check?.mod ?? 0;
+            action.maps = [0, -5, -10];
+            action.onHit = control;
+          }
+          const targets = areaTargets(area, spell.system.target?.value);
+          if ( targets > 1 ) action.area = { targets };
+          out.push(action);
+          continue;
+        }
+        if ( !kinds.has?.("damage") ) continue;
         const action = {
           id, name: spell.name, cost, damage: parts, resource, pool, uses,
           spellId: spell.id, entryId: entry.id, rank: spell.rank, traits,
@@ -395,6 +424,9 @@ export class Pf2eAdapter extends SystemAdapter {
         } else if ( defense?.save ) {
           action.kind = "save";
           action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: !!defense.save.basic };
+          // "If the target critically fails the save, it is also stunned 1."
+          const rider = parseCritRider(spell.system.description?.value);
+          if ( rider ) action.effects = [rider];
         } else {
           action.kind = "auto";
           if ( spell.slug === "force-barrage" ) action.damage = parts.map(p => ({ ...p, dice: p.dice.map(d => ({ ...d, n: d.n * 2 })), flat: p.flat * 2 }));
