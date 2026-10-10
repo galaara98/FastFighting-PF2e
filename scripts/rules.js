@@ -122,6 +122,26 @@ export const pf2eRules = {
     return (target.spec.level ?? 0) > 2 * action.rank ? 1 : 0;
   },
 
+  /**
+   * Conditions as numbers, so a frightened or tripped foe is weighed like any other penalty: frightened and sickened
+   * to everything, clumsy to AC and Reflex, enfeebled to melee, off-guard -2 AC, prone (off-guard, -2 to attack, an
+   * action to stand), slowed and stunned in actions.
+   */
+  conditionMods(key, value = 1) {
+    const v = Number(value) || 1;
+    switch ( key ) {
+      case "frightened":
+      case "sickened": return { attack: -v, ac: -v, saves: -v, checks: -v };
+      case "clumsy": return { ac: -v, saves: -Math.ceil(v / 3) };
+      case "enfeebled": return { attack: -v, damage: -v };
+      case "offGuard": return { ac: -2 };
+      case "prone": return { ac: -2, attack: -2, actions: -1 };
+      case "slowed": return { actions: -v };
+      case "stunned": return { actions: -Math.min(3, v) };
+      default: return null;
+    }
+  },
+
   /** Share of a creature's fighting a condition takes away each round. */
   conditionWeight(key, value) {
     switch ( key ) {
@@ -152,8 +172,9 @@ export const pf2eRules = {
    * melee attacks; prone -2 to attack; -2 to melee underwater without a swim speed; -2 per range increment.
    */
   modifiers: {
-    exposed({ target, grabbed, flanked }) {
-      return !!(target.prone || target.conds.offGuard || target.conds.paralyzed || grabbed || flanked);
+    exposed({ target, grabbed, flanked, exposedTo }) {
+      // (exposedTo: off-guard to this attacker only, after a Feint.)
+      return !!(target.prone || target.conds.offGuard || target.conds.paralyzed || grabbed || flanked || exposedTo);
     },
     defense(ctx) {
       const t = ctx.target;

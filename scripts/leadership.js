@@ -4,10 +4,12 @@
  * Commander class (tactics), and by abilities that read like rallying cries or commanding auras.
  */
 
-const LEADER_ABILITY = /(commander|captain|warlord|rally|inspir|command|leader|banner|battle cry|tactic)/i;
+// Matched against slugs too, so hyphens count as spaces.
+const LEADER_ABILITY = /(commander|captain|warlord|rally|inspir|command|leader|banner|battle[ -]cry|tactic)/i;
 
 /**
- * @param {object[]} entries  [{id, level, skills: {diplomacy, intimidation, warfareLore}, isCommander, tactics: number, abilityNames: string[]}]
+ * @param {object[]} entries  [{id, level, skills: {diplomacy, intimidation, warfareLore}, isCommander, tactics: number,
+ *   abilities: [{key, name}]}] (key: the ability's slug; an older abilityNames: string[] still works)
  * @returns {{id, score, reason, bonus: {brave, tacticalFloor, attack, ac}}[]} best first
  */
 export function rankLeaders(entries) {
@@ -22,10 +24,11 @@ export function rankLeaders(entries) {
       score += 4 + Math.min(4, e.tactics ?? 0);
       reasons.push(`Commander (${e.tactics ?? 0} tactics)`);
     }
-    const leaderAbilities = (e.abilityNames ?? []).filter(n => LEADER_ABILITY.test(n));
+    const leaderAbilities = (e.abilities ?? (e.abilityNames ?? []).map(n => ({ key: n, name: n })))
+      .filter(a => LEADER_ABILITY.test(a.key ?? "") || LEADER_ABILITY.test(a.name ?? ""));
     if ( leaderAbilities.length ) {
       score += 3;
-      reasons.push(leaderAbilities.slice(0, 2).join(", "));
+      reasons.push(leaderAbilities.slice(0, 2).map(a => a.name).join(", "));
     }
     out.push({ id: e.id, score, reason: reasons.join("; "), bonus: leaderBonus(score, e.isCommander) });
   }

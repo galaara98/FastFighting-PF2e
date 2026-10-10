@@ -22,9 +22,11 @@ const CONDITIONS = {
   grabbed: () => ({ immobilized: 1, offGuard: 1 }),
   paralyzed: () => ({ paralyzed: 1 }),
   fleeing: () => ({ fleeing: 1 }),
-  unconscious: () => ({ incapacitated: 1, offGuard: 1 })
+  unconscious: () => ({ incapacitated: 1, offGuard: 1 }),
+  // Dominate: it fights for its controller until the spell ends.
+  controlled: () => ({ controlled: 1 })
 };
-const CONDITION_RE = /\b(frightened|slowed|stunned|sickened|clumsy|enfeebled|off-guard|prone|immobilized|restrained|grabbed|paralyzed|fleeing|unconscious)\b\s*(\d+)?/g;
+const CONDITION_RE = /\b(frightened|slowed|stunned|sickened|clumsy|enfeebled|off-guard|prone|immobilized|restrained|grabbed|paralyzed|fleeing|unconscious|controlled)\b\s*(\d+)?/g;
 
 const DEGREES = ["Critical Failure", "Failure", "Success", "Critical Success"];
 const UNIT_ROUNDS = { round: 1, rounds: 1, minute: 10, minutes: 10, hour: 600, hours: 600 };
@@ -56,7 +58,7 @@ function degreeTexts(html) {
 }
 
 /** Conditions named in a sentence, with values (frightened 2, slowed 1, prone ...). */
-function conditionsIn(text) {
+export function conditionsIn(text) {
   const out = {};
   for ( const m of text.toLowerCase().matchAll(CONDITION_RE) ) {
     Object.assign(out, CONDITIONS[m[1]](m[2] ? Number(m[2]) : 1));
@@ -84,11 +86,13 @@ export function parseControl({ description, duration = "" }) {
     if ( !text || /\bunaffected\b/i.test(text) ) return null;
     let conditions = conditionsIn(text);
     // "As failure, plus ..." carries the failure's effects along.
-    if ( degree === 0 && /\bas failure\b/i.test(text) && texts[1] ) conditions = { ...conditionsIn(texts[1]), ...conditions };
+    if ( degree === 0 && /\bas (?:a )?failure\b/i.test(text) && texts[1] ) conditions = { ...conditionsIn(texts[1]), ...conditions };
     if ( !Object.keys(conditions).length ) return null;
-    // Frightened wears off a point a turn: it lasts about as many rounds as its value.
-    const rounds = durationRounds(text) ?? (conditions.frightened ? conditions.frightened : null) ?? (conditions.stunned ? 1 : null) ?? fallback ?? 1;
-    return { conditions, rounds: Math.max(1, rounds), label: label(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text) };
+    // Frightened wears off a point a turn: it lasts about as many rounds as its value. Control lasts the fight.
+    const rounds = durationRounds(text) ?? (conditions.frightened ? conditions.frightened : null) ?? (conditions.stunned ? 1 : null) ?? (conditions.controlled ? 100 : null) ?? fallback ?? 1;
+    // "It can attempt a Will save at the end of each of its turns. On a success, the spell ends." (the DC is the caster's)
+    const repeat = /save at the end of each of its turns/i.test(text);
+    return { conditions, rounds: Math.max(1, rounds), label: label(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text), ...(repeat ? { repeatSave: true } : {}) };
   });
   return outcomes.some(Boolean) ? outcomes : null;
 }

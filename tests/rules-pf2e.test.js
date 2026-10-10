@@ -87,3 +87,14 @@ describe("pf2e Reactive Strike", () => {
     expect(pf2eRules.disengage().cost).toEqual({ actions: 1 });
   });
 });
+
+describe("leadership by slug", () => {
+  test("a slug is enough (names change with translations); the name is what's shown", async () => {
+    const { rankLeaders } = await import("../scripts/leadership.js");
+    const base = { level: 3, skills: { diplomacy: 7, intimidation: 5 }, isCommander: false, tactics: 0 };
+    const [plain] = rankLeaders([{ id: "a", ...base, abilities: [{ key: "attack-of-opportunity", name: "Gelegenheitsangriff" }] }]);
+    const [banner] = rankLeaders([{ id: "b", ...base, abilities: [{ key: "commanders-banner", name: "Banner des Kommandanten" }] }]);
+    expect(banner.score).toBe(plain.score + 3);
+    expect(banner.reason).toMatch(/Banner des Kommandanten/);
+  });
+});

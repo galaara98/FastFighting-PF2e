@@ -6,7 +6,7 @@
 import { Pf2eAdapter } from "./adapter.js";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 3;
+const NEEDS_API = 4;
 
 export const MODULE_ID = "fast-fighting-pf2e";
 

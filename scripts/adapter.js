@@ -2,19 +2,27 @@
  * Pathfinder 2e adapter: reads PF2e actors into CombatantSpecs and commits outcomes back.
  * Data paths verified against pf2e 8.6.0 on Foundry v14.
  */
-import { SystemAdapter, parseTypedFormula, parseFormula } from "./core.js";
+import { SystemAdapter, parseTypedFormula, parseFormula, describeMods } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
-import { parseControl, parseCritRider } from "./control.js";
+import { parseControl, parseCritRider, conditionsIn } from "./control.js";
+import { modsFromRules, spellRounds, spellReach, helps } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
+/** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
+const EFFECT_CACHE = new Map();
+async function linkedEffect(uuid) {
+  if ( !EFFECT_CACHE.has(uuid) ) EFFECT_CACHE.set(uuid, fromUuid(uuid).catch(() => null));
+  return EFFECT_CACHE.get(uuid);
+}
+const plainText = html => String(html ?? "").replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 /** PF2e conditions the engine plays out, by slug -> engine key. */
 const ENGINE_CONDITIONS = {
   "off-guard": "offGuard", grabbed: "offGuard", restrained: "offGuard", prone: "prone", clumsy: "clumsy", enfeebled: "enfeebled",
@@ -84,7 +92,8 @@ export class Pf2eAdapter extends SystemAdapter {
       ...await this.#strikes(actor),
       ...await this.#spells(actor),
       ...this.#consumables(actor),
-      ...this.#feats(actor)
+      ...this.#feats(actor),
+      ...this.#skillActions(actor, traits)
     ];
 
     const speeds = {};
@@ -348,7 +357,9 @@ export class Pf2eAdapter extends SystemAdapter {
         const control = !parts.length && (spell.system.defense?.save || spell.isAttack)
           ? parseControl({ description: spell.system.description?.value, duration: spell.system.duration?.value })
           : null;
-        if ( !parts.length && !control ) continue;
+        // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
+        const support = !parts.length && !control ? await this.#spellSupport(spell, stat) : null;
+        if ( !parts.length && !control && !support ) continue;
 
         // Resource
         let resource = null;
@@ -376,6 +387,10 @@ export class Pf2eAdapter extends SystemAdapter {
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
         const isHeal = kinds.has?.("healing") && traits.includes("healing");
+        if ( support ) {
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, ...support });
+          continue;
+        }
 
         if ( isHeal ) {
           let heal = parts.map(p => ({ ...p, type: "healing" }));
@@ -400,7 +415,8 @@ export class Pf2eAdapter extends SystemAdapter {
           };
           if ( defense?.save ) {
             action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: false };
-            action.onSave = control;
+            // (Dominate: a save at the end of each of its turns, against the caster's DC.)
+            action.onSave = control.map(o => (o?.repeatSave ? { ...o, repeatSave: { type: action.save.type, dc: action.save.dc } } : o));
           } else {
             // A spell attack: the degrees are the caster's (critical success, success ...).
             action.bonus = stat.check?.mod ?? 0;
@@ -442,6 +458,84 @@ export class Pf2eAdapter extends SystemAdapter {
         }
         out.push(action);
       }
+    }
+    return out;
+  }
+
+  /**
+   * A spell that works through its Spell Effect: a buff for friends (Bless, Heroism, Courageous Anthem, Protection,
+   * Haste), a debuff on foes who fail a save (Bane, Malediction), or conditions laid on enemies with no save at all
+   * (Dirge of Doom). Null when it does nothing the engine plays out.
+   */
+  async #spellSupport(spell, stat) {
+    const sys = spell.system;
+    const html = sys.description?.value ?? "";
+    const text = plainText(html);
+    const mods = {};
+    let tempHp = 0;
+    for ( const m of html.matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {
+      const effect = await linkedEffect(m[1]);
+      const read = modsFromRules(effect?.system?.rules ?? [], { rank: spell.rank ?? 1 });
+      Object.assign(mods, read.mods);
+      tempHp = Math.max(tempHp, read.tempHp);
+    }
+    // Haste: quickened, an extra action each turn (for Strikes and Strides).
+    if ( /\bquickened\b/i.test(text) ) mods.actions = Math.max(mods.actions ?? 0, 1);
+    const rounds = spellRounds(sys.duration?.value) ?? 10;
+    const save = sys.defense?.save;
+    const area = sys.area;
+    const feet = parseFeet(sys.range?.value) ?? area?.value ?? 30;
+    const reachFoes = { melee: false, range: { increment: feet, max: feet, noPenalty: true } };
+    const many = areaTargets(area, sys.target?.value);
+    if ( Object.keys(mods).length || tempHp ) {
+      const outcome = { mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, rounds, label: describeMods(mods, { tempHp }) };
+      if ( save ) {
+        return { kind: "control", ...reachFoes, save: { type: save.statistic, dc: stat.dc?.value ?? 10 + (spell.actor?.level ?? 0), basic: false },
+          onSave: [outcome, outcome, null, null], area: many > 1 ? { targets: many } : undefined };
+      }
+      if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }) };
+      return { kind: "control", auto: true, ...reachFoes, outcome };
+    }
+    // Conditions on enemies, no save (Dirge of Doom: "Enemies within the area are Frightened 1").
+    const conditions = !save && !spell.isAttack && /\benem(?:y|ies)\b/i.test(text) ? conditionsIn(text) : {};
+    if ( Object.keys(conditions).length ) {
+      return { kind: "control", auto: true, ...reachFoes, area: many > 1 ? { targets: many } : undefined,
+        outcome: { conditions, rounds: Math.max(rounds, conditions.frightened ?? 1), label: Object.entries(conditions).map(([k, v]) => `${k === "offGuard" ? "off-guard" : k}${v > 1 ? ` ${v}` : ""}`).join(", ") } };
+    }
+    return null;
+  }
+
+  /**
+   * Skill actions anyone (or the trained) can take in a fight: Demoralize (Intimidation against Will: frightened),
+   * Trip (Athletics against Reflex, an attack: prone, or prone yourself on a critical failure), Feint (Deception
+   * against Perception: off-guard to you), and Bon Mot for those with the feat (Diplomacy against Will).
+   */
+  #skillActions(actor, traits) {
+    if ( traits.includes("mindless") ) return [];
+    const skill = slug => actor.skills?.[slug] ?? null;
+    const trained = slug => !!skill(slug) && ((skill(slug).rank ?? 0) >= 1 || (actor.type === "npc" && !!actor.system.skills?.[slug]));
+    const out = [];
+    const near = { melee: false, range: { increment: 30, max: 30, noPenalty: true } };
+    const intimidation = skill("intimidation");
+    if ( intimidation ) {
+      out.push({ id: `${actor.id}.demoralize`, name: "Demoralize", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "fear", "mental"], ...near,
+        check: { mod: intimidation.mod ?? 0, against: "will" }, oncePerTarget: true,
+        onHit: [null, null, { conditions: { frightened: 1 }, rounds: 1, label: "frightened 1" }, { conditions: { frightened: 2 }, rounds: 2, label: "frightened 2" }] });
+    }
+    if ( trained("athletics") ) {
+      const prone = { conditions: { prone: 1 }, rounds: 1, label: "prone" };
+      out.push({ id: `${actor.id}.trip`, name: "Trip", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5,
+        check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
+    }
+    if ( trained("deception") ) {
+      const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: "off-guard" };
+      out.push({ id: `${actor.id}.feint`, name: "Feint", kind: "control", cost: 1, traits: ["mental"], melee: true, reach: 5,
+        check: { mod: skill("deception").mod ?? 0, against: "perception" }, onHit: [null, null, exposed, exposed] });
+    }
+    if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
+      const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: "flustered" });
+      out.push({ id: `${actor.id}.bon-mot`, name: "Bon Mot", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
+        check: { mod: skill("diplomacy").mod ?? 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] });
     }
     return out;
   }
@@ -516,7 +610,7 @@ export class Pf2eAdapter extends SystemAdapter {
       },
       isCommander: actor.class?.slug === "commander",
       tactics: actor.itemTypes?.action?.filter(i => i.system.traits?.value?.includes("tactic")).length ?? 0,
-      abilityNames: actor.itemTypes?.action?.map(i => i.name) ?? []
+      abilities: actor.itemTypes?.action?.map(i => ({ key: slugOf(i) ?? "", name: i.name })) ?? []
     };
   }
 
