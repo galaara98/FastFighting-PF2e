@@ -221,6 +221,86 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
   }
 }
 
+/* -------------------------------------------- */
+/*  Giving something up                         */
+/* -------------------------------------------- */
+
+const emptyRecord = (tokenDoc, actor) => ({
+  tokenUuid: tokenDoc?.uuid ?? null, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [], deletedItems: [],
+  tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
+});
+
+/** Coin items as they are now, to work out what a coin transfer changed. */
+const coinSnapshot = actor => new Map(actor.itemTypes.treasure.filter(i => i.isCurrency).map(i => [i.id, i.toObject()]));
+
+/** An undo record for whatever happened to an actor's coins since `before`. */
+function coinUndo(tokenDoc, actor, before) {
+  const undo = emptyRecord(tokenDoc, actor);
+  const after = coinSnapshot(actor);
+  for ( const id of after.keys() ) if ( !before.has(id) ) undo.createdItems.push(id);
+  for ( const [id, data] of before ) {
+    if ( !after.has(id) ) undo.deletedItems.push(data);
+    else if ( after.get(id).system.quantity !== data.system.quantity ) undo.itemUpdates.push({ id, update: { "system.quantity": data.system.quantity } });
+  }
+  return undo;
+}
+
+/** Copper split into coins, largest first, without platinum (what people actually hand over). */
+function coinsFor(copper) {
+  const gp = Math.floor(copper / 100);
+  const sp = Math.floor((copper % 100) / 10);
+  return { gp, sp, cp: copper % 10 };
+}
+
+/**
+ * Hand over what a creature was talked into giving up: coins (with change made) or one item, from the giver to
+ * the talker. Returns undo records for both sides.
+ */
+export async function commitPf2eConcession(giverDoc, receiverDoc, concession) {
+  const giver = giverDoc?.actor;
+  if ( !giver?.inventory ) return [];
+  const receiver = receiverDoc?.actor?.inventory ? receiverDoc.actor : null;
+  const records = [];
+  if ( concession.kind === "money" ) {
+    const amount = Math.min(concession.amount, giver.inventory.currency.copperValue);
+    if ( amount <= 0 ) return [];
+    const coins = coinsFor(amount);
+    const before = coinSnapshot(giver);
+    const removed = await giver.inventory.removeCoins(coins, { byValue: true });
+    if ( removed === false ) return [];
+    records.push(coinUndo(giverDoc, giver, before));
+    if ( receiver ) {
+      const got = coinSnapshot(receiver);
+      await receiver.inventory.addCoins(coins);
+      records.push(coinUndo(receiverDoc, receiver, got));
+    }
+    return records;
+  }
+  const item = giver.items.get(concession.item?.id);
+  if ( !item ) return [];
+  const giverUndo = emptyRecord(giverDoc, giver);
+  const data = item.toObject();
+  delete data._id;
+  data.system.quantity = 1;
+  data.system.containerId = null;
+  data.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
+  if ( item.quantity > 1 ) {
+    giverUndo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.quantity } });
+    await item.update({ "system.quantity": item.quantity - 1 });
+  } else {
+    giverUndo.deletedItems.push(item.toObject());
+    await item.delete();
+  }
+  records.push(giverUndo);
+  if ( receiver ) {
+    const receiverUndo = emptyRecord(receiverDoc, receiver);
+    const [created] = await receiver.createEmbeddedDocuments("Item", [data]);
+    if ( created ) receiverUndo.createdItems.push(created.id);
+    records.push(receiverUndo);
+  }
+  return records;
+}
+
 async function handleLoot(tokenDoc, actor, options, undo) {
   const mode = options.lootMode ?? "corpse";
   if ( mode === "none" ) return;

@@ -7,7 +7,7 @@ import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eOutcome, describePf2eOutcome } from "./commit.js";
+import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -143,6 +143,7 @@ export class Pf2eAdapter extends SystemAdapter {
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
       creatureTraits: traits,
       social: this.#social(actor, level, traits),
+      valuables: this.#valuables(actor),
       leadership: this.#leadershipEntry(actor, tokenDoc.id)
     };
   }
@@ -164,6 +165,28 @@ export class Pf2eAdapter extends SystemAdapter {
       resolve: (will?.mod ?? Math.round(level * 1.15 + 5)) - Math.round(level * 1.15 + 5),
       languages: [...(actor.system.details?.languages?.value ?? [])],
       mindless: traits.includes("mindless")
+    };
+  }
+
+  /** Coins (in copper), and gear that could be handed over: stowed (not held or worn) and held. */
+  #valuables(actor) {
+    const inventory = actor.inventory;
+    if ( !inventory ) return null;
+    const stowed = [];
+    const wielded = [];
+    for ( const item of inventory.contents ?? [] ) {
+      if ( item.isOfType?.("treasure") && item.isCurrency ) continue;
+      if ( item.type === "backpack" || !(item.quantity > 0) ) continue; // no containers (their contents would go too)
+      const entry = { id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)) };
+      const carry = item.system.equipped?.carryType;
+      if ( carry === "held" ) wielded.push(entry);
+      else if ( carry === "stowed" ) stowed.push(entry);
+    }
+    return {
+      money: inventory.currency?.copperValue ?? 0,
+      denominations: [{ label: "pp", value: 1000 }, { label: "gp", value: 100 }, { label: "sp", value: 10 }, { label: "cp", value: 1 }],
+      stowed,
+      wielded
     };
   }
 
@@ -489,6 +512,10 @@ export class Pf2eAdapter extends SystemAdapter {
 
   describeOutcome(spec, final) {
     return describePf2eOutcome(spec, final);
+  }
+
+  async commitConcession(giverDoc, receiverDoc, concession) {
+    return commitPf2eConcession(giverDoc, receiverDoc, concession);
   }
 }
 
