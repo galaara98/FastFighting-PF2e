@@ -3,8 +3,6 @@
  */
 import { DOWNED_MODELS, STATUS } from "./core.js";
 
-export const DEGREE = Object.freeze({ CRIT_FAIL: 0, FAIL: 1, SUCCESS: 2, CRIT_SUCCESS: 3 });
-
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
 const ENERGY = new Set(["acid", "cold", "electricity", "fire", "sonic", "force", "vitality", "void"]);
@@ -19,6 +17,8 @@ function iwrMatches(key, type) {
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
+  /** A hit always deals at least 1 damage before resistances, however large the penalties. */
+  minimumDamage: 1,
 
   degreeOfSuccess(natural, total, dc) {
     let degree = total >= dc + 10 ? 3 : total >= dc ? 2 : total <= dc - 10 ? 0 : 1;
@@ -62,11 +62,6 @@ export const pf2eRules = {
       total += amount;
     }
     return total;
-  },
-
-  /** Expected damage after IWR for heuristics (cheap approximation using means per type). */
-  expectedAfterIwr(iwr, meanByType) {
-    return this.applyIwr(iwr, meanByType);
   },
 
   /**
@@ -129,6 +124,23 @@ export const pf2eRules = {
       return `stabilizes (unconscious)`;
     }
     return `recovery check (${["critical failure", "failure", "success", "critical success"][degree]}): dying ${c.dying}`;
+  },
+
+  /** Administer First Aid (stabilize): Medicine against DC 15 + the dying value. */
+  firstAidDC(c) {
+    return 15 + (c.dying ?? 0);
+  },
+
+  /** Result of first aid: success stops the dying (unconscious, wounded +1); a critical failure makes it worse. */
+  firstAid(c, degree) {
+    if ( degree >= 2 ) {
+      c.dying = 0;
+      c.stable = true;
+      c.wounded += 1;
+    } else if ( degree === 0 ) {
+      c.dying += 1;
+      if ( c.dying >= this.dyingLimit(c) ) c.status = STATUS.DEAD;
+    }
   },
 
   /** End of turn persistent damage: take it, then a DC 15 flat check to remove each instance. */

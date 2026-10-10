@@ -12,9 +12,30 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: FastFighting-PF2e
+
+      # The tests import FastFighting Core from a checkout beside this one.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: galaara98/FastFighting
+          path: FastFighting
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: FastFighting-PF2e/package-lock.json
+
+      - name: Test
+        working-directory: FastFighting-PF2e
+        run: |
+          npm ci
+          npm test
 
       - name: Set version and download URL in module.json
+        working-directory: FastFighting-PF2e
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           jq --arg v "$VERSION" \
@@ -22,11 +43,12 @@ jobs:
              '.version = $v | .download = $d' module.json > module.tmp && mv module.tmp module.json
 
       - name: Build module.zip
+        working-directory: FastFighting-PF2e
         run: zip -r module.zip module.json scripts languages README.md LICENSE
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
-            module.json
-            module.zip
+            FastFighting-PF2e/module.json
+            FastFighting-PF2e/module.zip

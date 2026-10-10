@@ -14,6 +14,11 @@ const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
+/** PF2e conditions the engine plays out, by slug -> engine key. */
+const ENGINE_CONDITIONS = {
+  "off-guard": "offGuard", grabbed: "offGuard", restrained: "offGuard", prone: "prone", clumsy: "clumsy", enfeebled: "enfeebled",
+  sickened: "sickened", frightened: "frightened", slowed: "slowed", stunned: "stunned", paralyzed: "paralyzed"
+};
 
 function slugOf(item) {
   const slug = item?.slug ?? item?.system?.slug;
@@ -129,6 +134,13 @@ export class Pf2eAdapter extends SystemAdapter {
       wounded: sys.attributes?.wounded?.value ?? 0,
       doomed: sys.attributes?.doomed?.value ?? 0,
       dying: sys.attributes?.dying?.value ?? 0,
+      // A fight resumed mid-way starts from where things stand.
+      conditions: this.#conditions(actor),
+      persistent: this.#persistent(actor),
+      perception: actor.perception?.mod ?? actor.initiative?.mod ?? 0,
+      darkvision: !!actor.hasDarkvision,
+      // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
+      firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
       creatureTraits: traits,
       social: {
         diplomacy: actor.skills?.diplomacy?.mod,
@@ -144,6 +156,34 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /* -------------------------------------------- */
+
+  #conditions(actor) {
+    const out = {};
+    for ( const c of actor.itemTypes?.condition ?? [] ) {
+      const key = ENGINE_CONDITIONS[c.slug];
+      if ( !key ) continue;
+      const value = typeof c.value === "number" ? c.value : 1;
+      out[key] = Math.max(out[key] ?? 0, value);
+    }
+    return out;
+  }
+
+  #persistent(actor) {
+    const out = [];
+    for ( const c of actor.itemTypes?.condition ?? [] ) {
+      const p = c.slug === "persistent-damage" ? c.system?.persistent : null;
+      if ( !p?.formula ) continue;
+      out.push({ ...parseFormula(p.formula, p.damageType ?? "untyped"), persistent: true });
+    }
+    return out;
+  }
+
+  /** PF2e regions: environment types (aquatic, ...) and difficult terrain from environment features. */
+  describeRegionBehavior(behavior) {
+    if ( behavior.type === "environment" ) return { types: [...(behavior.system.environmentTypes ?? [])] };
+    if ( behavior.type === "environmentFeature" && behavior.system.terrain?.difficult ) return { difficult: true };
+    return null;
+  }
 
   async #strikes(actor) {
     const out = [];

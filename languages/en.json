@@ -1,5 +1,6 @@
 {
   "FFPF2E": {
-    "NeedsCore": "FastFighting PF2e needs the FastFighting Core module. Install and enable it."
+    "NeedsCore": "FastFighting PF2e needs the FastFighting Core module. Install and enable it.",
+    "CoreTooOld": "FastFighting PF2e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules."
   }
 }

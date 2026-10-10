@@ -21,13 +21,13 @@ export function describePf2eOutcome(spec, final) {
   const lines = [];
   if ( final.hp !== spec.hp.value ) lines.push(`HP ${spec.hp.value} → ${final.hp}`);
   if ( final.status === STATUS.DEAD ) lines.push(spec.kind === "pc" ? "DIES" : "Dead");
-  else if ( final.status === STATUS.FLED ) lines.push(final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
+  else if ( final.status === STATUS.FLED ) lines.push(spec.kind === "pc" ? "Retreated from the battle" : final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
   else if ( final.status === STATUS.SURRENDERED ) lines.push("Surrenders");
   if ( final.swayed === "switched" ) lines.push(`Switches sides (now ${final.side})`);
   else if ( final.status === STATUS.DOWN ) lines.push(final.dying > 0 ? `Dying ${final.dying}` : "Unconscious (stable)");
   if ( final.wounded > (spec.wounded ?? 0) ) lines.push(`Wounded ${final.wounded}`);
   for ( const p of final.persistent ?? [] ) lines.push(`Persistent ${partFormula(p.part)} ${p.type}`);
-  for ( const a of final.afflictions ?? [] ) lines.push(`${a.name} (stage ${a.stage})`);
+  for ( const a of final.afflictions ?? [] ) lines.push(a.onset > 0 ? `${a.name} (takes hold in ${a.onset} rounds, stage ${a.stage})` : `${a.name} (stage ${a.stage})`);
   for ( const [k, v] of Object.entries(final.conditions ?? {}) ) if ( LINGERING[k] ) lines.push(`${k} ${v === true ? "" : v}`.trim());
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
@@ -120,7 +120,7 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
         name: `${a.name} (Stage ${a.stage})`,
         img: "icons/svg/poison.svg",
         system: {
-          description: { value: `<p>Afflicted during a FastFighting battle. Stage ${a.stage}; ${a.save} DC ${a.dc}. Continue tracking stages per the affliction's rules.</p>` },
+          description: { value: `<p>Afflicted during a FastFighting battle. ${a.onset > 0 ? `Still in its onset: takes hold in ${a.onset} rounds at stage ${a.stage}.` : `Stage ${a.stage}.`} ${a.save} DC ${a.dc}. Continue tracking stages per the affliction's rules.</p>` },
           badge: { type: "counter", value: a.stage },
           duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
           tokenIcon: { show: true }
@@ -144,7 +144,7 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
       undo.combatant = { uuid: combatant.uuid, defeated: false };
     }
     if ( spec.kind !== "pc" ) await handleLoot(tokenDoc, actor, options, undo);
-  } else if ( final.status === STATUS.FLED && options.fledMode !== "leave" ) {
+  } else if ( final.status === STATUS.FLED && options.fledMode !== "leave" && spec.kind !== "pc" ) {
     undo.tokenUpdate = { hidden: tokenDoc.hidden };
     await tokenDoc.update({ hidden: true });
   } else if ( final.status === STATUS.SURRENDERED ) {
@@ -228,8 +228,10 @@ async function handleLoot(tokenDoc, actor, options, undo) {
     await actor.update({ "flags.pf2e.lootable": true });
     return;
   }
-  // Loot pile: a PF2e loot actor at the corpse's position holding its physical gear.
-  const items = actor.items.filter(i => PHYSICAL.has(i.type)).map(i => {
+  // Loot pile: a PF2e loot actor at the corpse's position holding its physical gear, moved off the corpse so
+  // nothing exists twice.
+  const gear = actor.items.filter(i => PHYSICAL.has(i.type));
+  const items = gear.map(i => {
     const data = i.toObject();
     delete data._id;
     if ( data.system?.equipped ) data.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
@@ -252,6 +254,8 @@ async function handleLoot(tokenDoc, actor, options, undo) {
     disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL
   }]);
   undo.createdTokens.push(pileToken.uuid);
+  undo.deletedItems.push(...gear.map(i => i.toObject()));
+  await actor.deleteEmbeddedDocuments("Item", gear.map(i => i.id));
   if ( options.corpseMode === "remove" ) {
     undo.deletedTokens.push({ parentUuid: tokenDoc.parent.uuid, data: tokenDoc.toObject() });
     await tokenDoc.delete();

@@ -24,9 +24,6 @@ const CONDITION_KEYS = {
   dazzled: "dazzled"
 };
 
-/** Condition keys the engine uses directly; the rest are only committed by Make it So. */
-export const ENGINE_CONDITIONS = new Set(["offGuard", "clumsy", "enfeebled", "sickened", "frightened", "slowed", "stunned", "paralyzed"]);
-
 function stripHtml(html) {
   return String(html ?? "")
     .replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1")
