@@ -162,8 +162,12 @@ export class Pf2eAdapter extends SystemAdapter {
     const derived = this.deriveTraits(actor);
     const shield = sys.attributes?.shield;
     const mending = this.#mending(actor);
+    // A success that counts as a critical success: Evasion (Reflex), Juggernaut (Fortitude), Resolve (Will).
+    const upgrades = Object.entries({ evasion: "reflex", juggernaut: "fortitude", resolve: "will" })
+      .filter(([slug]) => actor.items.some(i => slugOf(i) === slug)).map(([, save]) => save);
     return {
       ...mending,
+      saveUpgrades: upgrades.length ? upgrades : undefined,
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
       actorId: actor.id,
