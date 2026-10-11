@@ -993,7 +993,7 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( !calc || !pcs.length || !hostile.length ) return null;
     const partyLevel = Math.round(pcs.reduce((s, p) => s + p.level, 0) / pcs.length);
     try {
-      const result = calc(partyLevel, pcs.length, hostile.filter(h => h.kind !== "hazard").map(h => h.level), [], {
+      const result = calc(partyLevel, pcs.length, hostile.map(h => h.level), [], {
         proficiencyWithoutLevel: game.pf2e.settings?.variants?.pwol?.enabled ?? false
       });
       return { label: result.rating, xp: result.totalXP, partyLevel, budgets: result.encounterBudgets };
