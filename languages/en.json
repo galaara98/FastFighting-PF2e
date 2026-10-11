@@ -7,6 +7,8 @@
     "Surrendered": "Surrendered",
     "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
     "Remains": "Remains of {name}",
-    "HeroPoints": "Hero Points"
+    "HeroPoints": "Hero Points",
+    "Aid": "Aid",
+    "RecallKnowledge": "Recall Knowledge"
   }
 }

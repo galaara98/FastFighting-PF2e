@@ -11,7 +11,8 @@ import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue } from "./effects.js";
+import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
+import { aidAction } from "./edges.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -28,6 +29,8 @@ const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i 
  * Empowerment (an implement in one hand, a weapon in the other).
  */
 const ALWAYS_ON = ["implements-empowerment"];
+/** Knowledge skills for Recall Knowledge (and any Lore). */
+const RECALL_SKILLS = new Set(["arcana", "crafting", "medicine", "nature", "occultism", "religion", "society"]);
 
 const EFFECT_CACHE = new Map();
 const CREATURE_CACHE = new Map();
@@ -150,7 +153,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...this.#consumables(actor),
       ...this.#feats(actor),
       ...await this.#selfEffects(actor),
-      ...this.#skillActions(actor, traits)
+      ...this.#skillActions(actor, traits, martial.strikes)
     ];
     actions.push(...await this.#abilities(actor, actions));
 
@@ -229,6 +232,8 @@ export class Pf2eAdapter extends SystemAdapter {
         pick: actor.skills?.thievery?.proficient && (actor.type !== "character" || actor.items.some(i => /thieves-?(tool|toolkit)/.test(i.slug ?? "")))
           ? { mod: actor.skills.thievery.mod } : null
       },
+      // Sizing a foe up (a Lore-Collector): Recall Knowledge, with its best knowledge skill.
+      sizeUp: this.#recallKnowledge(actor, traits),
       creatureTraits: traits,
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
@@ -239,6 +244,20 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /* -------------------------------------------- */
+
+  /**
+   * Recall Knowledge, to size up a foe: its best knowledge skill (Arcana, Crafting, Medicine, Nature, Occultism,
+   * Religion, Society, or a Lore), against the DC for the foe's level (the rules' typical DC). Null for the mindless.
+   */
+  #recallKnowledge(actor, traits) {
+    if ( traits.includes("mindless") ) return undefined;
+    let best = null;
+    for ( const [slug, s] of Object.entries(actor.skills ?? {}) ) {
+      if ( !(RECALL_SKILLS.has(slug) || /-lore$/.test(slug)) || typeof s?.mod !== "number" ) continue;
+      if ( !best || s.mod > best.mod ) best = { mod: s.mod, label: game.i18n.localize("FFPF2E.RecallKnowledge") };
+    }
+    return best ?? undefined;
+  }
 
   /** Talking in PF2e: Diplomacy persuades, Intimidation threatens, Deception bluffs; Will and Perception DCs resist. */
   #social(actor, level, traits) {
@@ -690,6 +709,9 @@ export class Pf2eAdapter extends SystemAdapter {
         return { kind: "control", ...reachFoes, save: { type: save.statistic, dc: stat.dc?.value ?? 10 + (spell.actor?.level ?? 0), basic: false },
           onSave: [outcome, outcome, null, null], area: many > 1 ? { targets: many } : undefined, effectRef };
       }
+      // Good for one roll (Guidance: "one attack roll, Perception check, saving throw, or skill check"; Sure Strike:
+      // "the next time you make an attack roll").
+      if ( ONE_ROLL.test(text) ) outcome.uses = 1;
       if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }), effectRef };
       return { kind: "control", auto: true, ...reachFoes, outcome, effectRef };
     }
@@ -827,14 +849,18 @@ export class Pf2eAdapter extends SystemAdapter {
   /**
    * Skill actions anyone (or the trained) can take in a fight: Demoralize (Intimidation against Will: frightened),
    * Trip (Athletics against Reflex, an attack: prone, or prone yourself on a critical failure), Feint (Deception
-   * against Perception: off-guard to you), and Bon Mot for those with the feat (Diplomacy against Will).
+   * against Perception: off-guard to you), Bon Mot for those with the feat (Diplomacy against Will), and Aid.
    */
-  #skillActions(actor, traits) {
+  #skillActions(actor, traits, strikes = []) {
     if ( traits.includes("mindless") ) return [];
     const skill = slug => actor.skills?.[slug] ?? null;
     const trained = slug => !!skill(slug) && ((skill(slug).rank ?? 0) >= 1 || (actor.type === "npc" && !!actor.system.skills?.[slug]));
     const out = [];
     const near = { melee: false, range: { increment: 30, max: 30, noPenalty: true } };
+    // Aid: for a friend's next roll at whoever it's set on (edges.js).
+    const aid = aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
+      skills: ["diplomacy", "medicine", "intimidation", "deception"].map(skill).filter(Boolean).map(s => ({ mod: s.mod, rank: s.rank ?? 0 })) });
+    if ( aid ) out.push(aid);
     const intimidation = skill("intimidation");
     if ( intimidation ) {
       out.push({ id: `${actor.id}.demoralize`, name: "Demoralize", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "fear", "mental"], ...near,

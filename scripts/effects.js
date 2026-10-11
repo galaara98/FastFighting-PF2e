@@ -8,6 +8,12 @@
  * can't play out (a rule that only applies sometimes, an item alteration) is left out.
  */
 
+/**
+ * Words that say a spell is good for one roll: Guidance ("one attack roll, Perception check, saving throw, or skill
+ * check"), Sure Strike ("The next time you make an attack roll").
+ */
+export const ONE_ROLL = /\b(?:one (?:attack roll|perception check|saving throw|skill check|check)|(?:the )?next time you (?:make|attempt) an? (?:attack roll|check|strike)|(?:its|your|the target's) next (?:attack roll|check|strike))\b/i;
+
 /** FlatModifier selectors -> engine bonuses. */
 const SELECTORS = {
   "attack": ["attack"], "attack-roll": ["attack"], "strike-attack-roll": ["attack"], "spell-attack-roll": ["attack"],
