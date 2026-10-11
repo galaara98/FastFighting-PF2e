@@ -43,7 +43,11 @@ describe("reading PF2e spell effects", () => {
     expect(modsFromRules(RULES.protection).mods).toEqual({ ac: 1, saves: 1 });
     expect(modsFromRules(RULES.rayOfFrost).mods).toEqual({ speed: -10 });
     expect(modsFromRules(RULES.sureStrike).mods).toEqual({ adv: 1 });
-    expect(modsFromRules(RULES.splash)).toEqual({ mods: {}, tempHp: 0 });
+    expect(modsFromRules(RULES.splash)).toEqual({ mods: {}, tempHp: 0, oneRoll: false });
+    // Guidance: a bonus its own roll option switches on, spent by the roll it helps.
+    const guidance = [{ key: "FlatModifier", predicate: ["guidance"], removeAfterRoll: "if-enabled", selector: ["attack", "perception", "saving-throw", "skill-check"], type: "status", value: 1 }];
+    expect(modsFromRules(guidance)).toEqual({ mods: {}, tempHp: 0, oneRoll: false });
+    expect(modsFromRules(guidance, { options: new Set(["guidance"]) })).toEqual({ mods: { attack: 1, saves: 1, checks: 1 }, tempHp: 0, oneRoll: true });
     expect(helps({ attack: 1 })).toBe(true);
     expect(helps({ attack: -1 })).toBe(false);
   });
@@ -148,7 +152,7 @@ describe("actions that put an effect on their user", () => {
   const options = new Set(["item:melee", "item:type:weapon", "self:effect:rage"]);
 
   test("Rage: level + Constitution in temporary hit points, and +2 to melee Strike damage while it lasts", () => {
-    expect(modsFromRules(effectRules, { actor, options })).toEqual({ mods: {}, tempHp: 8 });
+    expect(modsFromRules(effectRules, { actor, options })).toEqual({ mods: {}, tempHp: 8, oneRoll: false });
     expect(modsFromRules(actionRules, { actor, options, only: "self:effect:rage" }).mods).toEqual({ damage: 2 });
     // Without options (a spell effect), rules that only sometimes apply stay out.
     expect(modsFromRules(actionRules, { actor }).mods).toEqual({});

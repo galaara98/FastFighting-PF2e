@@ -685,13 +685,17 @@ export class Pf2eAdapter extends SystemAdapter {
     const text = plain(html);
     const mods = {};
     let tempHp = 0;
+    let oneRoll = false;
     const uuids = [];
+    // (A bonus the spell's own roll option switches on, as its target uses it: Guidance's "guidance".)
+    const own = new Set([spell.slug ?? slugOf(spell)].filter(Boolean));
     for ( const m of html.matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {
       const effect = await linkedEffect(m[1]);
       if ( effect ) uuids.push(m[1]);
-      const read = modsFromRules(effect?.system?.rules ?? [], { rank: spell.rank ?? 1 });
+      const read = modsFromRules(effect?.system?.rules ?? [], { rank: spell.rank ?? 1, options: own });
       Object.assign(mods, read.mods);
       tempHp = Math.max(tempHp, read.tempHp);
+      oneRoll ||= read.oneRoll;
     }
     // Haste: quickened, an extra action each turn (for Strikes and Strides).
     if ( /\bquickened\b/i.test(text) ) mods.actions = Math.max(mods.actions ?? 0, 1);
@@ -711,7 +715,7 @@ export class Pf2eAdapter extends SystemAdapter {
       }
       // Good for one roll (Guidance: "one attack roll, Perception check, saving throw, or skill check"; Sure Strike:
       // "the next time you make an attack roll").
-      if ( ONE_ROLL.test(text) ) outcome.uses = 1;
+      if ( oneRoll || ONE_ROLL.test(text) ) outcome.uses = 1;
       if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }), effectRef };
       return { kind: "control", auto: true, ...reachFoes, outcome, effectRef };
     }
@@ -857,8 +861,9 @@ export class Pf2eAdapter extends SystemAdapter {
     const trained = slug => !!skill(slug) && ((skill(slug).rank ?? 0) >= 1 || (actor.type === "npc" && !!actor.system.skills?.[slug]));
     const out = [];
     const near = { melee: false, range: { increment: 30, max: 30, noPenalty: true } };
-    // Aid: for a friend's next roll at whoever it's set on (edges.js).
-    const aid = aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
+    // Aid: for a friend's next roll at whoever it's set on (edges.js); for one that can tell a friend what it means to
+    // do (a language: not a wolf).
+    const aid = !(actor.system.details?.languages?.value ?? []).length ? null : aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
       skills: ["diplomacy", "medicine", "intimidation", "deception"].map(skill).filter(Boolean).map(s => ({ mod: s.mod, rank: s.rank ?? 0 })) });
     if ( aid ) out.push(aid);
     const intimidation = skill("intimidation");

@@ -110,7 +110,8 @@ export function predicateHolds(predicate, options) {
 }
 
 /**
- * Rule elements as engine bonuses and penalties (and temporary hit points).
+ * Rule elements as engine bonuses and penalties (and temporary hit points). `oneRoll`: a bonus that's spent by the
+ * roll it helps (removeAfterRoll: Guidance).
  * @param {object[]} rules
  * @param {object} [o]
  * @param {number} [o.rank]       the spell's rank (or the item's level)
@@ -122,6 +123,7 @@ export function predicateHolds(predicate, options) {
 export function modsFromRules(rules, { rank = 1, actor = null, options = null, only = null } = {}) {
   const mods = {};
   let tempHp = 0;
+  let oneRoll = false;
   const flags = {};
   for ( const r of rules ?? [] ) {
     if ( !r ) continue;
@@ -137,6 +139,7 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
     if ( r.key === "FlatModifier" ) {
       const value = ruleValue(r.value, { rank, actor, flags });
       if ( !value ) continue;
+      if ( r.removeAfterRoll ) oneRoll = true;
       for ( const selector of [].concat(r.selector ?? []) ) {
         for ( const key of SELECTORS[selector] ?? [] ) {
           // Bonuses of a kind don't stack: keep the larger of each sign.
@@ -150,7 +153,7 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
       tempHp = Math.max(tempHp, ruleValue(r.value, { rank, actor, flags }) ?? 0);
     }
   }
-  return { mods, tempHp };
+  return { mods, tempHp, oneRoll };
 }
 
 /** Rounds an effect item lasts ({value, unit}), or null when it doesn't say (unlimited, or until the encounter ends). */
