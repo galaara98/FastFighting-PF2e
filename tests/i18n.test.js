@@ -39,6 +39,16 @@ describe("the language files", () => {
     expect(found).toEqual([]);
   });
 
+  test("hardcoded-toEN.json: the date it was last updated, and the keys kept in English", () => {
+    const list = read("hardcoded-toEN.json");
+    expect(list.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isNaN(Date.parse(list.lastUpdated))).toBe(false);
+    expect(Array.isArray(list.keys)).toBe(true);
+    // Each names a key of this module's languages/en.json, or a group of them.
+    const keys = Object.keys(own);
+    expect(list.keys.filter(r => typeof r !== "string" || !keys.some(k => k === r || k.startsWith(`${r}.`)))).toEqual([]);
+  });
+
   test("each of this module's keys the code names is in languages/en.json (or names a group of keys)", () => {
     const missing = [];
     const keys = Object.keys(own);
