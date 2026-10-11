@@ -987,22 +987,6 @@ export class Pf2eAdapter extends SystemAdapter {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
   }
 
-  difficultyCrossCheck(friendly, hostile) {
-    const calc = game.pf2e?.gm?.calculateXP;
-    const pcs = friendly.filter(s => s.kind === "pc");
-    if ( !calc || !pcs.length || !hostile.length ) return null;
-    const partyLevel = Math.round(pcs.reduce((s, p) => s + p.level, 0) / pcs.length);
-    try {
-      const result = calc(partyLevel, pcs.length, hostile.map(h => h.level), [], {
-        proficiencyWithoutLevel: game.pf2e.settings?.variants?.pwol?.enabled ?? false
-      });
-      return { label: result.rating, xp: result.totalXP, partyLevel, budgets: result.encounterBudgets };
-    } catch ( err ) {
-      console.warn("fast-fighting | calculateXP failed", err);
-      return null;
-    }
-  }
-
   /* -------------------------------------------- */
 
   async commitOutcome(tokenDoc, spec, final, options) {

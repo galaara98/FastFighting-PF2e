@@ -54,7 +54,6 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - Reactive Strike: only creatures that have it (Attack of Opportunity, before the remaster) strike a foe leaving their reach, once a round. A careful creature Steps out of reach first.
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities.
 - **Recognised by slug:** abilities, feats and spells it has to know (Sneak Attack, Pack Attack, Reactive Strike, Battle Medicine, Bon Mot, knockdown and grab) are found by their slug, the same in every language, so a translated game works too.
-- **Difficulty cross-check:** compares the simulation with the PF2e encounter XP budget.
 - **Make it So for PF2e:** writes:
   - HP and temp HP;
   - dying, wounded, unconscious, prone and lingering conditions;
