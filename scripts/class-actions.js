@@ -19,6 +19,41 @@ function weaponDice(strike, n) {
 const doubled = part => ({ ...part, dice: part.dice.map(d => ({ ...d, n: d.n * 2 })), flat: part.flat * 2 });
 
 /**
+ * What `more` adds to `base` (damage parts as parsed): the extra dice, by size, and flat damage of each type. How a
+ * class feature's damage is read off the system's own formula, with and without the roll option that turns it on
+ * (Sneak Attack, Strategic Strike ...). Empty when it adds nothing.
+ * @param {object[]} base
+ * @param {object[]} more
+ * @param {string|null} [category]  what the extra is ("precision")
+ */
+export function extraParts(base, more, category = null) {
+  const key = p => `${p.type}|${p.persistent ? 1 : 0}`;
+  const had = new Map();
+  for ( const p of base ?? [] ) {
+    const h = had.get(key(p)) ?? { dice: new Map(), flat: 0 };
+    for ( const d of p.dice ?? [] ) h.dice.set(d.faces, (h.dice.get(d.faces) ?? 0) + d.n);
+    h.flat += p.flat ?? 0;
+    had.set(key(p), h);
+  }
+  const out = [];
+  for ( const p of more ?? [] ) {
+    const h = had.get(key(p)) ?? { dice: new Map(), flat: 0 };
+    const dice = [];
+    for ( const d of p.dice ?? [] ) {
+      const left = h.dice.get(d.faces) ?? 0;
+      const n = d.n - Math.min(left, d.n);
+      h.dice.set(d.faces, Math.max(0, left - d.n));
+      if ( n > 0 ) dice.push({ n, faces: d.faces, mult: 1 });
+    }
+    const flat = Math.max(0, (p.flat ?? 0) - h.flat);
+    h.flat = Math.max(0, h.flat - (p.flat ?? 0));
+    had.set(key(p), h);
+    if ( dice.length || flat > 0 ) out.push({ dice, flat, type: p.type, persistent: !!p.persistent, category: category ?? p.category ?? null });
+  }
+  return out;
+}
+
+/**
  * @param {object} d
  * @param {string} d.actorId
  * @param {Set<string>} d.slugs     the slugs of its feats, features and actions

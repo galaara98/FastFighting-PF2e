@@ -10,7 +10,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
-import { classActions } from "./class-actions.js";
+import { classActions, extraParts } from "./class-actions.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
@@ -22,6 +22,12 @@ const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", bur
 /** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
 const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
+
+/**
+ * Roll options a class means to have on in every fight, so they're part of its Strikes: a thaumaturge's Implement's
+ * Empowerment (an implement in one hand, a weapon in the other).
+ */
+const ALWAYS_ON = ["implements-empowerment"];
 
 const EFFECT_CACHE = new Map();
 const CREATURE_CACHE = new Map();
@@ -126,22 +132,27 @@ export class Pf2eAdapter extends SystemAdapter {
     const hp = sys.attributes.hp ?? {};
     const level = actor.level ?? sys.details?.level?.value ?? 0;
     const traits = [...(sys.traits?.value ?? [])];
-    const kind = actor.type === "character" ? "pc"
-      : actor.type === "familiar" ? "companion"
+    // (An animal or construct companion made on a character sheet is a minion: a companion, not a player character.)
+    const kind = actor.type === "familiar" || (actor.type === "character" && traits.includes("minion")) ? "companion"
+      : actor.type === "character" ? "pc"
         : traits.includes("minion") ? "minion" : "npc";
 
     // Its Strikes, and what its class does with them (Vicious Swing, Double Slice, Flurry of Blows, Hunter's Edge ...).
-    const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes: await this.#strikes(actor) });
+    const { strikes, variants } = await this.#strikes(actor);
+    const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes });
     const actions = [
       ...martial.strikes,
       ...martial.actions,
+      ...variants,
+      ...await this.#elementalBlasts(actor),
+      ...this.#marks(actor),
       ...await this.#spells(actor),
       ...this.#consumables(actor),
       ...this.#feats(actor),
       ...await this.#selfEffects(actor),
       ...this.#skillActions(actor, traits)
     ];
-    actions.push(...this.#abilities(actor, actions));
+    actions.push(...await this.#abilities(actor, actions));
 
     const speeds = {};
     for ( const [key, value] of Object.entries(sys.movement?.speeds ?? {}) ) {
@@ -317,21 +328,41 @@ export class Pf2eAdapter extends SystemAdapter {
     return null;
   }
 
+  /**
+   * Its Strikes, with what its class and archetypes add, read off the system's own damage formulas (rule elements
+   * and all) rather than by name:
+   *  - what's always on in a fight (a thaumaturge's Implement's Empowerment) is part of every Strike;
+   *  - what a flat-footed target adds (Sneak Attack, and the archetypes' and other classes' like it) is extra
+   *    precision damage against an off-guard foe;
+   *  - a Strike set up by a class action is an action of its own: an investigator's Devise a Stratagem (Strategic
+   *    Strike), a swashbuckler's finisher with panache (Precise Strike).
+   * A bomb or other consumable weapon can be thrown only as many times as it has.
+   * @returns {Promise<{strikes: object[], variants: object[]}>}
+   */
   async #strikes(actor) {
     const out = [];
+    const variants = [];
+    const character = actor.type === "character";
     const pack = this.#bonusDice(actor, "pack-attack");
     const sneak = this.#sneakAttackDice(actor);
+    const has = slug => actor.items.some(i => slugOf(i) === slug);
+    const setups = [];
+    if ( has("devise-a-stratagem") ) setups.push({ key: "stratagem", label: "Devise a Stratagem", options: ["check:substitution:devise-a-stratagem"], precision: true });
+    if ( has("panache") || actor.items.some(i => i.system?.traits?.value?.includes("finisher")) ) setups.push({ key: "finisher", label: "Finisher", options: ["self:effect:panache", "finisher"] });
     const strikes = (actor.system.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
     for ( const [index, s] of strikes.entries() ) {
       const item = s.item;
-      let normal = null;
-      let crit = null;
-      try {
-        normal = await s.damage?.({ getFormula: true });
-        crit = await s.critical?.({ getFormula: true });
-      } catch ( err ) {
-        console.warn(`fast-fighting | could not read damage for ${actor.name} ${s.label}`, err);
-      }
+      const formula = async (options = [], critical = false) => {
+        try {
+          const params = { getFormula: true, options: [...ALWAYS_ON, ...options] };
+          return (critical ? await s.critical?.(params) : await s.damage?.(params)) ?? null;
+        } catch ( err ) {
+          console.warn(`fast-fighting | could not read damage for ${actor.name} ${s.label}`, err);
+          return null;
+        }
+      };
+      const normal = await formula();
+      const crit = await formula([], true);
       const damage = normal ? parseTypedFormula(normal) : [];
       const effects = this.#attackEffects(actor, item);
       if ( !damage.length && !effects.length ) continue;
@@ -342,13 +373,21 @@ export class Pf2eAdapter extends SystemAdapter {
       const reach = reachTrait ? (Number(reachTrait.split("-")[1]) || 10) : (Number(item?.reach) || 5);
       const reload = Number(traits.find(t => t.startsWith("reload-"))?.split("-")[1]) || 0;
       const primaryType = damage[0]?.type ?? "untyped";
+      // (A bomb, a dart of alchemist's fire: one throw each.)
+      const consumable = traits.includes("consumable") || traits.includes("bomb");
+      const quantity = Number(item?.system?.quantity ?? 1);
+      if ( consumable && !(quantity > 0) ) continue;
 
       const bonusDamage = [];
       if ( pack && !ranged ) bonusDamage.push({ when: "pack", allies: 2, parts: [parseFormula(pack, primaryType)] });
-      const sneakEligible = actor.type !== "character" || ranged || traits.includes("agile") || traits.includes("finesse");
-      if ( sneak && sneakEligible ) bonusDamage.push({ when: "offGuard", parts: [{ ...parseFormula(sneak, primaryType), category: "precision" }] });
+      // Against an off-guard foe: what the system adds then (a character's Sneak Attack, by any class or archetype).
+      const offGuard = character && damage.length ? extraParts(damage, parseTypedFormula(await formula(["target:condition:off-guard"]) ?? ""), "precision") : [];
+      if ( offGuard.length ) bonusDamage.push({ when: "offGuard", parts: offGuard });
+      else if ( sneak && (!character || ranged || traits.includes("agile") || traits.includes("finesse")) ) {
+        bonusDamage.push({ when: "offGuard", parts: [{ ...parseFormula(sneak, primaryType), category: "precision" }] });
+      }
 
-      out.push({
+      const strike = {
         id: `${actor.id}.strike.${s.slug ?? index}.${index}`,
         name: s.label,
         kind: "strike",
@@ -362,11 +401,58 @@ export class Pf2eAdapter extends SystemAdapter {
         critDamage: crit ? parseTypedFormula(crit) : null,
         effects,
         bonusDamage,
-        drawCost: s.ready === false && actor.type === "character" ? 1 : 0,
-        traits
-      });
+        drawCost: s.ready === false && character ? 1 : 0,
+        traits,
+        ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
+      };
+      out.push(strike);
+      // What a class action before the Strike makes of it.
+      for ( const setup of setups ) {
+        if ( consumable || !damage.length ) continue;
+        const more = parseTypedFormula(await formula(setup.options) ?? "");
+        const extra = extraParts(damage, more, setup.precision ? "precision" : null);
+        if ( !extra.length ) continue;
+        const moreCrit = parseTypedFormula(await formula(setup.options, true) ?? "");
+        variants.push({ setup, strike: { ...strike, id: `${strike.id}.${setup.key}`, name: `${setup.label} (${s.label})`, cost: strike.cost + 1, oncePerTurn: true,
+          damage: [...damage, ...extra], critDamage: moreCrit.length ? moreCrit : null, classAction: setup.key } });
+      }
     }
-    return out;
+    // One of each: the Strike it does most with.
+    const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0) + (a.bonus ?? 0);
+    const picked = [];
+    for ( const setup of setups ) {
+      const best = variants.filter(v => v.setup === setup).map(v => v.strike).sort((a, b) => mean(b) - mean(a))[0];
+      if ( best ) picked.push(best);
+    }
+    return { strikes: out, variants: picked };
+  }
+
+  /**
+   * A kineticist's Elemental Blast, as the system works it out (its impulse attack, its gate's damage die, the
+   * two-action blast's Constitution): one action, up close or at range, and two actions at range.
+   */
+  async #elementalBlasts(actor) {
+    const Blast = game.pf2e?.ElementalBlast;
+    if ( !Blast || actor.class?.slug !== "kineticist" && !actor.items.some(i => slugOf(i) === "elemental-blast") ) return [];
+    const out = [];
+    try {
+      const blast = new Blast(actor);
+      const bonus = blast.statistic?.check?.mod ?? 0;
+      for ( const config of blast.configs ?? [] ) {
+        const damageType = config.damageTypes?.[0]?.value;
+        if ( !damageType ) continue;
+        const feet = Number(config.range?.max ?? config.range?.increment) || 30;
+        const read = async (melee, actionCost) => parseTypedFormula(await blast.damage({ element: config.element, damageType, melee, actionCost, getFormula: true }) ?? "");
+        const base = { kind: "strike", bonus, maps: [0, -5, -10], traits: ["impulse", "attack", config.element, "elemental-blast"] };
+        const name = `Elemental Blast (${config.element})`;
+        out.push({ ...base, id: `${actor.id}.blast.${config.element}.melee`, name, cost: 1, melee: true, reach: 5, damage: await read(true, 1) });
+        out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged`, name, cost: 1, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 1) });
+        out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged2`, name: `${name}, two actions`, cost: 2, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 2) });
+      }
+    } catch ( err ) {
+      console.warn(`fast-fighting | could not read ${actor.name}'s Elemental Blast`, err);
+    }
+    return out.filter(a => a.damage.length);
   }
 
   #attackEffects(actor, item) {
@@ -658,13 +744,15 @@ export class Pf2eAdapter extends SystemAdapter {
    * Its own abilities that ask for a save and hurt or hinder (Breath Weapon, Trample, a Drain): read from their text
    * (abilities.js), with a cooldown ("can't use it again for 1d4 rounds") or a frequency (once per day) as uses.
    */
-  #abilities(actor, actions) {
+  async #abilities(actor, actions) {
     const strikes = actions.filter(a => a.kind === "strike" && a.damage?.length).map(a => ({ name: a.name, damage: a.damage }));
     const out = [];
     for ( const item of actor.items ) {
-      if ( item.type !== "action" ) continue;
+      // Its actions, and feats that are actions of their own (a kineticist's impulses, Dragon's Rage Breath).
+      if ( item.type !== "action" && !(item.type === "feat" && item.system.actionType?.value === "action") ) continue;
+      if ( item.type === "feat" && !/@Check\[/i.test(item.system.description?.value ?? "") ) continue;
       const action = abilityAction({
-        id: `${actor.id}.${item.id}`, name: item.name, html: item.system.description?.value,
+        id: `${actor.id}.${item.id}`, name: item.name, html: await resolvedText(item),
         actions: item.system.actions?.value, actionType: item.system.actionType?.value, traits: item.system.traits?.value ?? [], strikes
       });
       if ( !action ) continue;
@@ -673,6 +761,19 @@ export class Pf2eAdapter extends SystemAdapter {
       out.push({ ...action, itemId: item.id });
     }
     return out;
+  }
+
+  /**
+   * A thaumaturge's Exploit Vulnerability: one action marks a foe, and its own hits on it deal more (its personal
+   * antithesis, a weakness of 2 + half its level to the thaumaturge's attacks).
+   */
+  #marks(actor) {
+    if ( !actor.items.some(i => slugOf(i) === "exploit-vulnerability") ) return [];
+    const level = actor.level ?? 1;
+    const flat = 2 + Math.floor(level / 2);
+    return [{ id: `${actor.id}.exploit-vulnerability`, name: "Exploit Vulnerability", kind: "control", auto: true, cost: 1, oncePerTurn: true,
+      traits: ["esoterica", "manipulate"], melee: false, range: { increment: 60, max: 60, noPenalty: true },
+      outcome: { mark: [{ dice: [], flat, type: "untyped", persistent: false, category: null }], rounds: 10, label: `exploited (+${flat})` } }];
   }
 
   /** Regeneration (deactivated by acid, fire ...) and fast healing, from the FastHealing rule elements on its abilities. */
@@ -706,6 +807,9 @@ export class Pf2eAdapter extends SystemAdapter {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", melee: true, ac: shield.ac });
       } else if ( slug === "nimble-dodge" ) {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "attacked", ac: 2 });
+      } else if ( slug === "intercept-attack" ) {
+        // A guardian's: an ally within 10 feet taking physical damage, it takes the blow instead (its own resistances).
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "allyHit", range: 10, physical: true, redirect: true, tell: "intercept" });
       } else if ( ["retributive-strike", "glimpse-of-redemption", "liberating-step"].includes(slug) ) {
         // A champion's reaction: a friend within 15 feet hit takes 2 + its level less (and the attacker, in reach of a
         // Retributive Strike, gets struck).
@@ -876,4 +980,33 @@ export class Pf2eAdapter extends SystemAdapter {
 
 function level(actor) {
   return actor.level ?? 0;
+}
+
+/**
+ * An item's text with its inline damage and checks worked out for this creature, as PF2e shows them: formulas that
+ * use its level or ability scores, a class DC, its own rule elements (a kineticist's gate). Text with nothing to work
+ * out is returned as it is.
+ */
+async function resolvedText(item) {
+  const raw = item.system.description?.value ?? "";
+  if ( !/@Damage\[[^\]]*@|@Check\[(?![^\]]*\bdc:\d)/i.test(raw) ) return raw;
+  let html;
+  try {
+    html = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, { rollData: item.getRollData?.(), relativeTo: item });
+  } catch ( err ) {
+    return raw;
+  }
+  // (Parsed inert: a player's own item text never runs anything on the GM's screen.)
+  const div = new DOMParser().parseFromString(String(html ?? ""), "text/html").body;
+  const damage = [...div.querySelectorAll("[data-damage-roll]")].map(e => String(e.dataset.formula ?? "").replace(/^\{|\}$/g, ""));
+  const checks = [...div.querySelectorAll("[data-pf2-check]")].map(e => {
+    const dc = Number(e.dataset.pf2Dc) || Number(/DC (\d+)/i.exec(e.textContent)?.[1]);
+    const basic = e.dataset.pf2Basic === "true" || /\bbasic\b/i.test(e.textContent);
+    return Number.isFinite(dc) && dc > 0 ? `@Check[${e.dataset.pf2Check}|dc:${dc}${basic ? "|basic" : ""}]` : null;
+  });
+  let d = 0;
+  let c = 0;
+  return raw
+    .replace(/@Damage\[((?:[^\[\]]|\[[^\]]*\])*)\]/gi, m => { const f = damage[d++]; return f ? `@Damage[${f}]` : m; })
+    .replace(/@Check\[[^\]]*\]/gi, m => checks[c++] ?? m);
 }

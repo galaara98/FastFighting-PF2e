@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { classActions } from "../scripts/class-actions.js";
+import { classActions, extraParts } from "../scripts/class-actions.js";
 import { parseFormula } from "../scripts/core.js";
 
 const strike = (name, formula, traits = []) => ({ id: `a.${name}`, name, kind: "strike", cost: 1, bonus: 10, maps: traits.includes("agile") ? [0, -4, -8] : [0, -5, -10], melee: true, reach: 5,
@@ -39,5 +39,16 @@ describe("martial class actions", () => {
     expect(flurry.map(s => s.maps)).toEqual([[0, -3, -6], [0, -2, -4]]);
     const precision = build(["hunt-prey", "precision"], [greataxe], 11).strikes[0].bonusDamage[0];
     expect(precision).toMatchObject({ oncePerTurn: true, parts: [{ dice: [{ n: 2, faces: 8 }], category: "precision" }] });
+  });
+});
+
+describe("what a roll option adds to a Strike", () => {
+  const part = (dice, flat, type = "piercing", category = null) => ({ dice: dice.map(([n, faces]) => ({ n, faces, mult: 1 })), flat, type, persistent: false, category });
+  test("the extra dice and flat damage, of the same type, as precision when asked", () => {
+    expect(extraParts([part([[1, 6]], 4)], [part([[1, 6], [1, 6]], 4)], "precision")).toEqual([part([[1, 6]], 0, "piercing", "precision")]);
+    expect(extraParts([part([[1, 6]], 2)], [part([[1, 6]], 6)])).toEqual([part([], 4)]);
+    // A new type of damage is all extra; nothing new is nothing.
+    expect(extraParts([part([[1, 6]], 2)], [part([[1, 6]], 2), part([[1, 6]], 0, "fire")])).toEqual([part([[1, 6]], 0, "fire")]);
+    expect(extraParts([part([[1, 6]], 2)], [part([[1, 6]], 2)])).toEqual([]);
   });
 });
