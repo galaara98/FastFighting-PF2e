@@ -9,6 +9,7 @@ import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
+import { abilityAction } from "./abilities.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
@@ -136,6 +137,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...await this.#selfEffects(actor),
       ...this.#skillActions(actor, traits)
     ];
+    actions.push(...this.#abilities(actor, actions));
 
     const speeds = {};
     for ( const [key, value] of Object.entries(sys.movement?.speeds ?? {}) ) {
@@ -641,6 +643,27 @@ export class Pf2eAdapter extends SystemAdapter {
    * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
    * against one attack). By slug, on characters and monsters alike. Null when it has none.
    */
+  /**
+   * Its own abilities that ask for a save and hurt or hinder (Breath Weapon, Trample, a Drain): read from their text
+   * (abilities.js), with a cooldown ("can't use it again for 1d4 rounds") or a frequency (once per day) as uses.
+   */
+  #abilities(actor, actions) {
+    const strikes = actions.filter(a => a.kind === "strike" && a.damage?.length).map(a => ({ name: a.name, damage: a.damage }));
+    const out = [];
+    for ( const item of actor.items ) {
+      if ( item.type !== "action" ) continue;
+      const action = abilityAction({
+        id: `${actor.id}.${item.id}`, name: item.name, html: item.system.description?.value,
+        actions: item.system.actions?.value, actionType: item.system.actionType?.value, traits: item.system.traits?.value ?? [], strikes
+      });
+      if ( !action ) continue;
+      const often = Number(item.system.frequency?.max);
+      if ( !action.cooldown && often > 0 ) action.uses = often;
+      out.push({ ...action, itemId: item.id });
+    }
+    return out;
+  }
+
   #reactions(actor) {
     const out = [];
     const shield = actor.system.attributes?.shield;
