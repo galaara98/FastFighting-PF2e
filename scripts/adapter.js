@@ -10,7 +10,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
-import { modsFromRules, spellRounds, spellReach, helps, effectRounds } from "./effects.js";
+import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -161,7 +161,9 @@ export class Pf2eAdapter extends SystemAdapter {
 
     const derived = this.deriveTraits(actor);
     const shield = sys.attributes?.shield;
+    const mending = this.#mending(actor);
     return {
+      ...mending,
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
       actorId: actor.id,
@@ -660,6 +662,21 @@ export class Pf2eAdapter extends SystemAdapter {
       const often = Number(item.system.frequency?.max);
       if ( !action.cooldown && often > 0 ) action.uses = often;
       out.push({ ...action, itemId: item.id });
+    }
+    return out;
+  }
+
+  /** Regeneration (deactivated by acid, fire ...) and fast healing, from the FastHealing rule elements on its abilities. */
+  #mending(actor) {
+    const out = {};
+    for ( const item of actor.items ) {
+      for ( const rule of item.system.rules ?? [] ) {
+        if ( rule.key !== "FastHealing" ) continue;
+        const value = Number(ruleValue(rule.value, { actor })) || 0;
+        if ( value <= 0 ) continue;
+        if ( rule.type === "regeneration" ) out.regen = { amount: value, stoppedBy: [...(rule.deactivatedBy ?? [])] };
+        else out.fastHealing = (out.fastHealing ?? 0) + value;
+      }
     }
     return out;
   }
