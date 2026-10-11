@@ -7,7 +7,7 @@ import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 8;
+const NEEDS_API = 9;
 
 /**
  * The last translation module we knew of for this game system, by language: in a language other than English, this
@@ -36,7 +36,7 @@ Hooks.once("fastFighting.init", api => {
     return;
   }
   api.registerAdapter("pf2e", Pf2eAdapter, { priority: 10, source: MODULE_ID });
-  api.adviseTranslation?.(MODULE_ID, "Pathfinder Second Edition", KNOWN_TRANSLATIONS);
+  api.adviseTranslation?.(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
 });
 
 Hooks.once("ready", () => {

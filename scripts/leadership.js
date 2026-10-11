@@ -20,10 +20,10 @@ export function rankLeaders(entries) {
     if ( best <= -99 ) continue;
     const typical = e.level + 4;
     let score = best - typical;
-    const reasons = [t("Lead.Best", "best social/warfare skill {n}", { n: `${best >= 0 ? "+" : ""}${best}` })];
+    const reasons = [t("Lead.Best", { n: `${best >= 0 ? "+" : ""}${best}` })];
     if ( e.isCommander ) {
       score += 4 + Math.min(4, e.tactics ?? 0);
-      reasons.push(t("Lead.Commander", "Commander ({n} tactics)", { n: e.tactics ?? 0 }));
+      reasons.push(t("Lead.Commander", { n: e.tactics ?? 0 }));
     }
     const leaderAbilities = (e.abilities ?? (e.abilityNames ?? []).map(n => ({ key: n, name: n })))
       .filter(a => LEADER_ABILITY.test(a.key ?? "") || LEADER_ABILITY.test(a.name ?? ""));

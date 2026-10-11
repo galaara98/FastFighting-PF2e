@@ -5,6 +5,7 @@
   "description": "Development tooling for the FastFighting PF2e Foundry VTT module",
   "scripts": {
     "test": "vitest run",
+    "test:reworded": "vitest run --mode reworded",
     "test:watch": "vitest"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 {
   "FFPF2E": {
+    "Label": "Pathfinder 2e",
     "NeedsCore": "FastFighting PF2e needs the FastFighting Core module. Install and enable it.",
     "CoreTooOld": "FastFighting PF2e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
     "FocusPoint": "Focus Point",
@@ -50,6 +51,30 @@
       "Master": "Serves a master",
       "Summoned": "Summoned",
       "Orders": "Mindless: follows orders"
+    },
+    "Action": {
+      "Demoralize": "Demoralize",
+      "Trip": "Trip",
+      "Grapple": "Grapple",
+      "Feint": "Feint"
+    },
+    "Feature": {
+      "devise-a-stratagem": "Devise a Stratagem",
+      "elemental-blast": "Elemental Blast",
+      "exploit-vulnerability": "Exploit Vulnerability",
+      "bon-mot": "Bon Mot",
+      "battle-medicine": "Battle Medicine",
+      "vicious-swing": "Vicious Swing",
+      "power-attack": "Power Attack",
+      "double-slice": "Double Slice",
+      "sudden-charge": "Sudden Charge",
+      "flurry-of-blows": "Flurry of Blows"
+    },
+    "Affliction": {
+      "Name": "{name} (Stage {stage})",
+      "Description": "<p>Afflicted during a FastFighting battle. {when} {save} DC {dc}. Continue tracking stages per the affliction's rules.</p>",
+      "Onset": "Still in its onset: takes hold in {n} rounds at stage {stage}.",
+      "Stage": "Stage {stage}."
     }
   }
 }

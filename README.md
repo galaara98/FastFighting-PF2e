@@ -85,3 +85,5 @@ PF2e ties token disposition to the actor's *alliance*. To make a creature Neutra
 Check out this repository next to the core repository (`../FastFighting`). Then run `npm install` and `npm test`; the tests use the core engine through `vitest.config.js`, which you can point elsewhere with `FASTFIGHTING_CORE`. Junction or symlink the folder into Foundry as `Data/modules/fast-fighting-pf2e`.
 
 This module is also the reference for writing a FastFighting helper for another system: see `scripts/main.js` and `scripts/adapter.js`, and the API section of the core README.
+
+Every word this module shows is in `languages/en.json`: the code holds keys, never the English. Translating it takes only a copy of that file (see **Translating** in the core README). `npm run test:reworded` runs the tests again with every word in the language files reworded, so they never depend on the wording.

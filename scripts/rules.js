@@ -48,7 +48,7 @@ export const pf2eRules = {
     return bestReactionStrike(reactor);
   },
   disengage() {
-    return { cost: { actions: 1 }, label: t("StepsAway", "Steps carefully out of reach") };
+    return { cost: { actions: 1 }, label: t("StepsAway") };
   },
   /** A wooden door (Hardness 5, 20 HP), a simple lock (DC 20 to Force Open or Pick a Lock). */
   door: { ac: 10, hp: 20, hardness: 5, forceDC: 20, pickDC: 20 },
@@ -299,15 +299,15 @@ export const pf2eRules = {
     c.dying += [2, 1, -1, -2][degree];
     if ( c.dying >= this.dyingLimit(c) ) {
       c.status = STATUS.DEAD;
-      return t("Recovery.Dies", "fails a recovery check and dies");
+      return t("Recovery.Dies");
     }
     if ( c.dying <= 0 ) {
       c.dying = 0;
       c.stable = true;
       c.wounded += 1;
-      return t("Recovery.Stable", "stabilizes (unconscious)");
+      return t("Recovery.Stable");
     }
-    return t("Recovery.Check", "recovery check ({degree}): dying {n}", { degree: localize(`FASTFIGHTING.Log.Degree${degree}`, ["critical failure", "failure", "success", "critical success"][degree]), n: c.dying });
+    return t("Recovery.Check", { degree: localize(`FASTFIGHTING.Log.Degree${degree}`), n: c.dying });
   },
 
   /** Administer First Aid (stabilize): Medicine against DC 15 + the dying value. */

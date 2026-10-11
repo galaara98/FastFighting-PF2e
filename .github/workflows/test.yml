@@ -32,3 +32,5 @@ jobs:
         working-directory: FastFighting-PF2e
       - run: npm test
         working-directory: FastFighting-PF2e
+      - run: npm run test:reworded
+        working-directory: FastFighting-PF2e

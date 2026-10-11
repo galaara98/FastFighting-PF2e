@@ -49,9 +49,9 @@ export function describePf2eOutcome(spec, final) {
 
 function resourceLabel(spec, key) {
   const action = spec.actions.find(a => a.resource === key);
-  if ( key === "focus" ) return t("FocusPoint", "Focus Point");
-  if ( key === "fate" ) return t("HeroPoint", "Hero Point");
-  if ( key.startsWith("slots:") ) return t("SlotRank", "Rank {rank} spell slot", { rank: key.split(":")[2] });
+  if ( key === "focus" ) return t("FocusPoint");
+  if ( key === "fate" ) return t("HeroPoint");
+  if ( key.startsWith("slots:") ) return t("SlotRank", { rank: key.split(":")[2] });
   return action?.name ?? key;
 }
 
@@ -132,10 +132,10 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
     for ( const a of final.afflictions ?? [] ) {
       toCreate.push({
         type: "effect",
-        name: `${a.name} (Stage ${a.stage})`,
+        name: t("Affliction.Name", { name: a.name, stage: a.stage }),
         img: "icons/svg/poison.svg",
         system: {
-          description: { value: `<p>Afflicted during a FastFighting battle. ${a.onset > 0 ? `Still in its onset: takes hold in ${a.onset} rounds at stage ${a.stage}.` : `Stage ${a.stage}.`} ${a.save} DC ${a.dc}. Continue tracking stages per the affliction's rules.</p>` },
+          description: { value: t("Affliction.Description", { when: a.onset > 0 ? t("Affliction.Onset", { n: a.onset, stage: a.stage }) : t("Affliction.Stage", { stage: a.stage }), save: a.save, dc: a.dc }) },
           badge: { type: "counter", value: a.stage },
           duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
           tokenIcon: { show: true }

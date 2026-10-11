@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { classActions, extraParts } from "../scripts/class-actions.js";
 import { parseFormula } from "../scripts/core.js";
+import { text } from "./foundry-i18n.js";
 
 const strike = (name, formula, traits = []) => ({ id: `a.${name}`, name, kind: "strike", cost: 1, bonus: 10, maps: traits.includes("agile") ? [0, -4, -8] : [0, -5, -10], melee: true, reach: 5,
   damage: [parseFormula(formula, "slashing")], critDamage: null, traits });
@@ -12,14 +13,14 @@ const build = (slugs, strikes, level = 5) => classActions({ actorId: "a", slugs:
 describe("martial class actions", () => {
   test("Vicious Swing: two actions, one more weapon die (two at 10th), counting as two attacks", () => {
     const [swing] = build(["vicious-swing"], [greataxe, shortsword]).actions;
-    expect(swing).toMatchObject({ name: "Vicious Swing (Greataxe)", cost: 2, attacks: 2 });
+    expect(swing).toMatchObject({ name: `${text("FFPF2E.Feature.vicious-swing")} (Greataxe)`, cost: 2, attacks: 2 });
     expect(swing.damage.at(-1).dice).toEqual([{ n: 1, faces: 12 }]);
     expect(build(["power-attack"], [greataxe], 10).actions[0].damage.at(-1).dice).toEqual([{ n: 2, faces: 12 }]);
   });
 
   test("Double Slice: a Strike with each of two weapons, both at the same penalty", () => {
     const [slice] = build(["double-slice"], [greataxe, shortsword, fist]).actions;
-    expect(slice).toMatchObject({ name: "Double Slice", cost: 2, sameMap: true });
+    expect(slice).toMatchObject({ name: text("FFPF2E.Feature.double-slice"), cost: 2, sameMap: true });
     expect(slice.sequence.map(s => s.name)).toEqual(["Greataxe", "Shortsword"]);
     expect(build(["double-slice"], [greataxe, fist]).actions).toEqual([]); // (one weapon and a fist: no)
   });
@@ -30,7 +31,7 @@ describe("martial class actions", () => {
 
   test("Flurry of Blows: two unarmed Strikes for one action, once a turn", () => {
     const [flurry] = build(["flurry-of-blows"], [greataxe, fist]).actions;
-    expect(flurry).toMatchObject({ name: "Flurry of Blows", cost: 1, oncePerTurn: true });
+    expect(flurry).toMatchObject({ name: text("FFPF2E.Feature.flurry-of-blows"), cost: 1, oncePerTurn: true });
     expect(flurry.sequence.map(s => s.name)).toEqual(["Fist", "Fist"]);
   });
 
