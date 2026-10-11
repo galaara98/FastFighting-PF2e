@@ -316,7 +316,11 @@ export class Pf2eAdapter extends SystemAdapter {
     for ( const item of inventory.contents ?? [] ) {
       if ( item.isOfType?.("treasure") && item.isCurrency ) continue;
       if ( item.type === "backpack" || !(item.quantity > 0) ) continue; // no containers (their contents would go too)
-      const entry = { id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)) };
+      // (What kind of thing it is, of what, how rare: for a character asking for something of a kind, itemCatalog.)
+      const entry = {
+        id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)),
+        category: item.type, material: item.system.material?.type ?? "", rarity: item.system.traits?.rarity ?? ""
+      };
       const carry = item.system.equipped?.carryType;
       if ( carry === "held" ) wielded.push(entry);
       else if ( carry === "stowed" ) stowed.push(entry);
@@ -1000,6 +1004,22 @@ export class Pf2eAdapter extends SystemAdapter {
 
   detectLeaders(specs) {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
+  }
+
+  /**
+   * The kinds of thing a character can ask for in a standoff: PF2e's physical item types, precious materials and
+   * rarities, in its own words.
+   */
+  itemCatalog() {
+    const label = key => game.i18n.localize(key);
+    const types = ["weapon", "armor", "shield", "ammo", "consumable", "equipment", "treasure", "book"].filter(k => CONFIG.Item.typeLabels?.[k]);
+    const order = ["common", "uncommon", "rare", "unique"];
+    const rarities = Object.keys(CONFIG.PF2E?.rarityTraits ?? {}).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+    return {
+      categories: types.map(key => ({ key, label: label(CONFIG.Item.typeLabels[key]) })),
+      materials: Object.entries(CONFIG.PF2E?.preciousMaterials ?? {}).map(([key, v]) => ({ key, label: label(v) })),
+      rarities: rarities.map(key => ({ key, label: label(CONFIG.PF2E.rarityTraits[key]) }))
+    };
   }
 
   /** PF2e's own words for armor class, hit points and stamina (in the client's language). */

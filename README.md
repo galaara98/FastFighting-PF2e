@@ -42,7 +42,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - immunities, weaknesses and resistances
   - speeds by movement type
   - languages, Diplomacy, Intimidation, Deception, Will and Perception DCs (for talking)
-  - Thievery (for theft, against Perception DC), Medicine (for first aid after the fight), coins and gear (for what a creature could be talked into giving up or have stolen)
+  - Thievery (for theft, against Perception DC), Medicine (for first aid after the fight), coins and gear (for what a creature could be talked into giving up or have stolen, or offer to end a standoff), each item's type, precious material and rarity (for what a character can ask for: PF2e's item types, precious materials and rarities, in its own words)
   - conditions, persistent damage and dying already on a creature (a fight resumed mid-way)
 - **Rules:**
   - four degrees of success, natural 20/1, basic saves, and a minimum of 1 damage per hit;
