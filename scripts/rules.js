@@ -29,6 +29,11 @@ const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ??
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
+  /**
+   * A playstyle's taunt: one action, as goading a foe with words is in the rules (Demoralize, Create a Diversion and
+   * Feint are a single action each).
+   */
+  tauntCost: { actions: 1 },
   /** Three actions; a minion (a summoned creature) two, when its summoner Sustains it. */
   turn(u) {
     return { actions: u.spec.creatureTraits?.includes("minion") ? 2 : 3 };
