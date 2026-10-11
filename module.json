@@ -20,8 +20,7 @@
   },
   "esmodules": ["scripts/main.js"],
   "languages": [
-    { "lang": "en", "name": "English", "path": "languages/en.json" },
-    { "lang": "es", "name": "Español", "path": "languages/es.json" }
+    { "lang": "en", "name": "English", "path": "languages/en.json" }
   ],
   "url": "https://github.com/galaara98/FastFighting-PF2e",
   "manifest": "https://github.com/galaara98/FastFighting-PF2e/releases/latest/download/module.json",
