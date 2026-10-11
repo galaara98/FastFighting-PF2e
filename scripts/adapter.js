@@ -987,6 +987,12 @@ export class Pf2eAdapter extends SystemAdapter {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
   }
 
+  /** PF2e's own words for armor class and hit points (in the client's language). */
+  term(key) {
+    const own = { ac: "PF2E.ArmorClassShortLabel", hp: "PF2E.HitPointsShortLabel" }[key];
+    return own && game.i18n.has(own) ? game.i18n.localize(own) : null;
+  }
+
   /* -------------------------------------------- */
 
   async commitOutcome(tokenDoc, spec, final, options) {
