@@ -17,6 +17,11 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - regeneration (deactivated by the damage it names) and fast healing, from their rule elements
   - Evasion, Juggernaut and Resolve: a success on that save counts as a critical success
   - martial class actions by slug: Vicious Swing (or Power Attack), Double Slice, Sudden Charge, Flurry of Blows, and a ranger's Hunter's Edge (Flurry's smaller multiple attack penalty, Precision's extra damage on the first hit each turn; Hunt Prey's own action isn't counted)
+  - what classes and archetypes add to a Strike, read off the system's own damage formula (rule elements and all) rather than by name: against an off-guard foe (Sneak Attack from any class or archetype, a cat companion's precision), what's always on in a fight (a thaumaturge's Implement's Empowerment), and Strikes set up by a class action (an investigator's Devise a Stratagem, a swashbuckler's finisher with panache)
+  - a kineticist's Elemental Blast (as the system works it out) and impulses; any feat that's an action with a save (impulses, Dragon's Rage Breath) is read like a monster's ability, its inline damage and DC worked out for the creature
+  - a thaumaturge's Exploit Vulnerability (extra damage on its own hits against the foe), a guardian's Intercept Attack (it takes an ally's blow instead)
+  - bombs and other consumable weapons: as many throws as there are
+  - animal and construct companions made on character sheets are companions, not player characters
   - champion's reactions: Retributive Strike, Glimpse of Redemption and Liberating Step (a friend within 15 feet takes 2 + level less from a blow; a Retributive Strike also strikes the attacker in reach)
   - Grapple for anyone trained in Athletics (grabbed, restrained on a critical success)
   - summon spells: a creature of the trait the spell calls, at the highest level its rank allows, from the installed bestiaries (the Monster Core first), as a minion with two actions that its summoner must Sustain each turn or lose
