@@ -2,8 +2,10 @@
  * Reading PF2e spell effects into the engine's buffs and debuffs. Pure, unit-tested: no Foundry globals.
  *
  * A PF2e buff or debuff spell links its "Spell Effect" item, whose rule elements carry the numbers: FlatModifier
- * (Bless: +1 status to attack rolls; Bane: -1; Heroism: +1 to attacks, saves and skills, more when heightened),
- * TempHP. What the engine can't play out (a rule that only applies sometimes, an item alteration) is left out.
+ * (Bless: +1 status to attacks; Bane: -1; Heroism: +1 to attacks, saves and skills, more when heightened), TempHP.
+ * An action that puts an effect on its user (Rage) reads the same way, with the actor's own numbers (its level, its
+ * ability modifiers) and the few conditions a fight can tell (this effect is on; a melee Strike). What the engine
+ * can't play out (a rule that only applies sometimes, an item alteration) is left out.
  */
 
 /** FlatModifier selectors -> engine bonuses. */
@@ -21,10 +23,15 @@ const SELECTORS = {
  * ternary(gte(@item.level,6),2,1))"), worked out by a small evaluator (no eval) with @item.level as the spell's rank.
  * Returns null for anything it doesn't understand.
  */
-export function ruleValue(raw, { rank = 1 } = {}) {
+export function ruleValue(raw, { rank = 1, actor = null, flags = {} } = {}) {
   if ( typeof raw === "number" ) return raw;
   if ( typeof raw !== "string" ) return null;
-  const src = raw.replace(/@item\.(?:level|rank)/g, String(rank)).replace(/\s+/g, "");
+  // The actor's own numbers: @actor.level, @actor.abilities.con.mod, and flags set by the effect's other rules.
+  const src = raw.replace(/@item\.(?:level|rank)/g, String(rank))
+    .replace(/@actor\.level/g, String(actor?.level ?? 0))
+    .replace(/@actor\.abilities\.(\w+)\.mod/g, (m, k) => String(actor?.abilities?.[k]?.mod ?? 0))
+    .replace(/@actor\.flags\.system\.([\w.]+)/g, (m, k) => String(flags[k] ?? 0))
+    .replace(/\s+/g, "");
   let i = 0;
   const fail = () => { throw new Error("unreadable"); };
   const FUNCS = {
@@ -79,14 +86,50 @@ export function ruleValue(raw, { rank = 1 } = {}) {
   }
 }
 
-/** A Spell Effect's rule elements as engine bonuses and penalties (and temporary hit points). */
-export function modsFromRules(rules, { rank = 1 } = {}) {
+/**
+ * Does a PF2e predicate hold, given the roll options known to be true? Strings must be among them; {not}, {or},
+ * {and} and {nor} combine. Anything it can't tell counts as not true.
+ */
+export function predicateHolds(predicate, options) {
+  const test = term => {
+    if ( typeof term === "string" ) return options.has(term);
+    if ( !term || typeof term !== "object" ) return false;
+    if ( "not" in term ) return !test(term.not);
+    if ( Array.isArray(term.or) ) return term.or.some(test);
+    if ( Array.isArray(term.and) ) return term.and.every(test);
+    if ( Array.isArray(term.nor) ) return !term.nor.some(test);
+    return false;
+  };
+  return [].concat(predicate ?? []).every(test);
+}
+
+/**
+ * Rule elements as engine bonuses and penalties (and temporary hit points).
+ * @param {object[]} rules
+ * @param {object} [o]
+ * @param {number} [o.rank]       the spell's rank (or the item's level)
+ * @param {object} [o.actor]      {level, abilities: {con: {mod}}} for formulas that use them
+ * @param {Set<string>} [o.options]  roll options known to hold: with them, rules whose predicates hold count too
+ *                                (without, any rule with a predicate is left out)
+ * @param {string} [o.only]       only rules whose predicate names this (an action's own rules for while its effect is on)
+ */
+export function modsFromRules(rules, { rank = 1, actor = null, options = null, only = null } = {}) {
   const mods = {};
   let tempHp = 0;
+  const flags = {};
   for ( const r of rules ?? [] ) {
-    if ( !r || r.predicate?.length ) continue; // only sometimes (against fear, on the first Strike): left out
+    if ( !r ) continue;
+    if ( only && !JSON.stringify(r.predicate ?? []).includes(only) ) continue;
+    if ( r.predicate?.length && !(options && predicateHolds(r.predicate, options)) ) continue; // only sometimes: left out
+    // Numbers an effect keeps for its other rules (Rage's temporary hit points).
+    if ( r.key === "ActiveEffectLike" && /^flags\.system\./.test(r.path ?? "") ) {
+      const key = r.path.slice("flags.system.".length);
+      const v = ruleValue(r.value, { rank, actor, flags });
+      if ( Number.isFinite(v) ) flags[key] = r.mode === "upgrade" ? Math.max(flags[key] ?? -Infinity, v) : r.mode === "add" ? (flags[key] ?? 0) + v : v;
+      continue;
+    }
     if ( r.key === "FlatModifier" ) {
-      const value = ruleValue(r.value, { rank });
+      const value = ruleValue(r.value, { rank, actor, flags });
       if ( !value ) continue;
       for ( const selector of [].concat(r.selector ?? []) ) {
         for ( const key of SELECTORS[selector] ?? [] ) {
@@ -98,10 +141,17 @@ export function modsFromRules(rules, { rank = 1 } = {}) {
     } else if ( r.key === "RollTwice" && /attack/.test([].concat(r.selector ?? []).join(" ")) && r.keep !== "lower" ) {
       mods.adv = 1; // Sure Strike: roll the attack twice, keep the better
     } else if ( r.key === "TempHP" ) {
-      tempHp = Math.max(tempHp, ruleValue(r.value, { rank }) ?? 0);
+      tempHp = Math.max(tempHp, ruleValue(r.value, { rank, actor, flags }) ?? 0);
     }
   }
   return { mods, tempHp };
+}
+
+/** Rounds an effect item lasts ({value, unit}), or null when it doesn't say (unlimited, or until the encounter ends). */
+export function effectRounds(duration) {
+  const v = Number(duration?.value);
+  if ( !(v > 0) ) return null;
+  return v * ({ rounds: 1, minutes: 10, hours: 600, days: 14400 }[duration.unit] ?? 1);
 }
 
 /** Rounds from a PF2e duration ("1 minute" = 10, "10 minutes" = 100, "1 round", "until the start of your next turn"). */

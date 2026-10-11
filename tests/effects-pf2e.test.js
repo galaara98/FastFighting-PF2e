@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { replay } from "../../fast-fighting/scripts/engine/simulator.js";
 import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
-import { ruleValue, modsFromRules, spellRounds, spellReach, helps } from "../scripts/effects.js";
+import { ruleValue, modsFromRules, spellRounds, spellReach, helps, predicateHolds, effectRounds } from "../scripts/effects.js";
 import { parseControl } from "../scripts/control.js";
 
 // Rule elements as the PF2e 8.6 Spell Effect items carry them.
@@ -129,5 +129,38 @@ describe("PF2e buffs, debuffs and skill actions in a fight", () => {
     const b = r.log.find(e => e.type === "buff");
     expect(b?.round).toBe(1);
     expect(b.targetIds).toEqual(expect.arrayContaining(["cleric", "f1", "f2"]));
+  });
+});
+
+describe("actions that put an effect on their user", () => {
+  // The shapes of the PF2e system's own Rage action and Effect: Rage rules.
+  const effectRules = [
+    { key: "ActiveEffectLike", mode: "upgrade", path: "flags.system.rageTempHP", value: 1 },
+    { key: "ActiveEffectLike", mode: "upgrade", path: "flags.system.rageTempHP", phase: "beforeDerived", predicate: [{ nor: ["self:type:familiar", "self:type:hazard", "self:type:vehicle"] }], value: "@actor.level + @actor.abilities.con.mod" },
+    { key: "TempHP", value: "@actor.flags.system.rageTempHP" },
+    { key: "RollOption", option: "rage" }
+  ];
+  const actionRules = [
+    { key: "FlatModifier", predicate: ["self:effect:rage", { or: [{ not: "item:ranged" }, { and: ["feat:raging-thrower", "item:thrown"] }] }], selector: "strike-damage", slug: "rage", value: 2 },
+    { key: "AdjustModifier", mode: "multiply", predicate: ["item:trait:agile"], selector: "strike-damage", slug: "rage", value: 0.5 }
+  ];
+  const actor = { level: 5, abilities: { con: { mod: 3 } } };
+  const options = new Set(["item:melee", "item:type:weapon", "self:effect:rage"]);
+
+  test("Rage: level + Constitution in temporary hit points, and +2 to melee Strike damage while it lasts", () => {
+    expect(modsFromRules(effectRules, { actor, options })).toEqual({ mods: {}, tempHp: 8 });
+    expect(modsFromRules(actionRules, { actor, options, only: "self:effect:rage" }).mods).toEqual({ damage: 2 });
+    // Without options (a spell effect), rules that only sometimes apply stay out.
+    expect(modsFromRules(actionRules, { actor }).mods).toEqual({});
+  });
+
+  test("predicates and durations", () => {
+    expect(predicateHolds(["a", { not: "b" }], new Set(["a"]))).toBe(true);
+    expect(predicateHolds([{ or: ["x", { and: ["a", "c"] }] }], new Set(["a", "c"]))).toBe(true);
+    expect(predicateHolds([{ nor: ["a"] }], new Set(["a"]))).toBe(false);
+    expect(predicateHolds([{ gte: ["level", 3] }], new Set())).toBe(false);
+    expect(effectRounds({ value: 1, unit: "minutes" })).toBe(10);
+    expect(effectRounds({ value: -1, unit: "unlimited" })).toBeNull();
+    expect(ruleValue("@actor.level + @actor.abilities.con.mod", { actor })).toBe(8);
   });
 });

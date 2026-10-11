@@ -9,7 +9,7 @@ import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
-import { modsFromRules, spellRounds, spellReach, helps } from "./effects.js";
+import { modsFromRules, spellRounds, spellReach, helps, effectRounds } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -17,7 +17,44 @@ const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
 /** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
+/** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
+const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
+const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
+
 const EFFECT_CACHE = new Map();
+const CREATURE_CACHE = new Map();
+
+/** The highest creature level a summon spell of each rank calls (PF2e's summon trait), from rank 1. */
+const SUMMON_LEVEL = [-1, -1, 1, 2, 3, 5, 7, 9, 11, 13, 15];
+/** What each summon spell calls, by its slug (the creature trait to look for). */
+const SUMMON_TRAITS = {
+  "summon-animal": "animal", "summon-fey": "fey", "summon-undead": "undead", "summon-elemental": "elemental", "summon-construct": "construct",
+  "summon-plant-or-fungus": "plant", "summon-dragon": "dragon", "summon-fiend": "fiend", "summon-celestial": "celestial", "summon-monitor": "monitor",
+  "summon-giant": "giant", "summon-entity": "aberration", "summon-anarch": "fiend", "summon-axiom": "monitor", "summon-lesser-servitor": "celestial"
+};
+
+/**
+ * A creature with this trait of the highest level up to `level` from the installed bestiaries (the Monster Core
+ * first), never a unique one: what a summon spell would most likely call.
+ */
+async function creatureFor(level, trait) {
+  const key = `${level}|${trait}`;
+  if ( !CREATURE_CACHE.has(key) ) CREATURE_CACHE.set(key, (async () => {
+    const rank = p => (/monster-core/.test(p.collection) ? 0 : /bestiary/.test(p.collection) ? 1 : 2);
+    const packs = [...game.packs].filter(p => p.documentName === "Actor").sort((a, b) => rank(a) - rank(b));
+    for ( const pack of packs ) {
+      const index = await pack.getIndex({ fields: ["type", "system.details.level.value", "system.traits.value", "system.traits.rarity"] });
+      const fits = index.filter(e => e.type === "npc" && (e.system?.traits?.value ?? []).includes(trait) && e.system?.traits?.rarity !== "unique"
+        && Number(e.system?.details?.level?.value) <= level);
+      if ( !fits.length ) continue;
+      const best = Math.max(...fits.map(e => Number(e.system.details.level.value)));
+      const pick = fits.filter(e => Number(e.system.details.level.value) === best).sort((a, b) => a.name.localeCompare(b.name))[0];
+      return pack.getDocument(pick._id);
+    }
+    return null;
+  })().catch(() => null));
+  return CREATURE_CACHE.get(key);
+}
 async function linkedEffect(uuid) {
   if ( !EFFECT_CACHE.has(uuid) ) EFFECT_CACHE.set(uuid, fromUuid(uuid).catch(() => null));
   return EFFECT_CACHE.get(uuid);
@@ -61,6 +98,9 @@ function areaTargets(area, targetText) {
 }
 
 export class Pf2eAdapter extends SystemAdapter {
+  /** Building a summoned creature (which doesn't summon in turn). */
+  #summoning = false;
+
   static systemId = "pf2e";
 
   get label() {
@@ -93,6 +133,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...await this.#spells(actor),
       ...this.#consumables(actor),
       ...this.#feats(actor),
+      ...await this.#selfEffects(actor),
       ...this.#skillActions(actor, traits)
     ];
 
@@ -140,6 +181,7 @@ export class Pf2eAdapter extends SystemAdapter {
       actions,
       iwr,
       resources,
+      reactions: this.#reactions(actor),
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags, masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
@@ -165,6 +207,7 @@ export class Pf2eAdapter extends SystemAdapter {
           ? { mod: actor.skills.thievery.mod } : null
       },
       creatureTraits: traits,
+      size: sizeOf(actor.size ?? sys.traits?.size?.value),
       social: this.#social(actor, level, traits),
       valuables: this.#valuables(actor),
       leadership: this.#leadershipEntry(actor, tokenDoc.id)
@@ -379,7 +422,9 @@ export class Pf2eAdapter extends SystemAdapter {
           : null;
         // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
         const support = !parts.length && !control ? await this.#spellSupport(spell, stat) : null;
-        if ( !parts.length && !control && !support ) continue;
+        // A summon spell: the creature it most likely calls, which must be Sustained.
+        const summon = traits.includes("summon") && !this.#summoning ? await this.#summon(spell) : null;
+        if ( !parts.length && !control && !support && !summon ) continue;
 
         // Resource
         let resource = null;
@@ -407,6 +452,10 @@ export class Pf2eAdapter extends SystemAdapter {
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
         const isHeal = kinds.has?.("healing") && traits.includes("healing");
+        if ( summon ) {
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, ...summon });
+          continue;
+        }
         if ( support ) {
           out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, ...support });
           continue;
@@ -487,6 +536,28 @@ export class Pf2eAdapter extends SystemAdapter {
    * Haste), a debuff on foes who fail a save (Bane, Malediction), or conditions laid on enemies with no save at all
    * (Dirge of Doom). Null when it does nothing the engine plays out.
    */
+  /**
+   * A summon spell as the engine's: a creature of the trait it calls, at the highest level its rank allows, read like
+   * any creature, as a minion (two actions a turn) that its summoner must Sustain each turn or lose.
+   */
+  async #summon(spell) {
+    const rank = Math.min(10, Number(spell.rank) || 1);
+    const slug = spell.slug ?? slugOf(spell);
+    const trait = SUMMON_TRAITS[slug] ?? (/\b(animal|fey|undead|elemental|construct|plant|dragon|fiend|celestial|monitor|giant|aberration|beast)\b/i.exec(plain(spell.system.description?.value ?? ""))?.[1]?.toLowerCase() ?? "animal");
+    const src = await creatureFor(SUMMON_LEVEL[rank], trait);
+    if ( !src ) return null;
+    this.#summoning = true;
+    let spec = null;
+    try {
+      spec = await this.toCombatantSpec({ actor: src, id: `summon-${src.id}`, name: src.name, texture: { src: src.img } });
+    } finally {
+      this.#summoning = false;
+    }
+    if ( !spec ) return null;
+    spec.creatureTraits = [...new Set([...(spec.creatureTraits ?? []), "minion", "summoned"])];
+    return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true };
+  }
+
   async #spellSupport(spell, stat) {
     const sys = spell.system;
     const html = sys.description?.value ?? "";
@@ -530,6 +601,65 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
+   * Actions that put an effect on their user (Rage, and the like): a buff on itself, read from the effect's rule
+   * elements and the action's own rules for while it's on (Rage: +2 to melee Strike damage, temporary hit points of
+   * level + Constitution), with the actor's own numbers. Its effect is left on after the fight for the time it has
+   * left.
+   */
+  async #selfEffects(actor) {
+    const out = [];
+    const data = { level: actor.level ?? 0, abilities: Object.fromEntries(Object.entries(actor.system.abilities ?? {}).map(([k, v]) => [k, { mod: Number(v?.mod) || 0 }])) };
+    for ( const item of actor.items ) {
+      const uuid = item.system?.selfEffect?.uuid;
+      if ( !uuid || !["action", "feat"].includes(item.type) ) continue;
+      const type = item.system.actionType?.value;
+      if ( type === "reaction" || type === "passive" ) continue;
+      const effect = await linkedEffect(uuid);
+      if ( !effect ) continue;
+      const slug = String(effect.system?.slug ?? slugOf(effect) ?? "");
+      const short = slug.replace(/^effect-/, "");
+      // What a fight can tell: the effect is on, and the Strike is a melee one.
+      const options = new Set(["item:melee", "item:type:weapon", `self:effect:${short}`, `self:effect:${slug}`, short]);
+      const own = modsFromRules(effect.system?.rules ?? [], { rank: item.level ?? 1, actor: data, options });
+      const whileOn = modsFromRules(item.system?.rules ?? [], { rank: item.level ?? 1, actor: data, options, only: `self:effect:${short}` });
+      const mods = { ...own.mods };
+      for ( const [k, v] of Object.entries(whileOn.mods) ) mods[k] = (mods[k] ?? 0) + v;
+      const tempHp = Math.max(own.tempHp, whileOn.tempHp);
+      if ( !Object.keys(mods).length && !tempHp ) continue;
+      out.push({
+        id: `${actor.id}.self.${item.id}`, name: item.name, kind: "buff", targets: "self", itemId: item.id,
+        cost: type === "free" ? 0 : (item.system.actions?.value ?? 1), economy: type === "free" ? "free" : undefined, traits: [...(item.system.traits?.value ?? [])],
+        outcome: { mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, rounds: effectRounds(effect.system?.duration) ?? 10, label: describeMods(mods, { tempHp }) },
+        effectRef: { uuids: [uuid] }
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
+   * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
+   * against one attack). By slug, on characters and monsters alike. Null when it has none.
+   */
+  #reactions(actor) {
+    const out = [];
+    const shield = actor.system.attributes?.shield;
+    const hasShield = shield?.ac > 0 && !shield.broken && !shield.destroyed;
+    for ( const item of actor.items ) {
+      if ( !["feat", "action"].includes(item.type) ) continue;
+      const slug = slugOf(item);
+      if ( slug === "shield-block" && hasShield && shield.hardness > 0 ) {
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: { dice: [], flat: shield.hardness, type: "untyped", persistent: false, category: null } });
+      } else if ( slug === "reactive-shield" && hasShield ) {
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", melee: true, ac: shield.ac });
+      } else if ( slug === "nimble-dodge" ) {
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "attacked", ac: 2 });
+      }
+    }
+    return out.length ? out : null;
+  }
+
+  /**
    * Skill actions anyone (or the trained) can take in a fight: Demoralize (Intimidation against Will: frightened),
    * Trip (Athletics against Reflex, an attack: prone, or prone yourself on a critical failure), Feint (Deception
    * against Perception: off-guard to you), and Bon Mot for those with the feat (Diplomacy against Will).
@@ -548,7 +678,8 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( trained("athletics") ) {
       const prone = { conditions: { prone: 1 }, rounds: 1, label: "prone" };
-      out.push({ id: `${actor.id}.trip`, name: "Trip", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5,
+      // (Only a creature at most one size larger.)
+      out.push({ id: `${actor.id}.trip`, name: "Trip", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
     }
     if ( trained("deception") ) {

@@ -28,6 +28,10 @@ const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ??
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
+  /** Three actions; a minion (a summoned creature) two, when its summoner Sustains it. */
+  turn(u) {
+    return { actions: u.spec.creatureTraits?.includes("minion") ? 2 : 3 };
+  },
 
   /**
    * Reactive Strike: only creatures that have it strike a foe leaving their reach (one reaction a round). A Step
@@ -118,6 +122,8 @@ export const pf2eRules = {
    * mental effects) or because every condition it would impose is one the creature is immune to.
    */
   isImmune(target, action) {
+    // Too big to trip.
+    if ( Number.isFinite(action.maxSize) && Number.isFinite(target.spec.size) && target.spec.size > action.maxSize ) return true;
     const immune = new Set(target.spec.iwr?.immune ?? []);
     const traits = action.traits ?? [];
     if ( traits.some(t => immune.has(TRAIT_IMMUNITY[t] ?? t)) ) return true;
