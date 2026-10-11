@@ -1,5 +1,9 @@
 # FastFighting PF2e
 
+> **AI use:** This module used AI in its creation.
+> - **Programming:** I am a skilled programmer by profession, but AI was used heavily as a co-pilot.
+> - **Strings:** ALL initial strings were created by AI. ALL initial translations were created by AI, and then human writers offered corrections.
+
 Pathfinder Second Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT battle estimator, storyteller and resolver.
 
 FastFighting Core runs the simulations, the Battle Planner, player surveys, stories and Make it So for any system. This module teaches it how PF2e works:
