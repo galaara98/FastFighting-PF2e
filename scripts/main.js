@@ -9,6 +9,14 @@ import { registerLoreBoost } from "./lore.js";
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
 const NEEDS_API = 8;
 
+/**
+ * The last translation module we knew of for this game system, by language: in a language other than English, this
+ * module's settings recommend it when it isn't on (FastFighting Core's api.adviseTranslation).
+ */
+const KNOWN_TRANSLATIONS = {
+  es: { id: "pf2e-es", title: "Translation: Spanish [PF2E] [UNOFFICIAL]", url: "https://github.com/allnnde/pf2e-esp-translation" }
+};
+
 export const MODULE_ID = "fast-fighting-pf2e";
 
 Hooks.once("init", () => {
@@ -28,6 +36,7 @@ Hooks.once("fastFighting.init", api => {
     return;
   }
   api.registerAdapter("pf2e", Pf2eAdapter, { priority: 10, source: MODULE_ID });
+  api.adviseTranslation?.(MODULE_ID, "Pathfinder Second Edition", KNOWN_TRANSLATIONS);
 });
 
 Hooks.once("ready", () => {
