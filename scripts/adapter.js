@@ -144,7 +144,7 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   canHandle(actor) {
-    return !!actor && ["character", "npc", "familiar"].includes(actor.type);
+    return !!actor && ["character", "npc", "familiar", "hazard"].includes(actor.type);
   }
 
   /* -------------------------------------------- */
@@ -157,7 +157,8 @@ export class Pf2eAdapter extends SystemAdapter {
     const level = actor.level ?? sys.details?.level?.value ?? 0;
     const traits = [...(sys.traits?.value ?? [])];
     // (An animal or construct companion made on a character sheet is a minion: a companion, not a player character.)
-    const kind = actor.type === "familiar" || (actor.type === "character" && traits.includes("minion")) ? "companion"
+    const hazard = actor.type === "hazard";
+    const kind = hazard ? "hazard" : actor.type === "familiar" || (actor.type === "character" && traits.includes("minion")) ? "companion"
       : actor.type === "character" ? "pc"
         : traits.includes("minion") ? "minion" : "npc";
 
@@ -184,7 +185,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const v = typeof value === "number" ? value : value?.value;
       if ( mode && v > 0 ) speeds[mode] = v;
     }
-    if ( !speeds.walk && !Object.keys(speeds).length ) speeds.walk = 25;
+    if ( !hazard && !speeds.walk && !Object.keys(speeds).length ) speeds.walk = 25; // (a hazard stays where it is)
 
     const iwr = { immune: [], weak: {}, resist: {} };
     for ( const i of actor.attributes?.immunities ?? [] ) iwr.immune.push(i.type);
@@ -215,7 +216,8 @@ export class Pf2eAdapter extends SystemAdapter {
       img: tokenDoc.texture?.src ?? actor.img,
       kind,
       level,
-      hp: { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0, ...staminaOf(actor, hp) },
+      // (A hazard with no Hit Points can't be broken: it's always set. One with them, at 0, is broken: it's done.)
+      hp: hazard && !(hp.max > 0) ? { value: 1, max: 1, temp: 0 } : { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0, ...staminaOf(actor, hp) },
       defenses: {
         ac: sys.attributes?.ac?.value ?? 10,
         fortitude: actor.saves?.fortitude?.mod ?? level + 5,
@@ -231,7 +233,7 @@ export class Pf2eAdapter extends SystemAdapter {
       reactions: this.#reactions(actor),
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
-      flags: { ...derived.flags, masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
+      flags: { ...derived.flags, ...(hazard ? { fearless: true, mindless: true } : {}), masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
       diesAtZero: actor.type !== "character",
       wounded: sys.attributes?.wounded?.value ?? 0,
       doomed: sys.attributes?.doomed?.value ?? 0,
@@ -258,9 +260,11 @@ export class Pf2eAdapter extends SystemAdapter {
       creatureTraits: traits,
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
-      social: this.#social(actor, level, traits),
+      social: hazard ? { mindless: true, languages: [], pitches: {}, resist: {} } : this.#social(actor, level, traits),
       valuables: this.#valuables(actor),
-      leadership: this.#leadershipEntry(actor, tokenDoc.id)
+      leadership: hazard ? null : this.#leadershipEntry(actor, tokenDoc.id),
+      // A hazard: a simple one fires once (its trigger), a complex one each round; nobody attacks it.
+      ...(hazard ? { hazard: { once: !actor.isComplex }, untargetable: true } : {})
     };
   }
 
@@ -804,7 +808,9 @@ export class Pf2eAdapter extends SystemAdapter {
       if ( item.type === "feat" && !/@Check\[/i.test(item.system.description?.value ?? "") ) continue;
       const action = abilityAction({
         id: `${actor.id}.${item.id}`, name: item.name, html: await resolvedText(item),
-        actions: item.system.actions?.value, actionType: item.system.actionType?.value, traits: item.system.traits?.value ?? [], strikes
+        // (A hazard's reaction is what it does when it's set off: its action.)
+        actions: item.system.actions?.value, traits: item.system.traits?.value ?? [], strikes,
+        actionType: actor.type === "hazard" && item.system.actionType?.value === "reaction" ? "action" : item.system.actionType?.value
       });
       if ( !action ) continue;
       const often = Number(item.system.frequency?.max);

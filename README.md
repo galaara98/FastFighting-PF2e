@@ -9,6 +9,7 @@ Pathfinder Second Edition support for [FastFighting Core](https://github.com/gal
 FastFighting Core runs the simulations, the Battle Planner, player surveys, stories and Make it So for any system. This module teaches it how PF2e works:
 
 - **Reading actors:**
+  - hazards: a simple hazard fires once, a complex one each round (on its Stealth initiative); its Strikes and the abilities it uses when set off (its reaction, read as its action), against whoever is in reach. It doesn't move or think, nobody attacks it, and it doesn't keep its side in the fight. With no alliance (PF2e's default for a hazard) it's set against the party; the planner can change that
   - hit points and temporary hit points, and a character's Stamina Points when the world plays the Stamina variant (damage takes temporary hit points, then Stamina, then hit points; healing restores hit points only)
   - strikes (multiple attack penalty, agile, reach, reload, drawing unready weapons)
   - spells (spell attacks, basic and non-basic saves, auto-hit spells such as Force Barrage)
