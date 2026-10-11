@@ -545,7 +545,10 @@ export class Pf2eAdapter extends SystemAdapter {
           resource = `slots:${entry.id}:${rank}`;
           pool = entry.system.slots?.[`slot${rank}`]?.value ?? 0;
         } else if ( mode === "innate" ) {
-          uses = spell.system.location?.uses?.value ?? 1;
+          // (PF2e says "at will" and "constant" only in the spell's name: "Translocate (At will)". At will is as
+          // often as it likes; a constant one is always on, not cast.)
+          if ( /\(constant\)/i.test(spell.name) ) continue;
+          uses = /\(at[- ]will\)/i.test(spell.name) ? undefined : spell.system.location?.uses?.value ?? 1;
         }
         const id = `${actor.id}.spell.${spell.id}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
