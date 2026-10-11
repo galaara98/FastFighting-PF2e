@@ -8,7 +8,7 @@
 import { MODULE_ID, STATUS } from "./core.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
-const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed" };
+const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
 
 function partFormula(p) {
   const dice = p.dice.map(d => `${d.mult && d.mult !== 1 ? `${d.mult}*` : ""}${d.n}d${d.faces}`);
@@ -151,10 +151,10 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
   } else if ( final.status === STATUS.SURRENDERED ) {
     const [effect] = await actor.createEmbeddedDocuments("Item", [{
       type: "effect",
-      name: game.i18n.localize("FASTFIGHTING.MakeItSo.Surrendered"),
+      name: game.i18n.localize("FFPF2E.Surrendered"),
       img: "icons/svg/cancel.svg",
       system: {
-        description: { value: `<p>${game.i18n.localize("FASTFIGHTING.MakeItSo.SurrenderedHint")}</p>` },
+        description: { value: `<p>${game.i18n.localize("FFPF2E.SurrenderedHint")}</p>` },
         duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
         tokenIcon: { show: true }
       }
@@ -320,7 +320,7 @@ async function handleLoot(tokenDoc, actor, options, undo) {
   });
   if ( !items.length ) return;
   const pileActor = await Actor.create({
-    name: game.i18n.format("FASTFIGHTING.MakeItSo.Remains", { name: tokenDoc.name }),
+    name: game.i18n.format("FFPF2E.Remains", { name: tokenDoc.name }),
     type: "loot",
     img: "icons/containers/bags/sack-leather-brown.webp",
     system: { lootSheetType: "Loot" },

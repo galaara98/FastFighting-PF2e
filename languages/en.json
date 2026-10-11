@@ -3,6 +3,9 @@
     "NeedsCore": "FastFighting PF2e needs the FastFighting Core module. Install and enable it.",
     "CoreTooOld": "FastFighting PF2e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
     "FocusPoint": "Focus Point",
-    "SlotRank": "Rank {rank} spell slot"
+    "SlotRank": "Rank {rank} spell slot",
+    "Surrendered": "Surrendered",
+    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
+    "Remains": "Remains of {name}"
   }
 }

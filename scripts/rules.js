@@ -112,7 +112,9 @@ export const pf2eRules = {
     const traits = action.traits ?? [];
     if ( traits.some(t => immune.has(TRAIT_IMMUNITY[t] ?? t)) ) return true;
     if ( traits.includes("mental") && target.spec.creatureTraits?.includes("mindless") ) return true;
-    const keys = [...new Set([...(action.onSave ?? []), ...(action.onHit ?? [])].filter(Boolean).flatMap(o => Object.keys(o.conditions ?? {})))];
+    // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count).
+    const outcomes = [...(action.onSave ?? []), ...(action.onHit ?? []), action.outcome].filter(o => o && !o.self);
+    const keys = [...new Set(outcomes.flatMap(o => Object.keys(o.conditions ?? {})))];
     return keys.length > 0 && keys.every(k => immune.has(CONDITION_IMMUNITY[k] ?? k));
   },
 

@@ -8,7 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
-import { parseControl, parseCritRider, conditionsIn } from "./control.js";
+import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { modsFromRules, spellRounds, spellReach, helps } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
@@ -22,7 +22,6 @@ async function linkedEffect(uuid) {
   if ( !EFFECT_CACHE.has(uuid) ) EFFECT_CACHE.set(uuid, fromUuid(uuid).catch(() => null));
   return EFFECT_CACHE.get(uuid);
 }
-const plainText = html => String(html ?? "").replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 /** PF2e conditions the engine plays out, by slug -> engine key. */
 const ENGINE_CONDITIONS = {
   "off-guard": "offGuard", grabbed: "offGuard", restrained: "offGuard", prone: "prone", clumsy: "clumsy", enfeebled: "enfeebled",
@@ -470,7 +469,7 @@ export class Pf2eAdapter extends SystemAdapter {
   async #spellSupport(spell, stat) {
     const sys = spell.system;
     const html = sys.description?.value ?? "";
-    const text = plainText(html);
+    const text = plain(html);
     const mods = {};
     let tempHp = 0;
     for ( const m of html.matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {

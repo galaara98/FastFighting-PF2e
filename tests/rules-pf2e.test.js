@@ -98,3 +98,16 @@ describe("leadership by slug", () => {
     expect(banner.reason).toMatch(/Banner des Kommandanten/);
   });
 });
+
+describe("immunity covers effects that simply happen", () => {
+  test("a fear aura with no save doesn't touch the immune", () => {
+    const dirge = { id: "dirge", kind: "control", auto: true, traits: ["fear", "mental"], outcome: { conditions: { frightened: 1 }, rounds: 1 } };
+    const fearless = { spec: { iwr: { immune: ["frightened"] }, creatureTraits: [] } };
+    const plain = { spec: { iwr: { immune: [] }, creatureTraits: [] } };
+    expect(pf2eRules.isImmune(fearless, { ...dirge, traits: [] })).toBe(true);
+    expect(pf2eRules.isImmune(plain, dirge)).toBe(false);
+    // A backfire on the user isn't what the target would suffer.
+    const trip = { id: "trip", kind: "control", check: {}, onHit: [{ conditions: { prone: 1 }, self: true }, null, { conditions: { prone: 1 } }, null] };
+    expect(pf2eRules.isImmune({ spec: { iwr: { immune: ["prone"] } } }, trip)).toBe(true);
+  });
+});

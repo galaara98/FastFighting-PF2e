@@ -31,7 +31,7 @@ const CONDITION_RE = /\b(frightened|slowed|stunned|sickened|clumsy|enfeebled|off
 const DEGREES = ["Critical Failure", "Failure", "Success", "Critical Success"];
 const UNIT_ROUNDS = { round: 1, rounds: 1, minute: 10, minutes: 10, hour: 600, hours: 600 };
 
-function plain(html) {
+export function plain(html) {
   return String(html ?? "")
     .replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1")
     .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
