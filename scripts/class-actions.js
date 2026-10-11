@@ -61,9 +61,11 @@ export function extraParts(base, more, category = null) {
  * @param {object[]} d.strikes      its Strikes, as engine actions
  * @returns {{actions: object[], strikes: object[]}}  new actions, and the Strikes as changed (Hunter's Edge)
  */
-export function classActions({ actorId, slugs, level, strikes }) {
+export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   const out = [];
   const has = slug => slugs.has(slug);
+  // (What the character calls it: a translated compendium's name, else the English.)
+  const named = (slug, english) => names[slug] ?? english;
   let changed = strikes;
   // Hunter's Edge: Flurry (a smaller multiple attack penalty) or Precision (extra precision damage once a turn).
   if ( has("hunt-prey") && has("flurry") ) {
@@ -80,7 +82,7 @@ export function classActions({ actorId, slugs, level, strikes }) {
   const swing = has("vicious-swing") || has("power-attack") ? best(melee.filter(s => !s.traits?.includes("unarmed")).length ? melee.filter(s => !s.traits?.includes("unarmed")) : melee) : null;
   if ( swing ) {
     const extra = weaponDice(swing, level >= 18 ? 3 : level >= 10 ? 2 : 1);
-    if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? "Vicious Swing" : "Power Attack"} (${swing.name})`, cost: 2, attacks: 2,
+    if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? named("vicious-swing", "Vicious Swing") : named("power-attack", "Power Attack")} (${swing.name})`, cost: 2, attacks: 2,
       damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, doubled(extra)] : null, classAction: "vicious-swing" });
   }
   // Double Slice: a Strike with each of two melee weapons, both at the current penalty.
@@ -91,20 +93,20 @@ export function classActions({ actorId, slugs, level, strikes }) {
       if ( weapons.length === 2 ) break;
     }
     if ( weapons.length === 2 ) {
-      out.push({ ...weapons[0], id: `${actorId}.double-slice`, name: "Double Slice", cost: 2, reach: Math.min(weapons[0].reach ?? 5, weapons[1].reach ?? 5),
+      out.push({ ...weapons[0], id: `${actorId}.double-slice`, name: named("double-slice", "Double Slice"), cost: 2, reach: Math.min(weapons[0].reach ?? 5, weapons[1].reach ?? 5),
         sequence: weapons.map((w, i) => ({ ...w, id: `${actorId}.double-slice.${i}` })), sameMap: true, classAction: "double-slice" });
     }
   }
   // Sudden Charge: two Strides, then a Strike.
   if ( has("sudden-charge") && melee.length ) {
     const s = best(melee);
-    out.push({ ...s, id: `${s.id}.sudden-charge`, name: `Sudden Charge (${s.name})`, cost: 2, charge: 2, classAction: "sudden-charge" });
+    out.push({ ...s, id: `${s.id}.sudden-charge`, name: `${named("sudden-charge", "Sudden Charge")} (${s.name})`, cost: 2, charge: 2, classAction: "sudden-charge" });
   }
   // Flurry of Blows: two unarmed Strikes for one action, once a turn.
   if ( has("flurry-of-blows") ) {
     const unarmed = melee.filter(s => s.traits?.includes("unarmed"));
     const s = best(unarmed.length ? unarmed : melee);
-    if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: "Flurry of Blows", cost: 1, oncePerTurn: true,
+    if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: named("flurry-of-blows", "Flurry of Blows"), cost: 1, oncePerTurn: true,
       sequence: [0, 1].map(i => ({ ...s, id: `${s.id}.flurry-of-blows.${i}` })), classAction: "flurry-of-blows" });
   }
   return { actions: out, strikes: changed };

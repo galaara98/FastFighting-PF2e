@@ -1,0 +1,55 @@
+{
+  "FFPF2E": {
+    "NeedsCore": "FastFighting PF2e necesita el módulo FastFighting Core. Instálalo y actívalo.",
+    "CoreTooOld": "FastFighting PF2e necesita una versión más reciente de FastFighting Core. Actualiza FastFighting Core en Módulos complementarios.",
+    "FocusPoint": "Punto de foco",
+    "SlotRank": "Espacio de conjuro de rango {rank}",
+    "Surrendered": "Rendido",
+    "SurrenderedHint": "Depuso las armas durante una batalla de FastFighting y está a merced de los vencedores.",
+    "Remains": "Restos de {name}",
+    "HeroPoints": "Puntos de héroe",
+    "Aid": "Ayudar",
+    "RecallKnowledge": "Recordar conocimiento",
+    "Settings": {
+      "loreBoost": {
+        "Name": "Ventaja del Coleccionista de saber",
+        "Hint": "Cuánto más probable es que las tiradas de un Coleccionista de saber contra un enemigo que ha estudiado tengan éxito, durante el resto del turno en que gastó una acción en Recordar conocimiento (cuando la prueba salió bien; nunca sin ella). 1,25× es un empujoncito; 3×, casi siempre un éxito seguro. Por defecto 2×: Recordar conocimiento cuesta una acción de tres, y la ventaja cubre las dos que quedan. En PF2e importa en todo el rango: los ataques después del primero en un turno llevan penalizador, así que sus probabilidades empiezan bajas y hay margen para subirlas."
+      }
+    },
+    "HeroPoint": "Punto de héroe",
+    "TwoActions": "{name}, dos acciones",
+    "Exploited": "explotado (+{n})",
+    "Flustered": "aturullado",
+    "Helpless": "indefenso",
+    "Aided": "ayudado",
+    "Hindered": "estorbado",
+    "StepsAway": "Se aparta con cuidado fuera de alcance",
+    "Recovery": {
+      "Dies": "falla una prueba de recuperación y muere",
+      "Stable": "se estabiliza (inconsciente)",
+      "Check": "prueba de recuperación ({degree}): agonizante {n}"
+    },
+    "Lead": {
+      "Best": "mejor habilidad social o marcial {n}",
+      "Commander": "Comandante ({n} tácticas)"
+    },
+    "Reason": {
+      "Mindless": "Sin mente",
+      "Pc": "Personaje jugador",
+      "Animal": "Instinto animal",
+      "Int": "Inteligencia {n}",
+      "Pack": ", caza en manada",
+      "NeverFlees": "Sin mente: nunca huye",
+      "Construct": "Constructo",
+      "Undead": "Muerto viviente",
+      "Will": "Voluntad {n} respecto a su nivel",
+      "SelfPreservation": ", instinto de conservación animal",
+      "Default": "Por defecto",
+      "Trait": "Rasgo: {trait}",
+      "Party": "Miembro del grupo",
+      "Master": "Sirve a un amo",
+      "Summoned": "Invocado",
+      "Orders": "Sin mente: obedece órdenes"
+    }
+  }
+}

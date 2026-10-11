@@ -15,6 +15,41 @@
         "Name": "Lore-Collector advantage",
         "Hint": "How much likelier a Lore-Collector's rolls against a foe it has sized up are to succeed, for the rest of the turn it spent an action on Recall Knowledge (when the check worked; never without it). 1.25× is a nudge, 3× a sure thing more often than not. Default 2×: Recall Knowledge costs one action of three, and the payoff covers the two left. It matters across the range in PF2e: attacks after the first in a turn carry a penalty, so their odds start low and there is room to raise them."
       }
+    },
+    "HeroPoint": "Hero Point",
+    "TwoActions": "{name}, two actions",
+    "Exploited": "exploited (+{n})",
+    "Flustered": "flustered",
+    "Helpless": "helpless",
+    "Aided": "aided",
+    "Hindered": "hindered",
+    "StepsAway": "Steps carefully out of reach",
+    "Recovery": {
+      "Dies": "fails a recovery check and dies",
+      "Stable": "stabilizes (unconscious)",
+      "Check": "recovery check ({degree}): dying {n}"
+    },
+    "Lead": {
+      "Best": "best social/warfare skill {n}",
+      "Commander": "Commander ({n} tactics)"
+    },
+    "Reason": {
+      "Mindless": "Mindless",
+      "Pc": "Player character",
+      "Animal": "Animal instinct",
+      "Int": "Intelligence {n}",
+      "Pack": ", hunts in packs",
+      "NeverFlees": "Mindless: never flees",
+      "Construct": "Construct",
+      "Undead": "Undead",
+      "Will": "Will {n} vs level",
+      "SelfPreservation": ", animal self-preservation",
+      "Default": "Default",
+      "Trait": "Trait: {trait}",
+      "Party": "Party member",
+      "Master": "Serves a master",
+      "Summoned": "Summoned",
+      "Orders": "Mindless: follows orders"
     }
   }
 }

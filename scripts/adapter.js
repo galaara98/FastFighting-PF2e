@@ -11,6 +11,7 @@ import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
+import { t, actionName, traitName, conditionLabel, coin } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -78,6 +79,16 @@ const ENGINE_CONDITIONS = {
   blinded: "blinded", deafened: "deafened"
 };
 
+/** What a character calls its feats, features and actions, by slug (a translated compendium's names). */
+function ownNames(actor) {
+  const out = {};
+  for ( const i of actor.items ?? [] ) {
+    const slug = slugOf(i);
+    if ( slug && !(slug in out) ) out[slug] = i.name;
+  }
+  return out;
+}
+
 function slugOf(item) {
   const slug = item?.slug ?? item?.system?.slug;
   if ( slug ) return slug;
@@ -143,7 +154,7 @@ export class Pf2eAdapter extends SystemAdapter {
 
     // Its Strikes, and what its class does with them (Vicious Swing, Double Slice, Flurry of Blows, Hunter's Edge ...).
     const { strikes, variants } = await this.#strikes(actor);
-    const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes });
+    const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes, names: ownNames(actor) });
     const actions = [
       ...martial.strikes,
       ...martial.actions,
@@ -299,7 +310,7 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     return {
       money: inventory.currency?.copperValue ?? 0,
-      denominations: [{ label: "pp", value: 1000 }, { label: "gp", value: 100 }, { label: "sp", value: 10 }, { label: "cp", value: 1 }],
+      denominations: [{ label: coin("pp"), value: 1000 }, { label: coin("gp"), value: 100 }, { label: coin("sp"), value: 10 }, { label: coin("cp"), value: 1 }],
       stowed,
       wielded
     };
@@ -367,8 +378,8 @@ export class Pf2eAdapter extends SystemAdapter {
     const sneak = this.#sneakAttackDice(actor);
     const has = slug => actor.items.some(i => slugOf(i) === slug);
     const setups = [];
-    if ( has("devise-a-stratagem") ) setups.push({ key: "stratagem", label: "Devise a Stratagem", options: ["check:substitution:devise-a-stratagem"], precision: true });
-    if ( has("panache") || actor.items.some(i => i.system?.traits?.value?.includes("finisher")) ) setups.push({ key: "finisher", label: "Finisher", options: ["self:effect:panache", "finisher"] });
+    if ( has("devise-a-stratagem") ) setups.push({ key: "stratagem", label: ownNames(actor)["devise-a-stratagem"] ?? "Devise a Stratagem", options: ["check:substitution:devise-a-stratagem"], precision: true });
+    if ( has("panache") || actor.items.some(i => i.system?.traits?.value?.includes("finisher")) ) setups.push({ key: "finisher", label: traitName("finisher", "Finisher"), options: ["self:effect:panache", "finisher"] });
     const strikes = (actor.system.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
     for ( const [index, s] of strikes.entries() ) {
       const item = s.item;
@@ -464,10 +475,10 @@ export class Pf2eAdapter extends SystemAdapter {
         const feet = Number(config.range?.max ?? config.range?.increment) || 30;
         const read = async (melee, actionCost) => parseTypedFormula(await blast.damage({ element: config.element, damageType, melee, actionCost, getFormula: true }) ?? "");
         const base = { kind: "strike", bonus, maps: [0, -5, -10], traits: ["impulse", "attack", config.element, "elemental-blast"] };
-        const name = `Elemental Blast (${config.element})`;
+        const name = `${ownNames(actor)["elemental-blast"] ?? "Elemental Blast"} (${traitName(config.element)})`;
         out.push({ ...base, id: `${actor.id}.blast.${config.element}.melee`, name, cost: 1, melee: true, reach: 5, damage: await read(true, 1) });
         out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged`, name, cost: 1, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 1) });
-        out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged2`, name: `${name}, two actions`, cost: 2, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 2) });
+        out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged2`, name: t("TwoActions", "{name}, two actions", { name }), cost: 2, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 2) });
       }
     } catch ( err ) {
       console.warn(`fast-fighting | could not read ${actor.name}'s Elemental Blast`, err);
@@ -567,8 +578,9 @@ export class Pf2eAdapter extends SystemAdapter {
         } else if ( mode === "innate" ) {
           // (PF2e says "at will" and "constant" only in the spell's name: "Translocate (At will)". At will is as
           // often as it likes; a constant one is always on, not cast.)
-          if ( /\(constant\)/i.test(spell.name) ) continue;
-          uses = /\(at[- ]will\)/i.test(spell.name) ? undefined : spell.system.location?.uses?.value ?? 1;
+          // (In a Spanish world: "(constante)", "(a voluntad)".)
+          if ( /\((constant|constante)\)/i.test(spell.name) ) continue;
+          uses = /\((at[- ]will|a voluntad)\)/i.test(spell.name) ? undefined : spell.system.location?.uses?.value ?? 1;
         }
         const id = `${actor.id}.spell.${spell.id}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
@@ -801,9 +813,9 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( !actor.items.some(i => slugOf(i) === "exploit-vulnerability") ) return [];
     const level = actor.level ?? 1;
     const flat = 2 + Math.floor(level / 2);
-    return [{ id: `${actor.id}.exploit-vulnerability`, name: "Exploit Vulnerability", kind: "control", auto: true, cost: 1, oncePerTurn: true,
+    return [{ id: `${actor.id}.exploit-vulnerability`, name: ownNames(actor)["exploit-vulnerability"] ?? "Exploit Vulnerability", kind: "control", auto: true, cost: 1, oncePerTurn: true,
       traits: ["esoterica", "manipulate"], melee: false, range: { increment: 60, max: 60, noPenalty: true },
-      outcome: { mark: [{ dice: [], flat, type: "untyped", persistent: false, category: null }], rounds: 10, label: `exploited (+${flat})` } }];
+      outcome: { mark: [{ dice: [], flat, type: "untyped", persistent: false, category: null }], rounds: 10, label: t("Exploited", "exploited (+{n})", { n: flat }) } }];
   }
 
   /** Regeneration (deactivated by acid, fire ...) and fast healing, from the FastHealing rule elements on its abilities. */
@@ -869,29 +881,29 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( aid ) out.push(aid);
     const intimidation = skill("intimidation");
     if ( intimidation ) {
-      out.push({ id: `${actor.id}.demoralize`, name: "Demoralize", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "fear", "mental"], ...near,
+      out.push({ id: `${actor.id}.demoralize`, name: actionName("Demoralize", "Demoralize"), kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "fear", "mental"], ...near,
         check: { mod: intimidation.mod ?? 0, against: "will" }, oncePerTarget: true,
-        onHit: [null, null, { conditions: { frightened: 1 }, rounds: 1, label: "frightened 1" }, { conditions: { frightened: 2 }, rounds: 2, label: "frightened 2" }] });
+        onHit: [null, null, { conditions: { frightened: 1 }, rounds: 1, label: conditionLabel("frightened", 1) }, { conditions: { frightened: 2 }, rounds: 2, label: conditionLabel("frightened", 2) }] });
     }
     if ( trained("athletics") ) {
-      const prone = { conditions: { prone: 1 }, rounds: 1, label: "prone" };
+      const prone = { conditions: { prone: 1 }, rounds: 1, label: conditionLabel("prone") };
       // (Only a creature at most one size larger.)
-      out.push({ id: `${actor.id}.trip`, name: "Trip", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+      out.push({ id: `${actor.id}.trip`, name: actionName("Trip", "Trip"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
       // Grapple (Athletics against Fortitude, an attack): grabbed until the end of its next turn, restrained on a
       // critical success; a critical failure puts you on the ground.
-      const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: "grabbed" };
-      out.push({ id: `${actor.id}.grapple`, name: "Grapple", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
-        check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: "restrained" }] });
+      const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: conditionLabel("grabbed") };
+      out.push({ id: `${actor.id}.grapple`, name: actionName("Grapple", "Grapple"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+        check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: conditionLabel("restrained") }] });
     }
     if ( trained("deception") ) {
-      const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: "off-guard" };
-      out.push({ id: `${actor.id}.feint`, name: "Feint", kind: "control", cost: 1, traits: ["mental"], melee: true, reach: 5,
+      const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: conditionLabel("off-guard") };
+      out.push({ id: `${actor.id}.feint`, name: actionName("Feint", "Feint"), kind: "control", cost: 1, traits: ["mental"], melee: true, reach: 5,
         check: { mod: skill("deception").mod ?? 0, against: "perception" }, onHit: [null, null, exposed, exposed] });
     }
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
-      const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: "flustered" });
-      out.push({ id: `${actor.id}.bon-mot`, name: "Bon Mot", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
+      const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered", "flustered") });
+      out.push({ id: `${actor.id}.bon-mot`, name: ownNames(actor)["bon-mot"] ?? "Bon Mot", kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
         check: { mod: skill("diplomacy").mod ?? 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] });
     }
     return out;
@@ -927,7 +939,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const [dc, bonus] = rank >= 4 ? [40, 50] : rank >= 3 ? [30, 30] : rank >= 2 ? [20, 10] : [15, 0];
       out.push({
         id: `${actor.id}.feat.battle-medicine`,
-        name: "Battle Medicine",
+        name: ownNames(actor)["battle-medicine"] ?? "Battle Medicine",
         kind: "heal",
         cost: 1,
         heal: [{ dice: [{ n: 2, faces: 8, mult: 1 }], flat: bonus, type: "healing", persistent: false, category: null }],

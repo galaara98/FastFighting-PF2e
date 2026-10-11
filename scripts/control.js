@@ -6,6 +6,7 @@
  * values, and how long they last ("for 1 round", "for 1 minute", "until the end of its next turn"), falling back to
  * the spell's own duration.
  */
+import { t, conditionLabel } from "./words.js";
 
 /** PF2e condition words -> engine conditions (the engine's own: prone, immobilized, incapacitated). */
 const CONDITIONS = {
@@ -69,7 +70,7 @@ export function conditionsIn(text) {
   return out;
 }
 
-const label = conds => Object.entries(conds).map(([k, v]) => ({ offGuard: "off-guard", incapacitated: "helpless" }[k] ?? k) + (v > 1 ? ` ${v}` : "")).join(", ");
+const label = conds => Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless", "helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null))).join(", ");
 
 /**
  * What each degree of the save does, or null if the spell imposes nothing the engine plays out.

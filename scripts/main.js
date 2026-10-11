@@ -7,7 +7,7 @@ import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 7;
+const NEEDS_API = 8;
 
 export const MODULE_ID = "fast-fighting-pf2e";
 

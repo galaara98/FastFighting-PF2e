@@ -7,6 +7,7 @@
  * help: beside the foe, for a Strike.
  * (Guidance and Sure Strike are spells, read from their effects; Recall Knowledge is the adapter's sizeUp.)
  */
+import { t } from "./words.js";
 
 /** DC to Aid (the remaster's). */
 export const AID_DC = 15;
@@ -25,7 +26,7 @@ export function aidAction({ id, name, strikes = [], skills = [] }) {
   if ( !ways.length ) return null;
   const best = ways.reduce((a, b) => (b.mod > a.mod ? b : a));
   const rank = Math.max(0, ...ways.map(x => x.rank));
-  const aided = n => ({ mods: { attack: n, checks: n }, uses: 1, vsFocus: true, rounds: 1, label: n > 0 ? "aided" : "hindered" });
+  const aided = n => ({ mods: { attack: n, checks: n }, uses: 1, vsFocus: true, rounds: 1, label: n > 0 ? t("Aided", "aided") : t("Hindered", "hindered") });
   return {
     id, name, kind: "buff", cost: 1, includeSelf: false, besideFoe: 5,
     melee: false, range: { increment: 30, max: 30, noPenalty: true },

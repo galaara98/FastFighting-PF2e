@@ -3,6 +3,7 @@
  * A leader is the creature with the best social/warfare skill relative to its level, boosted by the
  * Commander class (tactics), and by abilities that read like rallying cries or commanding auras.
  */
+import { t } from "./words.js";
 
 // Matched against slugs too, so hyphens count as spaces.
 const LEADER_ABILITY = /(commander|captain|warlord|rally|inspir|command|leader|banner|battle[ -]cry|tactic)/i;
@@ -19,10 +20,10 @@ export function rankLeaders(entries) {
     if ( best <= -99 ) continue;
     const typical = e.level + 4;
     let score = best - typical;
-    const reasons = [`best social/warfare skill ${best >= 0 ? "+" : ""}${best}`];
+    const reasons = [t("Lead.Best", "best social/warfare skill {n}", { n: `${best >= 0 ? "+" : ""}${best}` })];
     if ( e.isCommander ) {
       score += 4 + Math.min(4, e.tactics ?? 0);
-      reasons.push(`Commander (${e.tactics ?? 0} tactics)`);
+      reasons.push(t("Lead.Commander", "Commander ({n} tactics)", { n: e.tactics ?? 0 }));
     }
     const leaderAbilities = (e.abilities ?? (e.abilityNames ?? []).map(n => ({ key: n, name: n })))
       .filter(a => LEADER_ABILITY.test(a.key ?? "") || LEADER_ABILITY.test(a.name ?? ""));
