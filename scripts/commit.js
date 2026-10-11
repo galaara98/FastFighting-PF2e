@@ -93,6 +93,11 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
     update["system.attributes.hp.temp"] = final.temp;
     undo.actorUpdate["system.attributes.hp.temp"] = hp.temp ?? 0;
   }
+  // Stamina Points (the Stamina variant), when the fight read them.
+  if ( spec.hp.stamina && hp.sp && final.stamina !== undefined && hp.sp.value !== final.stamina ) {
+    update["system.attributes.hp.sp.value"] = final.stamina;
+    undo.actorUpdate["system.attributes.hp.sp.value"] = hp.sp.value;
+  }
   // Focus points and spontaneous slots
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const left = final.resources?.[key] ?? start;

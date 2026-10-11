@@ -120,6 +120,15 @@ function areaTargets(area, targetText) {
   return size >= 20 ? 4 : size >= 10 ? 3 : 2; // burst
 }
 
+
+/**
+ * A character's Stamina Points, when the world plays PF2e's Stamina variant: spent before hit points (the system takes
+ * damage from temporary hit points, then stamina, then hit points), and healing doesn't restore them.
+ */
+function staminaOf(actor, hp) {
+  if ( actor.type !== "character" || !game.pf2e?.settings?.variants?.stamina || !hp?.sp ) return {};
+  return { stamina: { value: Math.max(0, Number(hp.sp.value) || 0), max: Math.max(0, Number(hp.sp.max) || 0) } };
+}
 export class Pf2eAdapter extends SystemAdapter {
   /** Building a summoned creature (which doesn't summon in turn). */
   #summoning = false;
@@ -206,7 +215,7 @@ export class Pf2eAdapter extends SystemAdapter {
       img: tokenDoc.texture?.src ?? actor.img,
       kind,
       level,
-      hp: { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0 },
+      hp: { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0, ...staminaOf(actor, hp) },
       defenses: {
         ac: sys.attributes?.ac?.value ?? 10,
         fortitude: actor.saves?.fortitude?.mod ?? level + 5,
@@ -987,9 +996,9 @@ export class Pf2eAdapter extends SystemAdapter {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
   }
 
-  /** PF2e's own words for armor class and hit points (in the client's language). */
+  /** PF2e's own words for armor class, hit points and stamina (in the client's language). */
   term(key) {
-    const own = { ac: "PF2E.ArmorClassShortLabel", hp: "PF2E.HitPointsShortLabel" }[key];
+    const own = { ac: "PF2E.ArmorClassShortLabel", hp: "PF2E.HitPointsShortLabel", sp: "PF2E.StaminaPointsShortLabel" }[key];
     return own && game.i18n.has(own) ? game.i18n.localize(own) : null;
   }
 

@@ -9,6 +9,7 @@ Pathfinder Second Edition support for [FastFighting Core](https://github.com/gal
 FastFighting Core runs the simulations, the Battle Planner, player surveys, stories and Make it So for any system. This module teaches it how PF2e works:
 
 - **Reading actors:**
+  - hit points and temporary hit points, and a character's Stamina Points when the world plays the Stamina variant (damage takes temporary hit points, then Stamina, then hit points; healing restores hit points only)
   - strikes (multiple attack penalty, agile, reach, reload, drawing unready weapons)
   - spells (spell attacks, basic and non-basic saves, auto-hit spells such as Force Barrage)
   - crowd-control spells, read degree by degree from their text (Fear, Slow, Sleep, Paralyze, Command, Tangle Vine ...), and damage spells' critical-failure riders (Daze's stunned 1)
@@ -55,7 +56,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities.
 - **Recognised by slug:** abilities, feats and spells it has to know (Sneak Attack, Pack Attack, Reactive Strike, Battle Medicine, Bon Mot, knockdown and grab) are found by their slug, the same in every language, so a translated game works too.
 - **Make it So for PF2e:** writes:
-  - HP and temp HP;
+  - HP and temp HP, and Stamina Points in a world playing the Stamina variant;
   - dying, wounded, unconscious, prone and lingering conditions;
   - persistent damage conditions, and affliction effects (noting any onset still to come);
   - death, and lootable corpses or loot piles (gear moves off the corpse);
