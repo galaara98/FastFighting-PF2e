@@ -5,7 +5,7 @@
 import { SystemAdapter, parseTypedFormula, parseFormula, describeMods } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
-import { derivePf2eTraits } from "./traits.js";
+import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
@@ -219,6 +219,7 @@ export class Pf2eAdapter extends SystemAdapter {
           ? { mod: actor.skills.thievery.mod } : null
       },
       creatureTraits: traits,
+      creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
       social: this.#social(actor, level, traits),
       valuables: this.#valuables(actor),

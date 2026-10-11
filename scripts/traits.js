@@ -10,6 +10,25 @@ const SELFISH_BY_TRAIT = {
   minion: 10, construct: 5, mindless: 0
 };
 
+/** The creature types PF2e files creatures under (a creature can have more than one). */
+const CREATURE_TYPES = new Set(["aberration", "animal", "astral", "beast", "celestial", "construct", "dragon", "dream", "elemental",
+  "ethereal", "fey", "fiend", "fungus", "giant", "humanoid", "monitor", "ooze", "petitioner", "plant", "spirit", "time", "undead"]);
+
+/**
+ * What kind of creature, for grouping neutrals: its ancestry if it has one (goblin, human, kobold), else its creature
+ * types (animal; dragon and elemental).
+ * @param {string[]} traits
+ * @param {Iterable<string>} [ancestries]  the system's ancestry traits (CONFIG.PF2E.ancestryTraits)
+ * @returns {string|null}
+ */
+export function creatureKindOf(traits = [], ancestries = []) {
+  const known = new Set(ancestries);
+  const ancestry = traits.find(t => known.has(t) && !CREATURE_TYPES.has(t));
+  if ( ancestry ) return ancestry;
+  const types = traits.filter(t => CREATURE_TYPES.has(t)).sort();
+  return types.length ? types.join(":") : null;
+}
+
 /** Expected Will modifier for a creature of `level` (moderate PF2e NPC guideline). */
 function expectedWill(level) {
   return Math.round(level * 1.15 + 5);

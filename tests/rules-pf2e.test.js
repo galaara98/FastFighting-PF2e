@@ -111,3 +111,15 @@ describe("immunity covers effects that simply happen", () => {
     expect(pf2eRules.isImmune({ spec: { iwr: { immune: ["prone"] } } }, trip)).toBe(true);
   });
 });
+
+describe("what kind of creature (for grouping neutrals)", () => {
+  test("its ancestry if it has one, else its creature types", async () => {
+    const { creatureKindOf } = await import("../scripts/traits.js");
+    const ancestries = ["goblin", "human", "kobold"];
+    expect(creatureKindOf(["goblin", "humanoid"], ancestries)).toBe("goblin");
+    expect(creatureKindOf(["human", "humanoid"], ancestries)).toBe("human");
+    expect(creatureKindOf(["animal"], ancestries)).toBe("animal");
+    expect(creatureKindOf(["elemental", "fire", "dragon"], ancestries)).toBe("dragon:elemental");
+    expect(creatureKindOf(["mindless"], ancestries)).toBeNull();
+  });
+});
