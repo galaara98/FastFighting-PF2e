@@ -11,6 +11,9 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - Dominate: the target fights for you (controlled), with a Will save at the end of each of its turns
   - buff and debuff spells, from the rule elements of the Spell Effect they link: Bless, Heroism (heightened), Courageous Anthem, Protection, Benediction, Haste (quickened), Mystic Armor, Sure Strike for friends; Bane and Malediction for foes who fail their save; Dirge of Doom's frightened aura
   - skill actions: Demoralize (Intimidation against Will DC: frightened, once per foe), Trip (Athletics against Reflex DC, an attack; a critical failure lands you prone), Feint (Deception against Perception DC: off-guard to you, which sets up sneak attack), and Bon Mot for those with the feat
+  - Spell Effects already on a creature count through PF2e's own totals; ones still running when the fight ends are left on by Make it So, for the rounds left
+  - senses: darkvision and its kin (in the dark), scent, tremorsense, echolocation and the other senses that need no sight, with their ranges; blinded and deafened
+  - Hero Points: spent to keep someone from dying (a reroll), or all of them for one's own Heroic Recovery; Make it So takes them away
   - prepared and spontaneous slots, focus points
   - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet)
   - sneak attack and pack attack, knockdown and grab

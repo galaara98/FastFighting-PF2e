@@ -25,7 +25,8 @@ async function linkedEffect(uuid) {
 /** PF2e conditions the engine plays out, by slug -> engine key. */
 const ENGINE_CONDITIONS = {
   "off-guard": "offGuard", grabbed: "offGuard", restrained: "offGuard", prone: "prone", clumsy: "clumsy", enfeebled: "enfeebled",
-  sickened: "sickened", frightened: "frightened", slowed: "slowed", stunned: "stunned", paralyzed: "paralyzed"
+  sickened: "sickened", frightened: "frightened", slowed: "slowed", stunned: "stunned", paralyzed: "paralyzed",
+  blinded: "blinded", deafened: "deafened"
 };
 
 function slugOf(item) {
@@ -111,6 +112,9 @@ export class Pf2eAdapter extends SystemAdapter {
     const resources = {};
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
+    // Hero Points: spent to keep someone from dying (all of them, for one's own Heroic Recovery).
+    const heroPoints = actor.type === "character" ? Number(sys.resources?.heroPoints?.value) || 0 : 0;
+    if ( heroPoints > 0 ) resources.fate = heroPoints;
 
     const derived = this.deriveTraits(actor);
     const shield = sys.attributes?.shield;
@@ -148,6 +152,8 @@ export class Pf2eAdapter extends SystemAdapter {
       persistent: this.#persistent(actor),
       perception: actor.perception?.mod ?? actor.initiative?.mod ?? 0,
       darkvision: !!actor.hasDarkvision,
+      senses: this.#senses(actor),
+      fateLabel: game.i18n.localize("FFPF2E.HeroPoints"),
       // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
       // Steal: Thievery, for those trained in it.
@@ -210,6 +216,21 @@ export class Pf2eAdapter extends SystemAdapter {
       stowed,
       wielded
     };
+  }
+
+  /**
+   * What it senses beyond plain sight and hearing: darkvision (and its greater kin) to see in the dark, and the
+   * senses that need no sight at all (scent, tremorsense, echolocation, lifesense ...), each with its range.
+   */
+  #senses(actor) {
+    const out = [];
+    for ( const s of Array.from(actor.perception?.senses ?? []) ) {
+      const type = String(s?.type ?? "");
+      const range = Number.isFinite(Number(s?.range)) ? Number(s.range) : null;
+      if ( /darkvision|truesight|see-invisibility/.test(type) ) out.push({ type, range, dark: true });
+      else if ( type && !/low-light|vision/.test(type) ) out.push({ type, range, blind: true });
+    }
+    return out;
   }
 
   #conditions(actor) {
@@ -472,8 +493,10 @@ export class Pf2eAdapter extends SystemAdapter {
     const text = plain(html);
     const mods = {};
     let tempHp = 0;
+    const uuids = [];
     for ( const m of html.matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {
       const effect = await linkedEffect(m[1]);
+      if ( effect ) uuids.push(m[1]);
       const read = modsFromRules(effect?.system?.rules ?? [], { rank: spell.rank ?? 1 });
       Object.assign(mods, read.mods);
       tempHp = Math.max(tempHp, read.tempHp);
@@ -488,12 +511,14 @@ export class Pf2eAdapter extends SystemAdapter {
     const many = areaTargets(area, sys.target?.value);
     if ( Object.keys(mods).length || tempHp ) {
       const outcome = { mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, rounds, label: describeMods(mods, { tempHp }) };
+      // (Its Spell Effect, to leave on a creature still under it when the fight ends.)
+      const effectRef = uuids.length ? { uuids: [...new Set(uuids)] } : undefined;
       if ( save ) {
         return { kind: "control", ...reachFoes, save: { type: save.statistic, dc: stat.dc?.value ?? 10 + (spell.actor?.level ?? 0), basic: false },
-          onSave: [outcome, outcome, null, null], area: many > 1 ? { targets: many } : undefined };
+          onSave: [outcome, outcome, null, null], area: many > 1 ? { targets: many } : undefined, effectRef };
       }
-      if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }) };
-      return { kind: "control", auto: true, ...reachFoes, outcome };
+      if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }), effectRef };
+      return { kind: "control", auto: true, ...reachFoes, outcome, effectRef };
     }
     // Conditions on enemies, no save (Dirge of Doom: "Enemies within the area are Frightened 1").
     const conditions = !save && !spell.isAttack && /\benem(?:y|ies)\b/i.test(text) ? conditionsIn(text) : {};
@@ -640,6 +665,7 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   resourceLabel(key) {
+    if ( key === "fate" ) return game.i18n.localize("FFPF2E.HeroPoints");
     if ( key === "focus" ) return game.i18n.localize("FFPF2E.FocusPoint");
     if ( key.startsWith("slots:") ) return game.i18n.format("FFPF2E.SlotRank", { rank: key.split(":")[2] });
     return null;

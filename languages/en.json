@@ -6,6 +6,7 @@
     "SlotRank": "Rank {rank} spell slot",
     "Surrendered": "Surrendered",
     "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
-    "Remains": "Remains of {name}"
+    "Remains": "Remains of {name}",
+    "HeroPoints": "Hero Points"
   }
 }

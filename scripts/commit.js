@@ -30,6 +30,7 @@ export function describePf2eOutcome(spec, final) {
   for ( const p of final.persistent ?? [] ) lines.push(`Persistent ${partFormula(p.part)} ${p.type}`);
   for ( const a of final.afflictions ?? [] ) lines.push(a.onset > 0 ? `${a.name} (takes hold in ${a.onset} rounds, stage ${a.stage})` : `${a.name} (stage ${a.stage})`);
   for ( const [k, v] of Object.entries(final.conditions ?? {}) ) if ( LINGERING[k] ) lines.push(`${k} ${v === true ? "" : v}`.trim());
+  for ( const e of final.effects ?? [] ) lines.push(`Still ${e.label || "affected"} (${e.rounds} more round${e.rounds === 1 ? "" : "s"})`);
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
     if ( used > 0 ) lines.push(`Uses ${used}× ${resourceLabel(spec, key)}`);
@@ -40,6 +41,7 @@ export function describePf2eOutcome(spec, final) {
 function resourceLabel(spec, key) {
   const action = spec.actions.find(a => a.resource === key);
   if ( key === "focus" ) return "Focus Point";
+  if ( key === "fate" ) return "Hero Point";
   if ( key.startsWith("slots:") ) return `rank ${key.split(":")[2]} spell slot`;
   return action?.name ?? key;
 }
@@ -89,6 +91,9 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
     if ( key === "focus" ) {
       update["system.resources.focus.value"] = left;
       undo.actorUpdate["system.resources.focus.value"] = sys.resources?.focus?.value ?? start;
+    } else if ( key === "fate" ) {
+      update["system.resources.heroPoints.value"] = left;
+      undo.actorUpdate["system.resources.heroPoints.value"] = sys.resources?.heroPoints?.value ?? start;
     }
   }
   if ( Object.keys(update).length ) await actor.update(update);
@@ -168,11 +173,32 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
     await actor.update({ "system.details.alliance": friendly ? "party" : "opposition" });
     await tokenDoc.update({ disposition: friendly ? CONST.TOKEN_DISPOSITIONS.FRIENDLY : CONST.TOKEN_DISPOSITIONS.HOSTILE });
   }
+  await lingeringEffects(actor, final, options);
   const live = tokenDoc.actor ?? actor;
   for ( const item of live.items ) {
     if ( !itemsBefore.has(item.id) && !undo.createdItems.includes(item.id) ) undo.createdItems.push(item.id);
   }
   return undo;
+}
+
+/** Buffs and debuffs still running when the fight ends stay on: their Spell Effect, for the rounds left. */
+async function lingeringEffects(actor, final, options) {
+  for ( const e of final.effects ?? [] ) {
+    const source = options?.effectSource?.(e.key);
+    for ( const uuid of source?.action?.effectRef?.uuids ?? [] ) {
+      let effect = null;
+      try {
+        effect = await fromUuid(uuid);
+      } catch ( err ) { /* gone */ }
+      if ( !effect ) continue;
+      const data = effect.toObject();
+      delete data._id;
+      data.system = { ...data.system, duration: { value: Math.max(1, e.rounds), unit: "rounds", expiry: "turn-start", sustained: false } };
+      if ( source.action.rank ) data.system.level = { ...(data.system.level ?? {}), value: source.action.rank };
+      data.flags = { ...(data.flags ?? {}), [MODULE_ID]: { lingering: true } };
+      await actor.createEmbeddedDocuments("Item", [data]); // (Undo finds it among the items that weren't there before)
+    }
+  }
 }
 
 async function commitSpellsAndItems(actor, spec, final, undo) {

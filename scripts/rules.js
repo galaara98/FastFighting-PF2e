@@ -53,6 +53,16 @@ export const pf2eRules = {
   doorDamage(door, damage) {
     return damage - (door.hardness ?? 0);
   },
+  /**
+   * Heroic Recovery: a character who would die spends all their Hero Points to stay alive instead, stable at 0 HP
+   * and no longer dying (wounded doesn't go up).
+   */
+  avertDeath(u) {
+    u.status = STATUS.DOWN;
+    u.hp = 0;
+    u.dying = 0;
+    u.stable = true;
+  },
   /** A hit always deals at least 1 damage before resistances, however large the penalties. */
   minimumDamage: 1,
 
