@@ -645,9 +645,12 @@ export class Pf2eAdapter extends SystemAdapter {
     const out = [];
     const shield = actor.system.attributes?.shield;
     const hasShield = shield?.ac > 0 && !shield.broken && !shield.destroyed;
+    const seen = new Set(); // (a feat and the action it grants share a slug)
     for ( const item of actor.items ) {
       if ( !["feat", "action"].includes(item.type) ) continue;
       const slug = slugOf(item);
+      if ( seen.has(slug) ) continue;
+      seen.add(slug);
       if ( slug === "shield-block" && hasShield && shield.hardness > 0 ) {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: { dice: [], flat: shield.hardness, type: "untyped", persistent: false, category: null } });
       } else if ( slug === "reactive-shield" && hasShield ) {
