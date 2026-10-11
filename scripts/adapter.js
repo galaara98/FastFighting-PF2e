@@ -13,6 +13,7 @@ import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
+import { loreBoost } from "./lore.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -254,7 +255,7 @@ export class Pf2eAdapter extends SystemAdapter {
     let best = null;
     for ( const [slug, s] of Object.entries(actor.skills ?? {}) ) {
       if ( !(RECALL_SKILLS.has(slug) || /-lore$/.test(slug)) || typeof s?.mod !== "number" ) continue;
-      if ( !best || s.mod > best.mod ) best = { mod: s.mod, label: game.i18n.localize("FFPF2E.RecallKnowledge") };
+      if ( !best || s.mod > best.mod ) best = { mod: s.mod, label: game.i18n.localize("FFPF2E.RecallKnowledge"), boost: loreBoost() };
     }
     return best ?? undefined;
   }

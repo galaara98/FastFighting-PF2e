@@ -4,11 +4,17 @@
  * Make it So) through the core's public API.
  */
 import { Pf2eAdapter } from "./adapter.js";
+import { registerLoreBoost } from "./lore.js";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
 const NEEDS_API = 7;
 
 export const MODULE_ID = "fast-fighting-pf2e";
+
+Hooks.once("init", () => {
+  // How much a Lore-Collector's sizing a foe up pays off (lore.js).
+  registerLoreBoost();
+});
 
 Hooks.once("fastFighting.init", api => {
   // module.json limits this module to PF2e worlds; this guard covers anything that slips past.

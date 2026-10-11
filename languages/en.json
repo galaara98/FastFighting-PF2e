@@ -9,6 +9,12 @@
     "Remains": "Remains of {name}",
     "HeroPoints": "Hero Points",
     "Aid": "Aid",
-    "RecallKnowledge": "Recall Knowledge"
+    "RecallKnowledge": "Recall Knowledge",
+    "Settings": {
+      "loreBoost": {
+        "Name": "Lore-Collector advantage",
+        "Hint": "How much likelier a Lore-Collector's rolls against a foe it has sized up are to succeed, for the rest of the turn it spent an action on Recall Knowledge (when the check worked; never without it). 1.25× is a nudge, 2.5× a sure thing more often than not. Default 2×: Recall Knowledge costs one action of three, and the payoff covers the two left."
+      }
+    }
   }
 }
