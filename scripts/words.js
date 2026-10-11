@@ -28,3 +28,19 @@ export function conditionLabel(slug, value = null) {
 
 /** A coin's abbreviation ("gp"), as the system writes it. */
 export const coin = c => localize(`PF2E.CurrencyAbbreviations.${c}`, c);
+
+/*
+ * In a translated world (a Babele translation of PF2e's compendiums: pf2e-es and the like), an item taken from a
+ * compendium reads in the table's language, and the rules it states are worded that way. The rules are read here from
+ * the English (what Babele keeps of the original), so they're understood whatever the language. Without Babele, or for
+ * an item it didn't translate: the item as it is.
+ */
+
+/** An item's name as the English books have it. */
+export const englishName = item => item?.flags?.babele?.originalName ?? item?.name ?? "";
+
+/** An item's description as the English books have it. */
+export function englishDescription(item) {
+  const original = item?.flags?.babele?.originalPayload?.description;
+  return typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
+}

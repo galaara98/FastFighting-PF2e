@@ -11,7 +11,7 @@ import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { t, actionName, traitName, conditionLabel, coin } from "./words.js";
+import { t, actionName, traitName, conditionLabel, coin, englishName, englishDescription } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -496,7 +496,7 @@ export class Pf2eAdapter extends SystemAdapter {
           id: `${actor.id}.${slug}`,
           name: source.name,
           slug,
-          description: source.system.description?.value,
+          description: englishDescription(source),
           traits
         });
         if ( parsed ) effects.push(parsed);
@@ -510,7 +510,7 @@ export class Pf2eAdapter extends SystemAdapter {
   #bonusDice(actor, slug) {
     const item = actor.items.find(i => slugOf(i) === slug);
     if ( !item ) return null;
-    const m = /(\d+d\d+)/.exec(item.system.description?.value ?? "");
+    const m = /(\d+d\d+)/.exec(englishDescription(item));
     return m?.[1] ?? null;
   }
 
@@ -521,7 +521,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const level = actor.level ?? 1;
       return `${level >= 17 ? 4 : level >= 11 ? 3 : level >= 5 ? 2 : 1}d6`;
     }
-    return /(\d+d\d+)/.exec(item.system.description?.value ?? "")?.[1] ?? null;
+    return /(\d+d\d+)/.exec(englishDescription(item))?.[1] ?? null;
   }
 
   /* -------------------------------------------- */
@@ -548,7 +548,7 @@ export class Pf2eAdapter extends SystemAdapter {
         const parts = roll ? parseTypedFormula(roll.formula) : [];
         // No damage: maybe it's crowd control, conditions by degree of the target's save or of a spell attack.
         const control = !parts.length && (spell.system.defense?.save || spell.isAttack)
-          ? parseControl({ description: spell.system.description?.value, duration: spell.system.duration?.value })
+          ? parseControl({ description: englishDescription(spell), duration: spell.system.duration?.value })
           : null;
         // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
         const support = !parts.length && !control ? await this.#spellSupport(spell, stat) : null;
@@ -579,8 +579,8 @@ export class Pf2eAdapter extends SystemAdapter {
           // (PF2e says "at will" and "constant" only in the spell's name: "Translocate (At will)". At will is as
           // often as it likes; a constant one is always on, not cast.)
           // (In a Spanish world: "(constante)", "(a voluntad)".)
-          if ( /\((constant|constante)\)/i.test(spell.name) ) continue;
-          uses = /\((at[- ]will|a voluntad)\)/i.test(spell.name) ? undefined : spell.system.location?.uses?.value ?? 1;
+          if ( /\((constant|constante)\)/i.test(englishName(spell)) || /\((constant|constante)\)/i.test(spell.name) ) continue;
+          uses = /\((at[- ]will|a voluntad)\)/i.test(`${englishName(spell)} ${spell.name}`) ? undefined : spell.system.location?.uses?.value ?? 1;
         }
         const id = `${actor.id}.spell.${spell.id}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
@@ -653,7 +653,7 @@ export class Pf2eAdapter extends SystemAdapter {
           action.kind = "save";
           action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: !!defense.save.basic };
           // "If the target critically fails the save, it is also stunned 1."
-          const rider = parseCritRider(spell.system.description?.value);
+          const rider = parseCritRider(englishDescription(spell));
           if ( rider ) action.effects = [rider];
         } else {
           action.kind = "auto";
@@ -677,7 +677,7 @@ export class Pf2eAdapter extends SystemAdapter {
   async #summon(spell) {
     const rank = Math.min(10, Number(spell.rank) || 1);
     const slug = spell.slug ?? slugOf(spell);
-    const trait = SUMMON_TRAITS[slug] ?? (/\b(animal|fey|undead|elemental|construct|plant|dragon|fiend|celestial|monitor|giant|aberration|beast)\b/i.exec(plain(spell.system.description?.value ?? ""))?.[1]?.toLowerCase() ?? "animal");
+    const trait = SUMMON_TRAITS[slug] ?? (/\b(animal|fey|undead|elemental|construct|plant|dragon|fiend|celestial|monitor|giant|aberration|beast)\b/i.exec(plain(englishDescription(spell)))?.[1]?.toLowerCase() ?? "animal");
     const src = await creatureFor(SUMMON_LEVEL[rank], trait);
     if ( !src ) return null;
     this.#summoning = true;
@@ -694,7 +694,7 @@ export class Pf2eAdapter extends SystemAdapter {
 
   async #spellSupport(spell, stat) {
     const sys = spell.system;
-    const html = sys.description?.value ?? "";
+    const html = englishDescription(spell);
     const text = plain(html);
     const mods = {};
     let tempHp = 0;
@@ -1035,7 +1035,7 @@ function level(actor) {
  * out is returned as it is.
  */
 async function resolvedText(item) {
-  const raw = item.system.description?.value ?? "";
+  const raw = englishDescription(item);
   if ( !/@Damage\[[^\]]*@|@Check\[(?![^\]]*\bdc:\d)/i.test(raw) ) return raw;
   let html;
   try {
