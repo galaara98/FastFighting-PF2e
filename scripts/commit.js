@@ -16,6 +16,20 @@ function partFormula(p) {
   return [...dice, ...flat].join("+").replace(/\+-/g, "-") || "1";
 }
 
+/**
+ * Whose side the token is on after the fight, when words (or a quarrel) changed it: won over (switched sides), talked
+ * out of the fight (it takes no side now), or a neutral that turned on the party. Null when nothing changed.
+ * @returns {"friendly"|"hostile"|"neutral"|null}
+ */
+export function sideChange(final) {
+  if ( final.swayed === "switched" ) return final.side === "friendly" ? "friendly" : "hostile";
+  if ( final.side !== "neutralParty" || final.status === STATUS.DEAD ) return null;
+  if ( final.against?.includes("friendly") ) return "hostile";
+  return final.swayed === "neutral" ? "neutral" : null;
+}
+const SIDE_LINES = { friendly: "Switches sides (now friendly)", hostile: "Turned on the party (now hostile)", neutral: "Stands aside (now neutral)" };
+const DISPOSITIONS = { friendly: "FRIENDLY", hostile: "HOSTILE", neutral: "NEUTRAL" };
+
 /** Human-readable list of what will change, for the confirmation dialog. */
 export function describePf2eOutcome(spec, final) {
   const lines = [];
@@ -24,8 +38,9 @@ export function describePf2eOutcome(spec, final) {
   else if ( final.status === STATUS.FLED ) lines.push(spec.kind === "pc" ? "Retreated from the battle" : final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
   else if ( final.status === STATUS.SURRENDERED ) lines.push("Surrenders");
   else if ( final.status === STATUS.STOOD_DOWN ) lines.push("Stands down (talked out of fighting)");
-  if ( final.swayed === "switched" ) lines.push(`Switches sides (now ${final.side})`);
-  else if ( final.status === STATUS.DOWN ) lines.push(final.dying > 0 ? `Dying ${final.dying}` : "Unconscious (stable)");
+  const changed = sideChange(final);
+  if ( changed ) lines.push(final.swayed === "switched" ? `Switches sides (now ${changed})` : SIDE_LINES[changed]);
+  if ( final.status === STATUS.DOWN ) lines.push(final.dying > 0 ? `Dying ${final.dying}` : "Unconscious (stable)");
   if ( final.wounded > (spec.wounded ?? 0) ) lines.push(`Wounded ${final.wounded}`);
   for ( const p of final.persistent ?? [] ) lines.push(`Persistent ${partFormula(p.part)} ${p.type}`);
   for ( const a of final.afflictions ?? [] ) lines.push(a.onset > 0 ? `${a.name} (takes hold in ${a.onset} rounds, stage ${a.stage})` : `${a.name} (stage ${a.stage})`);
@@ -166,12 +181,12 @@ export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
     }]);
     if ( effect ) undo.createdItems.push(effect.id);
   }
-  if ( final.swayed === "switched" ) {
-    const friendly = final.side === "friendly";
+  const changed = sideChange(final);
+  if ( changed ) {
     undo.actorUpdate["system.details.alliance"] = actor.system.details?.alliance ?? null;
     undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
-    await actor.update({ "system.details.alliance": friendly ? "party" : "opposition" });
-    await tokenDoc.update({ disposition: friendly ? CONST.TOKEN_DISPOSITIONS.FRIENDLY : CONST.TOKEN_DISPOSITIONS.HOSTILE });
+    await actor.update({ "system.details.alliance": { friendly: "party", hostile: "opposition", neutral: null }[changed] });
+    await tokenDoc.update({ disposition: CONST.TOKEN_DISPOSITIONS[DISPOSITIONS[changed]] });
   }
   await lingeringEffects(actor, final, options);
   const live = tokenDoc.actor ?? actor;

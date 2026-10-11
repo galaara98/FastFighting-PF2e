@@ -45,7 +45,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - persistent damage conditions, and affliction effects (noting any onset still to come);
   - death, and lootable corpses or loot piles (gear moves off the corpse);
   - expended slots and focus, and used consumables;
-  - surrender and side switches (alliance and disposition);
+  - surrender and side changes (alliance and disposition: won over, their new side; talked out of the fight, Neutral; a neutral that turned on the party, Hostile);
   - coins (with change made) and items handed over by someone talked into it or robbed.
 
   A retreating PC stays on the map.
