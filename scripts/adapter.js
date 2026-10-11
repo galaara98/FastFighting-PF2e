@@ -10,6 +10,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
+import { classActions } from "./class-actions.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue } from "./effects.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
@@ -129,8 +130,11 @@ export class Pf2eAdapter extends SystemAdapter {
       : actor.type === "familiar" ? "companion"
         : traits.includes("minion") ? "minion" : "npc";
 
+    // Its Strikes, and what its class does with them (Vicious Swing, Double Slice, Flurry of Blows, Hunter's Edge ...).
+    const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes: await this.#strikes(actor) });
     const actions = [
-      ...await this.#strikes(actor),
+      ...martial.strikes,
+      ...martial.actions,
       ...await this.#spells(actor),
       ...this.#consumables(actor),
       ...this.#feats(actor),
@@ -701,6 +705,12 @@ export class Pf2eAdapter extends SystemAdapter {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", melee: true, ac: shield.ac });
       } else if ( slug === "nimble-dodge" ) {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "attacked", ac: 2 });
+      } else if ( ["retributive-strike", "glimpse-of-redemption", "liberating-step"].includes(slug) ) {
+        // A champion's reaction: a friend within 15 feet hit takes 2 + its level less (and the attacker, in reach of a
+        // Retributive Strike, gets struck).
+        const level = actor.level ?? 1;
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "allyHit", range: 15,
+          reduce: { dice: [], flat: 2 + level, type: "untyped", persistent: false, category: null }, strike: slug === "retributive-strike" || undefined });
       }
     }
     return out.length ? out : null;
@@ -728,6 +738,11 @@ export class Pf2eAdapter extends SystemAdapter {
       // (Only a creature at most one size larger.)
       out.push({ id: `${actor.id}.trip`, name: "Trip", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
+      // Grapple (Athletics against Fortitude, an attack): grabbed until the end of its next turn, restrained on a
+      // critical success; a critical failure puts you on the ground.
+      const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: "grabbed" };
+      out.push({ id: `${actor.id}.grapple`, name: "Grapple", kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+        check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: "restrained" }] });
     }
     if ( trained("deception") ) {
       const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: "off-guard" };
