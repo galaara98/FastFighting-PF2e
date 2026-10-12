@@ -56,7 +56,8 @@
       "Demoralize": "Demoralize",
       "Trip": "Trip",
       "Grapple": "Grapple",
-      "Feint": "Feint"
+      "Feint": "Feint",
+      "Disarm": "Disarm"
     },
     "Feature": {
       "devise-a-stratagem": "Devise a Stratagem",
@@ -75,6 +76,8 @@
       "Description": "<p>Afflicted during a FastFighting battle. {when} {save} DC {dc}. Continue tracking stages per the affliction's rules.</p>",
       "Onset": "Still in its onset: takes hold in {n} rounds at stage {stage}.",
       "Stage": "Stage {stage}."
-    }
+    },
+    "Loosened": "loosened grip (-2 to attacks with it)",
+    "Dropped": "dropped its weapon"
   }
 }

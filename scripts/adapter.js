@@ -165,19 +165,22 @@ export class Pf2eAdapter extends SystemAdapter {
     // Its Strikes, and what its class does with them (Vicious Swing, Double Slice, Flurry of Blows, Hunter's Edge ...).
     const { strikes, variants } = await this.#strikes(actor);
     const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes, names: ownNames(actor) });
+    // (Its own: a class's actions, a kineticist's blasts, a thaumaturge's mark, its feats' actions, what it puts on
+    // itself, a creature's abilities. What "magic and specialties" means, with spells.)
+    const own = list => list.map(a => ({ ...a, feature: true }));
     const actions = [
       ...martial.strikes,
-      ...martial.actions,
-      ...variants,
-      ...await this.#elementalBlasts(actor),
-      ...this.#marks(actor),
+      ...own(martial.actions),
+      ...own(variants),
+      ...own(await this.#elementalBlasts(actor)),
+      ...own(this.#marks(actor)),
       ...await this.#spells(actor),
       ...this.#consumables(actor),
-      ...this.#feats(actor),
-      ...await this.#selfEffects(actor),
+      ...own(this.#feats(actor)),
+      ...own(await this.#selfEffects(actor)),
       ...this.#skillActions(actor, traits, martial.strikes)
     ];
-    actions.push(...await this.#abilities(actor, actions));
+    actions.push(...own(await this.#abilities(actor, actions)));
 
     const speeds = {};
     for ( const [key, value] of Object.entries(sys.movement?.speeds ?? {}) ) {
@@ -451,6 +454,8 @@ export class Pf2eAdapter extends SystemAdapter {
         bonusDamage,
         drawCost: s.ready === false && character ? 1 : 0,
         traits,
+        // (A weapon in hand, one that can be knocked away: a character's weapon, or a creature's that has one.)
+        held: ["simple", "martial", "advanced"].includes(item?.category) || undefined,
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
       };
       out.push(strike);
@@ -914,6 +919,13 @@ export class Pf2eAdapter extends SystemAdapter {
       const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: conditionLabel("grabbed") };
       out.push({ id: `${actor.id}.grapple`, name: actionName("Grapple"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: conditionLabel("restrained") }] });
+      // Disarm (Athletics against Reflex, an attack; a foe with a weapon in hand, no more than one size larger): -2 to
+      // its attacks with it until its next turn; on a critical success it drops it (an action gone picking it up). A
+      // critical failure leaves you off-guard.
+      const loosened = { mods: { attack: -2 }, rounds: 1, label: t("Loosened") };
+      out.push({ id: `${actor.id}.disarm`, name: actionName("Disarm"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1, disarm: true,
+        check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true },
+        onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, loosened, { mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }] });
     }
     if ( trained("deception") ) {
       const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: conditionLabel("off-guard") };
@@ -922,7 +934,7 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
       const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered") });
-      out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
+      out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
         check: { mod: skill("diplomacy").mod ?? 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] });
     }
     return out;

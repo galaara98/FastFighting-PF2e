@@ -34,6 +34,12 @@ export const pf2eRules = {
    * Feint are a single action each).
    */
   tauntCost: { actions: 1 },
+  /** A creature keeping a low profile on the way in Avoids Notice: Stealth for initiative, when it's better. */
+  stealthInitiative: true,
+  /** A nonlethal attack (fists, a sap; the rules' -2 for a lethal weapon isn't played) knocks a foe out instead. */
+  pullsBlow(u, action) {
+    return (action?.traits ?? []).includes("nonlethal");
+  },
   /** Three actions; a minion (a summoned creature) two, when its summoner Sustains it. */
   turn(u) {
     return { actions: u.spec.creatureTraits?.includes("minion") ? 2 : 3 };
@@ -130,6 +136,8 @@ export const pf2eRules = {
   isImmune(target, action) {
     // Too big to trip.
     if ( Number.isFinite(action.maxSize) && Number.isFinite(target.spec.size) && target.spec.size > action.maxSize ) return true;
+    // Nothing in hand to knock away: claws and jaws can't be disarmed.
+    if ( action.disarm && !(target.spec.actions ?? []).some(a => a.kind === "strike" && a.held) ) return true;
     const immune = new Set(target.spec.iwr?.immune ?? []);
     const traits = action.traits ?? [];
     if ( traits.some(t => immune.has(TRAIT_IMMUNITY[t] ?? t)) ) return true;

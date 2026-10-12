@@ -16,7 +16,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - crowd-control spells, read degree by degree from their text (Fear, Slow, Sleep, Paralyze, Command, Tangle Vine ...), and damage spells' critical-failure riders (Daze's stunned 1)
   - Dominate: the target fights for you (controlled), with a Will save at the end of each of its turns
   - buff and debuff spells, from the rule elements of the Spell Effect they link: Bless, Heroism (heightened), Courageous Anthem, Protection, Benediction, Haste (quickened), Mystic Armor, Sure Strike for friends; Bane and Malediction for foes who fail their save; Dirge of Doom's frightened aura. A spell good for one roll (Guidance: "one attack roll, Perception check, saving throw, or skill check"; Sure Strike: "the next time you make an attack roll") is spent by that roll
-  - skill actions: Demoralize (Intimidation against Will DC: frightened, once per foe), Trip (Athletics against Reflex DC, an attack; a critical failure lands you prone; only a creature up to one size larger), Feint (Deception against Perception DC: off-guard to you, which sets up sneak attack), Bon Mot for those with the feat, and Aid
+  - skill actions: Demoralize (Intimidation against Will DC: frightened, once per foe), Trip (Athletics against Reflex DC, an attack; a critical failure lands you prone; only a creature up to one size larger), Disarm (Athletics against Reflex DC, an attack: -2 to its attacks with that weapon, knocked away on a critical success; only a weapon in hand), Feint (Deception against Perception DC: off-guard to you, which sets up sneak attack), Bon Mot for those with the feat, and Aid
   - gaining an edge: **Aid** (Prepare to Aid, then the reaction) for any creature with a mind: a check against DC 15 with its best Strike or Diplomacy, Medicine, Intimidation or Deception, for +1 to a friend's next roll at whoever that friend is set on (its foe, the one it would talk round, the friend it would tend), +2 on a critical success (+3 master, +4 legendary), -1 on a critical failure; for a Strike, only beside the foe. **Recall Knowledge** is how a Lore-Collector sizes a foe up: its best knowledge skill (Arcana, Crafting, Medicine, Nature, Occultism, Religion, Society or a Lore) against the DC for the foe's level; it has to work to pay off. How much it pays off is the **Lore-Collector advantage** setting (1.25× to 3× as likely to succeed, for the rest of that turn; default 2×, since it costs one action of three; it matters across the range, since attacks after the first carry a penalty)
   - actions that put an effect on their user (Rage and the like), read from the effect's rule elements and the action's own rules for while it's on (Rage: +2 to melee Strike damage, temporary hit points of level + Constitution); left on after the fight for the time it has left
   - reactions: Shield Block (the raised shield's Hardness off a physical blow), Reactive Shield (raising it as a melee blow comes, perhaps a miss after all), Nimble Dodge (+2 AC against one attack)
@@ -66,6 +66,31 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - coins (with change made) and items handed over by someone talked into it or robbed.
 
   A retreating PC stays on the map.
+
+## Playstyles in PF2e
+
+Every perk a playstyle (or a tactics answer) can switch on does something here. Most play as they do in any system (who a character goes for, when it loses heart, whom it listens to, how it talks). These lean on PF2e's own:
+
+| Perk (playstyles) | In PF2e |
+| --- | --- |
+| Hard to spot (Chicken, Fragile, Wallflower) | Foes' attention slides off it, and it **Avoids Notice** on the way in: Stealth for initiative, when that's better. (Hide and Take Cover want cover the simulation can't see, so they aren't played.) |
+| Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Trip**, **Grapple**, **Disarm** (Athletics against Reflex: -2 to the foe's attacks with its weapon until its next turn; a critical success knocks it away, an action lost picking it up; only a weapon in hand), **Demoralize**, **Feint**, and spells that lay a condition, over a plain Strike. |
+| Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Aid**; healing and buff spells. |
+| In a hurry (Impatient, Speed-Runner) | It doesn't Raise a Shield or Step clear of a foe (it takes the Reactive Strike). |
+| Acting first (Instigator) | Its initiative. |
+| Lore-Collector | **Recall Knowledge**. |
+| Weak spots (Puzzle-Maniac) | Weaknesses. |
+| Thief | **Steal** (Thievery, -5 in combat). |
+| Trap avoiders | Hazards (simple and complex), and any token the GM marks as one. |
+| Finishing the fallen (Cruel) | Dying: a blow on one who's dying raises it. |
+| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with a **nonlethal** attack (fists, a sap) that would kill it, and leaves the fallen be. (The rules' -2 for making a lethal weapon nonlethal isn't played.) |
+| Mending, healing, rescue | Healing spells, potions and elixirs, Battle Medicine; a friend dying gets **Administer First Aid** (two actions, Medicine against 15 + dying), in the fight as after it. |
+| Locked doors | Force Open and Pick a Lock. |
+
+Tactics answers:
+
+- **Shields:** Raise a Shield, as the answer says.
+- **Magic and specialties** (an Un-Mundane character leans on them): spells, its class's actions (Vicious Swing, Double Slice, Sudden Charge, Flurry of Blows, a stratagem, a finisher), a kineticist's blasts, a thaumaturge's Exploit Vulnerability, its feats' actions (Battle Medicine, Bon Mot), what it puts on itself (Rage), and a creature's abilities. Its weapon Strikes, the skill actions anyone trained can take (Trip, Grapple, Disarm, Demoralize, Feint, Aid), and bombs and potions are what anyone could do.
 
 ## Installation
 
