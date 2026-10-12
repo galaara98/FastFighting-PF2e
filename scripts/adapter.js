@@ -1016,10 +1016,10 @@ export class Pf2eAdapter extends SystemAdapter {
     const d = actor.system?.details ?? {};
     const b = d.biography ?? {};
     // What's said of the character itself (a creature's description; a character's appearance, attitude, beliefs, likes,
-    // catchphrases and edicts) in full; its backstory and campaign notes, a story with others in it, a little. Never its
-    // allies, enemies, dislikes or anathema: those are about others, or the opposite of it.
+    // catchphrases and edicts) in full; its backstory and campaign notes, a story with others in it, a little; its
+    // dislikes and anathema the other way ("dislikes cowards"). Never its allies or enemies: those are about others.
     const about = [textOf([b.appearance, b.attitude, b.beliefs, b.likes, b.catchphrases, b.edicts]), plainText(d.publicNotes), plainText(d.privateNotes), plainText(d.blurb)];
-    return { about: about.filter(Boolean).join(". "), story: textOf([b.backstory, b.campaignNotes]) };
+    return { about: about.filter(Boolean).join(". "), story: textOf([b.backstory, b.campaignNotes]), against: textOf([b.dislikes, b.anathema]) };
   }
 
   deriveTraits(actor) {
