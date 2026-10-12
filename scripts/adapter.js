@@ -24,6 +24,8 @@ const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-compa
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
 /** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
 /** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
+/** A creature's rarity, as the core counts it (spec.rarity). */
+export const RARITY = Object.freeze({ common: 0, uncommon: 1, rare: 2, unique: 3 });
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
 const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
 
@@ -230,6 +232,8 @@ export class Pf2eAdapter extends SystemAdapter {
       },
       shield: shield?.ac > 0 && !shield.broken && !shield.destroyed ? { ac: shield.ac, hardness: shield.hardness } : null,
       initiative: { mod: actor.initiative?.mod ?? actor.perception?.mod ?? 0, stealth: actor.skills?.stealth?.mod ?? 0 },
+      // A creature's rarity (its trait: common, uncommon, rare, unique): a rarer one has a slight edge for command.
+      rarity: actor.type === "character" ? 0 : RARITY[sys.traits?.rarity] ?? 0,
       speeds,
       actions,
       iwr,
