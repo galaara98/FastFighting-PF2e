@@ -6,6 +6,7 @@ import { SystemAdapter, parseTypedFormula, parseFormula, describeMods } from "./
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
+import { pf2eHints, pf2eTactics, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
@@ -983,6 +984,34 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /* -------------------------------------------- */
+
+  /** What a character's system says for setting it up by itself (auto.js): class, ancestry, traits (slugs), gear. */
+  #facts(actor) {
+    const armor = (actor.itemTypes?.armor ?? []).find(a => a.isEquipped);
+    return {
+      cls: actor.class?.slug ?? null,
+      ancestry: actor.ancestry?.slug ?? null,
+      traits: [...(actor.system?.traits?.value ?? [])].map(String),
+      shield: !!actor.system?.attributes?.shield?.ac,
+      heavy: armor?.system?.category === "heavy"
+    };
+  }
+
+  /** The playstyles PF2e says fit it (auto.js). */
+  playstyleHints(actor) {
+    return pf2eHints(this.#facts(actor));
+  }
+
+  /** Its own answers to the tactics questions (auto.js): a class's style, a champion's guarding, the mindless never running. */
+  tacticHints(actor) {
+    return pf2eTactics(this.#facts(actor));
+  }
+
+  /** Its biography (a character's backstory, beliefs, edicts and anathema ...; a creature's notes and blurb) as text. */
+  biography(actor) {
+    const d = actor.system?.details ?? {};
+    return [textOf(d.biography), plainText(d.publicNotes), plainText(d.privateNotes), plainText(d.blurb)].filter(Boolean).join(". ");
+  }
 
   deriveTraits(actor) {
     const abilities = actor.items.filter(i => ["action", "feat"].includes(i.type)).map(slugOf).filter(Boolean);

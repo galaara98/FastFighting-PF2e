@@ -92,6 +92,20 @@ Tactics answers:
 - **Shields:** Raise a Shield, as the answer says.
 - **Magic and specialties** (an Un-Mundane character leans on them): spells, its class's actions (Vicious Swing, Double Slice, Sudden Charge, Flurry of Blows, a stratagem, a finisher), a kineticist's blasts, a thaumaturge's Exploit Vulnerability, its feats' actions (Battle Medicine, Bon Mot), what it puts on itself (Rage), and a creature's abilities. Its weapon Strikes, the skill actions anyone trained can take (Trip, Grapple, Disarm, Demoralize, Feint, Aid), and bombs and potions are what anyone could do.
 
+## Set up by itself
+
+When FastFighting sets a character up by itself (the first time it sees it: see the core's README), PF2e has its say:
+- **Class, by slug:**
+  - a Champion a Tank and a Martyr; a Guardian a Tank; a Commander leads; a Cleric an Enabler; a Bard a People-Pleaser and a Diplomat;
+  - a Rogue a Thief; a Ranger or Gunslinger a Wallflower; a Swashbuckler an Instigator; a Barbarian a Brawler, impatient; a Monk a Speed-Runner;
+  - an Alchemist, Inventor, Investigator or Thaumaturge a Puzzle-Maniac (an Investigator, Thaumaturge or Wizard a Lore-Collector too);
+  - the spellcasters, a Kineticist and a Magus Un-Mundane.
+  - Its fighting style follows: a Champion or Guardian protects its friends; the martial classes hold the front line or skirmish; the casters lead with spells. A Cleric heals readily.
+- **Ancestry, by slug,** only where its own abilities lean somewhere (an orc's ferocity, a kobold's traps, a goblin's haste, a dwarf's toughness).
+- **A creature's traits:** undead, mindless, constructs, oozes and plants Relentless (the mindless and constructs never run); a fiend or the unholy Cruel; the holy and celestials Moralists; fey Wildcards; animals and giants Brawlers.
+- **Gear:** a shield or heavy armor makes a Tank likelier.
+- **Keywords:** a character's biography (backstory, beliefs, edicts, anathema and the rest), a creature's notes and blurb.
+
 ## Installation
 
 Install **FastFighting Core** first, then this module, using this manifest URL:
