@@ -2,7 +2,7 @@
  * Pathfinder 2e adapter: reads PF2e actors into CombatantSpecs and commits outcomes back.
  * Data paths verified against pf2e 8.6.0 on Foundry v14.
  */
-import { SystemAdapter, parseTypedFormula, parseFormula, describeMods } from "./core.js";
+import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
@@ -1018,7 +1018,14 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   deriveTraits(actor) {
-    const abilities = actor.items.filter(i => ["action", "feat"].includes(i.type)).map(slugOf).filter(Boolean);
+    const own = actor.items.filter(i => ["action", "feat", "heritage"].includes(i.type));
+    const abilities = own.map(slugOf).filter(Boolean);
+    // (Each feat, feature and action once, with its rules: what they do says something of who has them.)
+    const seen = new Set();
+    const items = own.map(i => ({ slug: slugOf(i), name: i.name, rules: i.system?.rules ?? [] })).filter(i => i.slug && !seen.has(i.slug) && seen.add(i.slug));
+    const word = key => (key && hasWords(key) ? localize(key) : null);
+    const pc = actor.type === "character";
+    const skills = Object.entries(actor.skills ?? {});
     return derivePf2eTraits({
       type: actor.type,
       level: actor.level ?? 0,
@@ -1027,7 +1034,24 @@ export class Pf2eAdapter extends SystemAdapter {
       wis: actor.system.abilities?.wis?.mod ?? 0,
       will: actor.saves?.will?.mod,
       abilities,
-      hasMaster: actor.type === "familiar"
+      items,
+      hasMaster: actor.type === "familiar",
+      ...(pc ? {
+        con: actor.system.abilities?.con?.mod ?? 0,
+        cls: actor.class?.slug ?? null,
+        ancestry: actor.ancestry?.slug ?? null,
+        background: actor.background?.slug ?? null,
+        skills: Object.fromEntries(skills.map(([k, s]) => [k, s?.rank ?? 0])),
+        perception: actor.perception?.rank ?? 1,
+        inParty: actor.parties instanceof Set ? actor.parties.size > 0 : undefined,
+        names: {
+          abilities: Object.fromEntries(["int", "wis", "con"].map(k => [k, word(CONFIG.PF2E?.abilities?.[k]) ?? k])),
+          cls: actor.class?.name, ancestry: actor.ancestry?.name, background: actor.background?.name,
+          perception: actor.perception?.label ?? word("PF2E.PerceptionLabel"),
+          ranks: [0, 1, 2, 3, 4].map(r => word(CONFIG.PF2E?.proficiencyLevels?.[r]) ?? String(r)),
+          skills: Object.fromEntries(skills.map(([k, s]) => [k, s?.label ?? k]))
+        }
+      } : {})
     });
   }
 

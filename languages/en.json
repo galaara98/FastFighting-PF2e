@@ -47,10 +47,13 @@
       "SelfPreservation": ", animal self-preservation",
       "Default": "Default",
       "Trait": "Trait: {trait}",
-      "Party": "Party member",
       "Master": "Serves a master",
       "Summoned": "Summoned",
-      "Orders": "Mindless: follows orders"
+      "Orders": "Mindless: follows orders",
+      "Ability": "{name} {n}",
+      "Level": "level {n}",
+      "Proficient": "{name} {rank}",
+      "NoParty": "not in a party"
     },
     "Action": {
       "Demoralize": "Demoralize",
