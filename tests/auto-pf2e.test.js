@@ -149,14 +149,15 @@ describe("PF2e's answers for player characters", () => {
     expect(pf2eTactics({ ...herbalist, heals: ["Heal"] }).healAggro).toEqual({ value: "balanced", why: "Heal" });
   });
 
-  test("what it heals others with, from its actions: touch or range; not a potion, first aid or one that reaches nobody", () => {
+  test("what it heals others with, from its actions: not a spell on itself, a potion or first aid", () => {
     const heal = (name, extra) => ({ id: name, name, kind: "heal", heal: [], ...extra });
     expect(healsOthers([
       heal("Heal", { reach: 5 }), heal("Heal", { range: { increment: 30, max: 30 } }), heal("Battle Medicine", { reach: 5 }),
+      heal("Garden of Healing"), heal("Harmonize Self", { selfOnly: true }),
       heal("Healing Potion (Minor)", { resource: "item:abc", selfOnly: true }), heal("Elixir of Life", { resource: "item:def" }),
-      heal("Wholeness of Body"), heal("First Aid", { firstAid: true, reach: 5 }),
+      heal("First Aid", { firstAid: true, reach: 5 }),
       { id: "strike", name: "Longsword", kind: "strike", reach: 5 }
-    ])).toEqual(["Heal", "Battle Medicine"]);
+    ])).toEqual(["Heal", "Battle Medicine", "Garden of Healing"]);
     expect(healsOthers()).toEqual([]);
   });
 

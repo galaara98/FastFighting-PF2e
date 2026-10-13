@@ -36,7 +36,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - senses: darkvision and its kin (in the dark), scent, tremorsense, echolocation and the other senses that need no sight, with their ranges; blinded and deafened
   - Hero Points: spent to keep someone from dying (a reroll), or all of them for one's own Heroic Recovery; Make it So takes them away
   - prepared and spontaneous slots, focus points
-  - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet)
+  - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet; a healing spell with no range, area or target, cast on yourself, heals only its caster)
   - sneak attack and pack attack, knockdown and grab
   - poisons and diseases parsed stage by stage from their text
   - immunities, weaknesses and resistances

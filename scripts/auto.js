@@ -133,8 +133,8 @@ export const rescuesAllies = ({ type, text } = {}) => type === "reaction" && ALL
 export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_STRIKES_SELF.test(triggerOf(text));
 
 /**
- * What it heals others with, by name, from its actions (spec.actions): its heal spells, Battle Medicine; healing that
- * reaches someone (by touch or at range). Not a potion or an elixir (its own), nor first aid (which mends nobody).
+ * What it heals others with, by name, from its actions (spec.actions): its heal spells, Battle Medicine. Not one that
+ * heals only itself (selfOnly: a spell on yourself, a potion), an elixir (its own), nor first aid (which mends nobody).
  * @param {object[]} actions
  * @returns {string[]}
  */
@@ -142,7 +142,6 @@ export function healsOthers(actions = []) {
   const out = [];
   for ( const a of actions ?? [] ) {
     if ( a?.kind !== "heal" || a.selfOnly || a.firstAid || a.consumable || /^item:/.test(a.resource ?? "") ) continue;
-    if ( !(a.reach > 0) && !a.range ) continue;
     if ( a.name && !out.includes(a.name) ) out.push(a.name);
   }
   return out;

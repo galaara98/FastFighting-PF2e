@@ -1,9 +1,10 @@
 /**
- * What the adapter reads of a PF2e character that needs no Foundry: its dying numbers, its Ferocity, and how an item's
- * text is enriched to work out its formulas (PF2e's own enrichers only, nothing that rolls, links or embeds).
+ * What the adapter reads of a PF2e character that needs no Foundry: its dying numbers, its Ferocity, a spell on itself,
+ * and how an item's text is enriched to work out its formulas (PF2e's own enrichers only, nothing that rolls, links or
+ * embeds).
  */
 import { afterEach, describe, expect, test } from "vitest";
-import { dyingOf, ferocityOf, resolvedText } from "../scripts/adapter.js";
+import { dyingOf, ferocityOf, resolvedText, selfOnlySpell } from "../scripts/adapter.js";
 
 describe("its dying numbers, as PF2e works them out", () => {
   test("Diehard's dying 5 and Toughness's recovery DC 9; the doomed value PF2e took off goes back on", () => {
@@ -30,6 +31,19 @@ describe("its Ferocity, by slug", () => {
     expect(ferocityOf([item("ferocity", "Ferocity")], 2)).toEqual({ label: "Ferocity", uses: null, untilWounded: 3, temp: 0 });
     expect(ferocityOf([item("diehard", "Diehard")], 2)).toBeNull();
     expect(ferocityOf(undefined, 2)).toBeNull();
+  });
+});
+
+describe("a spell that reaches only its caster", () => {
+  test("no range, no area, no target: on itself (a heal from it heals only itself); otherwise it reaches others", () => {
+    const spell = (range, target, area = null) => ({ range: { value: range }, target: { value: target }, area });
+    // (As PF2e's own spells have them: Harmonize Self; Heal, Soothe, Lay on Hands; Garden of Healing.)
+    expect(selfOnlySpell(spell("", ""))).toBe(true);
+    expect(selfOnlySpell({})).toBe(true);
+    expect(selfOnlySpell(spell("varies", "1 willing living creature or 1 undead"))).toBe(false);
+    expect(selfOnlySpell(spell("30 feet", "1 willing creature"))).toBe(false);
+    expect(selfOnlySpell(spell("touch", "1 willing living creature or 1 undead creature"))).toBe(false);
+    expect(selfOnlySpell(spell("", "", { type: "emanation", value: 10 }))).toBe(false);
   });
 });
 

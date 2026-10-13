@@ -116,6 +116,14 @@ function parseFeet(text) {
   return m ? Number(m[1]) : null;
 }
 
+/**
+ * Does a spell reach only its caster? PF2e leaves a spell on yourself with no range, no area and no target (Harmonize
+ * Self, Cloak of Light); one with an area around you reaches those in it.
+ */
+export function selfOnlySpell(system) {
+  return !String(system?.range?.value ?? "").trim() && !system?.area && !String(system?.target?.value ?? "").trim();
+}
+
 /** Rough number of enemies caught by an area. */
 function areaTargets(area, targetText) {
   if ( /1 or 2 creatures/i.test(targetText ?? "") ) return 2;
@@ -679,12 +687,14 @@ export class Pf2eAdapter extends SystemAdapter {
             heal = heal.map((p, i) => i === 0 ? { ...p, flat: p.flat + 8 * (spell.rank ?? 1) } : p);
           }
           const animalOnly = /animal/i.test(spell.system.target?.value ?? "");
-          // One-action heal is a touch; two actions reach 30 feet.
-          const touch = /touch/i.test(spell.system.range?.value ?? "") || (cost === 1 && HEAL_SPELLS_TWO_ACTION_BONUS.has(spell.slug));
-          const reach = touch ? { reach: 5 } : rangeFeet ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
+          // One-action heal is a touch; two actions reach 30 feet (its range "varies" with the actions spent).
+          const variable = HEAL_SPELLS_TWO_ACTION_BONUS.has(spell.slug);
+          const touch = variable ? cost === 1 : /touch/i.test(spell.system.range?.value ?? "");
+          const feet = variable ? 30 : rangeFeet;
+          const reach = touch ? { reach: 5 } : feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {};
           out.push({
             id, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank,
-            targetTrait: animalOnly ? "animal" : null, ...reach
+            targetTrait: animalOnly ? "animal" : null, ...reach, ...(selfOnlySpell(spell.system) ? { selfOnly: true } : {})
           });
           continue;
         }
