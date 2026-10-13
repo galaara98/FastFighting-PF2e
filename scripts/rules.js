@@ -47,6 +47,9 @@ function holdsOn(c) {
   return true;
 }
 
+/** Damage types from before the remaster (older content still has them), as the story tells them. */
+const STORY_TYPES = Object.freeze({ positive: "vitality", negative: "void", good: "radiant", evil: "unholy", lawful: "force", chaotic: "spirit", precision: "untyped" });
+
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
@@ -375,5 +378,10 @@ export const pf2eRules = {
   /** End of turn persistent damage: take it, then a DC 15 flat check to remove each instance. */
   persistentFlatCheck(rng) {
     return rng.d20() >= 15;
+  },
+
+  /** The story's family for a damage type: the remaster's are the story's own; older content's are mapped. */
+  storyDamageType(type) {
+    return STORY_TYPES[type] ?? type;
   }
 };

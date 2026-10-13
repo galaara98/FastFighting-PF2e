@@ -181,6 +181,21 @@ export function ferocityOf(items, level) {
   };
 }
 
+/** Elements that show in the story (an attack's trait, by slug), and the damage they may be told over: a plain blow. */
+const ELEMENT_LOOKS = Object.freeze({ air: "wind", water: "water", earth: "earth", wood: "plant", plant: "plant" });
+const PLAIN_DAMAGE = new Set(["bludgeoning", "piercing", "slashing", "untyped", "force"]);
+
+/**
+ * How an attack looks in the story, where its group or traits say more than its damage (the core's story families): a
+ * firearm's shot is gunfire; an air, water, earth or wood attack is that element when its harm is a plain blow (a
+ * lightning bolt with the air trait is still lightning). Undefined: its damage says.
+ */
+export function storyLook(traits = [], group = null, damage = []) {
+  if ( group === "firearm" ) return "ballistic";
+  if ( !damage.length || !damage.every(p => PLAIN_DAMAGE.has(p.type)) ) return undefined;
+  return traits.map(t => ELEMENT_LOOKS[t]).find(Boolean);
+}
+
 export class Pf2eAdapter extends SystemAdapter {
   /** Building a summoned creature (which doesn't summon in turn). */
   #summoning = false;
@@ -518,6 +533,7 @@ export class Pf2eAdapter extends SystemAdapter {
         bonusDamage,
         drawCost: s.ready === false && character ? 1 : 0,
         traits,
+        storyType: storyLook(traits, item?.system?.group ?? null, damage),
         // (A weapon in hand, one that can be knocked away: a character's weapon, or a creature's that has one.)
         held: ["simple", "martial", "advanced"].includes(item?.category) || undefined,
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
@@ -722,7 +738,7 @@ export class Pf2eAdapter extends SystemAdapter {
         if ( !kinds.has?.("damage") ) continue;
         const action = {
           id, name: spell.name, cost, damage: parts, resource, pool, uses,
-          spellId: spell.id, entryId: entry.id, rank: spell.rank, traits,
+          spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, storyType: storyLook(traits, null, parts),
           melee: false,
           range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
         };
