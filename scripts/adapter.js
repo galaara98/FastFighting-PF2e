@@ -1224,7 +1224,10 @@ function level(actor) {
  * out is returned as it is.
  */
 async function resolvedText(item) {
-  const raw = englishDescription(item);
+  // (Its links as their labels, embeds left out: only its formulas are worked out, and no link is ever followed.)
+  const raw = String(englishDescription(item) ?? "")
+    .replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ")
+    .replace(/@(?:UUID|Compendium)\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? " ");
   if ( !/@Damage\[[^\]]*@|@Check\[(?![^\]]*\bdc:\d)/i.test(raw) ) return raw;
   let html;
   try {
