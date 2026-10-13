@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { derivePf2eTraits, ruleLeans } from "../scripts/traits.js";
 import { PC_BASELINE } from "../../FastFighting/scripts/constants.js";
+import { text } from "./foundry-i18n.js";
 
 /** A level-1 player character: the usual hero's numbers unless told otherwise. */
 const pc = extra => derivePf2eTraits({ type: "character", level: 5, traits: ["human", "humanoid"], int: 1, wis: 1, con: 1, will: 10, abilities: [], items: [], skills: {}, perception: 1, inParty: true, ...extra });
@@ -72,6 +73,14 @@ describe("a PF2e creature's traits", () => {
     const companion = derivePf2eTraits({ type: "character", level: 1, traits: ["animal", "minion"], int: -4, wis: 2, will: 4 }).traits;
     expect(companion.selfish).toBe(10);
     expect(companion.loyal).toBe(85);
+  });
+
+  test("an animal's reasons: its instinct, hunting in packs, its self-preservation, each in one sentence of its own", () => {
+    const wolf = derivePf2eTraits({ type: "npc", level: 1, traits: ["animal"], int: -4, wis: 2, will: 7, abilities: ["pack-attack"] });
+    expect(wolf.reasons.tactical).toContain(text("FFPF2E.Reason.PackHunter", { reason: text("FFPF2E.Reason.Animal") }));
+    expect(wolf.reasons.brave).toContain(text("FFPF2E.Reason.WillAnimal", { n: "+1" }));
+    const man = derivePf2eTraits({ type: "npc", level: 1, traits: ["humanoid"], int: 0, wis: 0, will: 6 });
+    expect(man.reasons.brave).toContain(text("FFPF2E.Reason.Will", { n: "+0" }));
   });
 
   test("the mindless don't change: nothing moves them", () => {

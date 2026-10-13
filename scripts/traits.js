@@ -220,7 +220,7 @@ export function derivePf2eTraits(d) {
     tactical = clamp(38 + d.int * 8 + d.wis * 2, 10, 95);
     reasons.tactical = t("Reason.Int", { n: signed(d.int) });
   }
-  if ( flags.packTactics ) reasons.tactical += t("Reason.Pack");
+  if ( flags.packTactics ) reasons.tactical = t("Reason.PackHunter", { reason: reasons.tactical });
 
   // Brave ------------------------------------------------------------
   let brave;
@@ -230,7 +230,7 @@ export function derivePf2eTraits(d) {
   else {
     const delta = (d.will ?? expectedWill(d.level)) - expectedWill(d.level);
     brave = clamp(55 + delta * 5 - (traits.has("animal") ? 15 : 0), 10, 90);
-    reasons.brave = t("Reason.Will", { n: signed(delta) }) + (traits.has("animal") ? t("Reason.SelfPreservation") : "");
+    reasons.brave = t(traits.has("animal") ? "Reason.WillAnimal" : "Reason.Will", { n: signed(delta) });
   }
   if ( traits.has("minion") ) brave = Math.max(brave, 70);
 
