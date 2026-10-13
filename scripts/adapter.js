@@ -1223,7 +1223,7 @@ function level(actor) {
  * use its level or ability scores, a class DC, its own rule elements (a kineticist's gate). Text with nothing to work
  * out is returned as it is.
  */
-async function resolvedText(item) {
+export async function resolvedText(item) {
   // (Its links as their labels, embeds left out: only its formulas are worked out, and no link is ever followed.)
   const raw = String(englishDescription(item) ?? "")
     .replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ")
@@ -1231,7 +1231,11 @@ async function resolvedText(item) {
   if ( !/@Damage\[[^\]]*@|@Check\[(?![^\]]*\bdc:\d)/i.test(raw) ) return raw;
   let html;
   try {
-    html = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, { rollData: item.getRollData?.(), relativeTo: item });
+    // (PF2e's own enrichers only, @Damage and @Check among them: no inline roll is made, no document link, hyperlink or
+    // embed is worked out, and no secret is shown, whoever's screen it is on.)
+    html = await foundry.applications.ux.TextEditor.implementation.enrichHTML(raw, {
+      rollData: item.getRollData?.(), relativeTo: item, rolls: false, embeds: false, documents: false, links: false, secrets: false
+    });
   } catch ( err ) {
     return raw;
   }
