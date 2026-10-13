@@ -4,7 +4,7 @@
  * with its reason ("Let this character decide").
  */
 import { describe, expect, test } from "vitest";
-import { pf2eHints, pf2eTactics, textOf, triggerOf, guardsAllies, rescuesAllies, guardsSelf, highSkill } from "../scripts/auto.js";
+import { pf2eHints, pf2eTactics, textOf, triggerOf, guardsAllies, rescuesAllies, guardsSelf, healsOthers, highSkill } from "../scripts/auto.js";
 import { traitName } from "../scripts/words.js";
 import { listJoin } from "../scripts/core.js";
 import { TACTIC_CHOICES } from "../../fast-fighting/scripts/engine/tactics.js";
@@ -43,7 +43,7 @@ const kyra = (extra = {}) => ({
   features: { "cloistered-cleric": "Cloistered Cleric", "divine-font": "Divine Font (Healing)", "domain-initiate": "Domain Initiate" },
   traits: ["human", "humanoid", "holy"], font: { value: "heal", name: "Divine Font (Healing)" }, deity: { name: "Sarenrae", weapons: ["scimitar"] },
   strikes: [{ id: "kyra.strike.scimitar.0", base: "scimitar" }, { id: "kyra.strike.sling.1", base: "sling" }], weapons: { melee: 1, ranged: 1 },
-  casting: { slots: "Divine Prepared Spells", innate: null }, social: pcSocial(1, 0, 0), languages: 2, purse: { money: 150, coin: 100 }, ...extra
+  casting: { slots: "Divine Prepared Spells", innate: null }, heals: ["Heal"], social: pcSocial(1, 0, 0), languages: 2, purse: { money: 150, coin: 100 }, ...extra
 });
 const valeros = (extra = {}) => ({
   kind: "pc", level: 1, cls: { slug: "fighter", name: "Fighter" }, background: { slug: "farmhand", name: "Farmhand" },
@@ -112,16 +112,17 @@ describe("reading what an ability does from its trigger", () => {
 });
 
 describe("PF2e's answers for player characters", () => {
-  test("a cloistered cleric with a healing font: leads with spells, keeps everyone up, offers mercy (holy)", () => {
+  test("a cloistered cleric with a healing font: leads with spells, keeps her slots for the day, keeps everyone up, offers mercy (holy)", () => {
     const got = pf2eTactics(kyra());
     expect(got.style).toEqual({ value: "caster", why: "Cloistered Cleric" });
     expect(got.specialty).toEqual({ value: "strong", why: "Cleric" });
+    expect(got.resourceUse).toEqual({ value: "conserve", why: "Divine Prepared Spells" });
     expect(got.healAggro).toEqual({ value: "aggressive", why: "Divine Font (Healing)" });
     expect(got.allyDying).toEqual({ value: "rescue", why: "Divine Font (Healing)" });
     expect(got.talk).toEqual({ value: "opportune", why: text("FFPF2E.Reason.Proficient", { name: "Diplomacy", rank: "Trained" }) });
     expect(got.offer).toEqual({ value: { kind: "noHarm" }, why: traitName("holy") });
     // (A cloistered cleric doesn't fight with its deity's weapon; nothing else on its sheet speaks to these.)
-    for ( const k of ["preferredAction", "target", "shield", "retreat", "beyond", "expect", "consumables", "resourceUse"] ) expect(got[k], k).toBeUndefined();
+    for ( const k of ["preferredAction", "target", "shield", "retreat", "beyond", "expect", "consumables"] ) expect(got[k], k).toBeUndefined();
   });
 
   test("a warpriest fights with its deity's favored weapon; a harmful font isn't a healer's", () => {
@@ -129,9 +130,43 @@ describe("PF2e's answers for player characters", () => {
     expect(got.preferredAction).toEqual({ value: "kyra.strike.scimitar.0", why: "Sarenrae" });
     expect(got.style).toEqual({ value: "frontline", why: "Warpriest" });
     expect(got.specialty).toEqual({ value: "some", why: "Warpriest" });
-    const harm = pf2eTactics(kyra({ font: { value: "harm", name: "Divine Font (Harmful)" } }));
+    const harm = pf2eTactics(kyra({ font: { value: "harm", name: "Divine Font (Harmful)" }, heals: [] }));
     expect(harm.healAggro).toBeUndefined();
     expect(harm.allyDying).toBeUndefined();
+    // (One who still prepares a heal heals as the fight allows, and goes to a friend who falls.)
+    const mending = pf2eTactics(kyra({ font: { value: "harm", name: "Divine Font (Harmful)" }, heals: ["Heal", "Soothe"] }));
+    expect(mending.healAggro).toEqual({ value: "balanced", why: listJoin(["Heal", "Soothe"]) });
+    expect(mending.allyDying).toEqual({ value: "rescue", why: listJoin(["Heal", "Soothe"]) });
+  });
+
+  test("healing others: what it heals others with, by name; a healer's choices make it eager, but only with something to heal with", () => {
+    expect(pf2eTactics(valeros({ heals: ["Battle Medicine"] })).healAggro).toEqual({ value: "balanced", why: "Battle Medicine" });
+    expect(pf2eTactics(valeros({ heals: ["Battle Medicine"], features: { "medic-dedication": "Medic Dedication" } })).healAggro)
+      .toEqual({ value: "aggressive", why: "Medic Dedication" });
+    const chirurgeon = { kind: "pc", cls: { slug: "alchemist", name: "Alchemist" }, features: { chirurgeon: "Chirurgeon" } };
+    expect(pf2eTactics(chirurgeon).healAggro).toBeUndefined();
+    expect(pf2eTactics({ ...chirurgeon, heals: ["Battle Medicine"] }).healAggro).toEqual({ value: "aggressive", why: "Chirurgeon" });
+    expect(pf2eTactics({ ...herbalist, heals: ["Heal"] }).healAggro).toEqual({ value: "balanced", why: "Heal" });
+  });
+
+  test("what it heals others with, from its actions: touch or range; not a potion, first aid or one that reaches nobody", () => {
+    const heal = (name, extra) => ({ id: name, name, kind: "heal", heal: [], ...extra });
+    expect(healsOthers([
+      heal("Heal", { reach: 5 }), heal("Heal", { range: { increment: 30, max: 30 } }), heal("Battle Medicine", { reach: 5 }),
+      heal("Healing Potion (Minor)", { resource: "item:abc", selfOnly: true }), heal("Elixir of Life", { resource: "item:def" }),
+      heal("Wholeness of Body"), heal("First Aid", { firstAid: true, reach: 5 }),
+      { id: "strike", name: "Longsword", kind: "strike", reach: 5 }
+    ])).toEqual(["Heal", "Battle Medicine"]);
+    expect(healsOthers()).toEqual([]);
+  });
+
+  test("its limited means: a caster's spell slots last the day; Focus Points are for this fight", () => {
+    expect(pf2eTactics(ezren()).resourceUse).toEqual({ value: "conserve", why: "Arcane Prepared Spells" });
+    const monk = { kind: "pc", cls: { slug: "monk", name: "Monk" }, casting: { slots: null, innate: null, focus: "Qi Spells" } };
+    expect(pf2eTactics(monk).resourceUse).toEqual({ value: "nova", why: "Qi Spells" });
+    // (A fighter's dedication spells don't make it a caster; a creature's slots leave it to the core.)
+    expect(pf2eTactics(valeros({ casting: { slots: "Arcane Prepared Spells" } })).resourceUse).toBeUndefined();
+    expect(pf2eTactics(chanter).resourceUse).toBeUndefined();
   });
 
   test("a fighter holds the line; Reactive Shield raises the shield only as the blow comes; an archer shoots", () => {
@@ -280,8 +315,11 @@ describe("every answer is one the core takes", () => {
     champion({ slug: "justice", name: "Justice" }, reaction("retributive-strike", "Retributive Strike", "An enemy damages your ally")),
     champion({ slug: "desecration", name: "Desecration" }, reaction("selfish-shield", "Selfish Shield", "An enemy damages you")),
     zombie, wolf, bodyguard, herbalist, chanter, serpentfolk, hobgoblin, devil, troll, golem, goblin,
-    { kind: "pc", cls: { slug: "alchemist", name: "Alchemist" }, features: { chirurgeon: "Chirurgeon" } },
-    { kind: "pc", cls: { slug: "oracle", name: "Oracle" }, features: { life: "Life" } },
+    kyra({ font: { value: "harm", name: "Divine Font (Harmful)" }, heals: ["Heal", "Soothe"] }), valeros({ heals: ["Battle Medicine"] }),
+    { ...herbalist, heals: ["Heal"] },
+    { kind: "pc", cls: { slug: "alchemist", name: "Alchemist" }, features: { chirurgeon: "Chirurgeon" }, heals: ["Battle Medicine"] },
+    { kind: "pc", cls: { slug: "oracle", name: "Oracle" }, features: { life: "Life" }, heals: ["Heal"], casting: { slots: "Divine Spontaneous Spells", focus: "Revelation Spells" } },
+    { kind: "pc", cls: { slug: "monk", name: "Monk" }, casting: { focus: "Qi Spells" } },
     { kind: "minion", traits: ["summoned", "minion"], languages: 0 }];
 
   test("each one of its question's choices, with a reason, and the core's withHints keeps every one", () => {
@@ -298,5 +336,13 @@ describe("every answer is one the core takes", () => {
       expect(Object.keys(kept.why).sort()).toEqual(Object.keys(hints).sort());
       for ( const k of Object.keys(hints) ) expect(kept.lets[k]).toEqual(hints[k].value);
     }
+  });
+
+  test("an answer with no reason to give isn't given", () => {
+    const nameless = champion({ slug: "justice", name: "Justice" }, reaction("retributive-strike", "Retributive Strike", "An enemy damages your ally"),
+      { deity: { name: "", weapons: ["longsword"] }, cls: { slug: "champion", name: "" } });
+    const hints = pf2eTactics(nameless);
+    expect(hints.preferredAction).toBeUndefined();
+    for ( const [k, { why }] of Object.entries(hints) ) expect(why, k).toBeTruthy();
   });
 });

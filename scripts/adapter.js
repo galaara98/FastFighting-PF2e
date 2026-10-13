@@ -6,7 +6,7 @@ import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize,
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
-import { pf2eHints, pf2eTactics, plainText, textOf } from "./auto.js";
+import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
@@ -1056,14 +1056,17 @@ export class Pf2eAdapter extends SystemAdapter {
       else if ( a.range ) weapons.ranged++;
     }
     const bomb = (spec.actions ?? []).find(a => a.kind === "strike" && (a.traits ?? []).includes("bomb"))?.name ?? null;
-    // Its spellcasting: with spell slots (prepared or spontaneous), and innate.
+    // Its spellcasting: with spell slots (prepared or spontaneous), innate, and focus spells (with a focus pool).
     let slots = null;
     let innate = null;
+    let focus = null;
+    const pool = Number(actor.system?.resources?.focus?.max) || 0;
     for ( const entry of actor.spellcasting?.regular ?? actor.spellcasting?.contents ?? [] ) {
       const mode = entry.system?.prepared?.value;
       const ranked = Object.entries(entry.system?.slots ?? {}).some(([key, s]) => key !== "slot0" && Number(s?.max) > 0);
       if ( !slots && ranked && ["prepared", "spontaneous"].includes(mode) ) slots = entry.name;
       if ( !innate && mode === "innate" && (entry.spells?.size ?? entry.spells?.contents?.length ?? 1) > 0 ) innate = entry.name;
+      if ( !focus && mode === "focus" && pool > 0 && (entry.spells?.size ?? entry.spells?.contents?.length ?? 1) > 0 ) focus = entry.name;
     }
     // Diplomacy, Deception and Intimidation: a character's proficiency; whether a creature's stat block lists them.
     const social = {};
@@ -1089,7 +1092,8 @@ export class Pf2eAdapter extends SystemAdapter {
       deity,
       strikes,
       weapons,
-      casting: { slots, innate },
+      casting: { slots, innate, focus },
+      heals: healsOthers(spec.actions),
       social,
       languages: (spec.social?.languages ?? actor.system?.details?.languages?.value ?? []).length,
       immune: (spec.iwr?.immune ?? []).map(type => ({ type, name: word(CONFIG.PF2E?.immunityTypes?.[type]) ?? type })),

@@ -133,6 +133,22 @@ export const rescuesAllies = ({ type, text } = {}) => type === "reaction" && ALL
 export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_STRIKES_SELF.test(triggerOf(text));
 
 /**
+ * What it heals others with, by name, from its actions (spec.actions): its heal spells, Battle Medicine; healing that
+ * reaches someone (by touch or at range). Not a potion or an elixir (its own), nor first aid (which mends nobody).
+ * @param {object[]} actions
+ * @returns {string[]}
+ */
+export function healsOthers(actions = []) {
+  const out = [];
+  for ( const a of actions ?? [] ) {
+    if ( a?.kind !== "heal" || a.selfOnly || a.firstAid || a.consumable || /^item:/.test(a.resource ?? "") ) continue;
+    if ( !(a.reach > 0) && !a.range ) continue;
+    if ( a.name && !out.includes(a.name) ) out.push(a.name);
+  }
+  return out;
+}
+
+/**
  * PF2e's own answers to the tactics questions, and what a character offers and expects to end an argument: what its
  * class and the choices it made in it, its feats and features, its kind and its stat block say, each with its reason
  * (the system's own name for it). Questions its data says nothing about are left out (the core's reading stands).
@@ -150,8 +166,9 @@ export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_ST
  * @param {{name: string, weapons: string[]}} [f.deity]   its deity and favored weapons (base weapon slugs)
  * @param {{id: string, base: string}[]} [f.strikes]   its weapon Strikes: the action's id, the base weapon
  * @param {{melee: number, ranged: number}} [f.weapons]   how many melee and ranged weapons it fights with
- * @param {{slots: string|null, innate: string|null}} [f.casting]   its spellcasting with spell slots (prepared or
- *   spontaneous), and innate: each one's name, or null
+ * @param {{slots: string|null, innate: string|null, focus: string|null}} [f.casting]   its spellcasting with spell slots
+ *   (prepared or spontaneous), innate, and focus spells (with Focus Points to cast them): each one's name, or null
+ * @param {string[]} [f.heals]   what it heals others with, by name (healsOthers: its spells, Battle Medicine)
  * @param {Record<string, {rank: number, mod: number, listed: boolean, name: string, rankName: string}>} [f.social]
  *   Diplomacy, Deception and Intimidation
  * @param {number} [f.languages]   how many languages it speaks
@@ -165,10 +182,11 @@ export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_ST
  */
 export function pf2eTactics(f = {}) {
   const out = {};
-  // (The first answer to a question stands: the rules below go from the surest reading to the least.)
+  // (The first answer to a question stands: the rules below go from the surest reading to the least. One with no
+  // reason to give isn't an answer.)
   const say = (key, value, why) => {
-    if ( key in out || value === undefined || value === null || value === "" ) return;
-    out[key] = { value, why: why ?? "" };
+    if ( key in out || value === undefined || value === null || value === "" || !why ) return;
+    out[key] = { value, why: String(why) };
   };
   const features = f.features ?? {};
   const has = slug => Object.hasOwn(features, slug);
@@ -194,7 +212,11 @@ export function pf2eTactics(f = {}) {
   const selfish = cls === "champion" && !!selfGuard && !guard;
   const guardian = ["champion", "guardian"].includes(cls) && !selfish;
   const guardWhy = guard?.name ?? clsName;
-  const healer = (cls === "cleric" && f.font?.value === "heal" && f.font.name)
+  // What it heals others with; and, with something to heal with, one who's a healer by its choices (a cleric with a
+  // healing font, a chirurgeon, an oracle of life, a medic).
+  const heals = (f.heals ?? []).filter(Boolean);
+  const healNames = heals.length ? listJoin(heals.slice(0, 3)) : null;
+  const healer = !heals.length ? null : (cls === "cleric" && f.font?.value === "heal" && f.font.name)
     || (cls === "alchemist" && has("chirurgeon") && named("chirurgeon"))
     || (cls === "oracle" && has("life") && named("life"))
     || (has("medic-dedication") && named("medic-dedication")) || null;
@@ -240,8 +262,11 @@ export function pf2eTactics(f = {}) {
   if ( guard ) say("target", "protect", guard.name);
   if ( cls === "commander" ) say("target", "dangerous", clsName);
 
-  // Spell slots and other limited abilities: a summoned creature has nothing to save them for.
+  // Spell slots and other limited abilities: a summoned creature has nothing to save them for; a caster's spell slots
+  // last the day; Focus Points come back after ten minutes' Refocus, so they're for this fight.
   if ( summoned ) say("resourceUse", "nova", summoned);
+  if ( pc && CASTERS.has(cls) ) say("resourceUse", "conserve", f.casting?.slots);
+  if ( pc ) say("resourceUse", "nova", f.casting?.focus);
 
   // Magic and its specialties.
   if ( pc && cls ) {
@@ -281,12 +306,15 @@ export function pf2eTactics(f = {}) {
     if ( best ) say("talk", best.mod >= highSkill(f.level) ? "first" : "opportune", t("Why.Skill", { skill: best.name || best.slug, mod: sign(best.mod) }));
   }
 
-  // Healing others, and an ally dying.
+  // Healing others (with what it heals others with): a healer eagerly, anyone else as the fight allows. An ally dying:
+  // one who heals goes to it.
   if ( healer ) say("healAggro", "aggressive", healer);
+  say("healAggro", "balanced", healNames);
   if ( unthinking ) say("allyDying", "fight", unthinking);
   if ( rescue ) say("allyDying", "rescue", rescue.name);
   if ( guardian ) say("allyDying", "rescue", guardWhy);
   if ( healer ) say("allyDying", "rescue", healer);
+  say("allyDying", "rescue", healNames);
 
   // Its own potions: vitality hurts the undead (void healing), and some can't be healed at all; one that mends by
   // itself waits until it's dire.
