@@ -81,6 +81,12 @@
       "Stage": "Stage {stage}."
     },
     "Loosened": "loosened grip (-2 to attacks with it)",
-    "Dropped": "dropped its weapon"
+    "Dropped": "dropped its weapon",
+    "Why": {
+      "NoLanguage": "No language",
+      "Immune": "Immune to {what}",
+      "Skill": "{skill} {mod}",
+      "Untrained": "{rank} in {skills}"
+    }
   }
 }

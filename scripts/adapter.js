@@ -92,6 +92,12 @@ function ownNames(actor) {
   return out;
 }
 
+/** A character's weapon Strikes, as the system lists them (the ones it shows). */
+const strikesOf = actor => (actor.system?.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
+
+/** The id of a Strike's action: the `index`th of strikesOf(actor). */
+const strikeId = (actor, s, index) => `${actor.id}.strike.${s.slug ?? index}.${index}`;
+
 function slugOf(item) {
   const slug = item?.slug ?? item?.system?.slug;
   if ( slug ) return slug;
@@ -405,7 +411,7 @@ export class Pf2eAdapter extends SystemAdapter {
     const setups = [];
     if ( has("devise-a-stratagem") ) setups.push({ key: "stratagem", label: featureName(ownNames(actor), "devise-a-stratagem"), options: ["check:substitution:devise-a-stratagem"], precision: true });
     if ( has("panache") || actor.items.some(i => i.system?.traits?.value?.includes("finisher")) ) setups.push({ key: "finisher", label: traitName("finisher"), options: ["self:effect:panache", "finisher"] });
-    const strikes = (actor.system.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
+    const strikes = strikesOf(actor);
     for ( const [index, s] of strikes.entries() ) {
       const item = s.item;
       const formula = async (options = [], critical = false) => {
@@ -444,7 +450,7 @@ export class Pf2eAdapter extends SystemAdapter {
       }
 
       const strike = {
-        id: `${actor.id}.strike.${s.slug ?? index}.${index}`,
+        id: strikeId(actor, s, index),
         name: s.label,
         kind: "strike",
         cost: 1 + reload,
@@ -1006,9 +1012,93 @@ export class Pf2eAdapter extends SystemAdapter {
     return pf2eHints(this.#facts(actor));
   }
 
-  /** Its own answers to the tactics questions (auto.js): a class's style, a champion's guarding, the mindless never running. */
-  tacticHints(actor) {
-    return pf2eTactics(this.#facts(actor));
+  /**
+   * Its own answers to the tactics questions, and what it offers and expects (auto.js: pf2eTactics), each with its
+   * reason: its class and the choices it made in it, its feats, features and abilities (by slug, and by what their
+   * triggers say they do), its traits, spellcasting, skills, languages, immunities and gear.
+   */
+  tacticHints(actor, spec) {
+    return pf2eTactics(this.#tacticFacts(actor, spec ?? {}));
+  }
+
+  /** What pf2eTactics reads of a character (plain values, with the names the GM sees). */
+  #tacticFacts(actor, spec) {
+    const word = key => (key && hasWords(key) ? localize(key) : null);
+    const features = {};
+    const abilities = [];
+    let formation = null;
+    let mending = null;
+    for ( const item of actor.items ?? [] ) {
+      const rules = item.system?.rules ?? [];
+      // (Fighting in formation: an ability whose rules turn on the "formation" roll option, a hobgoblin soldier's.)
+      if ( !formation && rules.some(r => r?.key === "RollOption" && r.option === "formation") ) formation = item.name;
+      if ( !mending && (spec.regen || spec.fastHealing) && rules.some(r => r?.key === "FastHealing") ) mending = item.name;
+      if ( !["feat", "action", "heritage"].includes(item.type) ) continue;
+      const slug = slugOf(item);
+      if ( slug && !Object.hasOwn(features, slug) ) features[slug] = item.name;
+      const type = item.system?.actionType?.value;
+      if ( type === "reaction" || type === "action" ) abilities.push({ slug, name: item.name, type, text: englishDescription(item) });
+    }
+    // A cleric's divine font: what its choice selected (heal or harm).
+    const fontItem = actor.items?.find(i => slugOf(i) === "divine-font");
+    const fontRule = (fontItem?.system?.rules ?? []).find(r => r?.key === "ChoiceSet" && r.flag === "divineFont");
+    const font = fontItem ? { value: fontItem.flags?.pf2e?.rulesSelections?.divineFont ?? fontRule?.selection ?? null, name: fontItem.name } : null;
+    const deity = actor.deity ? { name: actor.deity.name, weapons: [...(actor.deity.system?.weapons ?? [])] } : null;
+    // Its weapon Strikes (the ones that are its actions), and the weapons it fights with (not its fists, nor a bomb).
+    const ids = new Set((spec.actions ?? []).map(a => a.id));
+    const strikes = strikesOf(actor).map((s, index) => ({ id: strikeId(actor, s, index), base: s.item?.baseType ?? s.item?.system?.baseItem ?? s.item?.slug ?? null }))
+      .filter(s => ids.has(s.id));
+    const weapons = { melee: 0, ranged: 0 };
+    for ( const a of spec.actions ?? [] ) {
+      if ( a.kind !== "strike" || a.feature || a.classAction || /^item:/.test(a.resource ?? "") ) continue;
+      if ( (a.traits ?? []).some(x => ["unarmed", "impulse"].includes(x)) ) continue;
+      if ( a.melee ) weapons.melee++;
+      else if ( a.range ) weapons.ranged++;
+    }
+    const bomb = (spec.actions ?? []).find(a => a.kind === "strike" && (a.traits ?? []).includes("bomb"))?.name ?? null;
+    // Its spellcasting: with spell slots (prepared or spontaneous), and innate.
+    let slots = null;
+    let innate = null;
+    for ( const entry of actor.spellcasting?.regular ?? actor.spellcasting?.contents ?? [] ) {
+      const mode = entry.system?.prepared?.value;
+      const ranked = Object.entries(entry.system?.slots ?? {}).some(([key, s]) => key !== "slot0" && Number(s?.max) > 0);
+      if ( !slots && ranked && ["prepared", "spontaneous"].includes(mode) ) slots = entry.name;
+      if ( !innate && mode === "innate" && (entry.spells?.size ?? entry.spells?.contents?.length ?? 1) > 0 ) innate = entry.name;
+    }
+    // Diplomacy, Deception and Intimidation: a character's proficiency; whether a creature's stat block lists them.
+    const social = {};
+    for ( const slug of ["diplomacy", "deception", "intimidation"] ) {
+      const s = actor.skills?.[slug];
+      const rank = Number(s?.rank) || 0;
+      social[slug] = {
+        rank, mod: s?.mod, listed: rank >= 1 || !!actor._source?.system?.skills?.[slug],
+        name: s?.label ?? slug, rankName: word(CONFIG.PF2E?.proficiencyLevels?.[rank]) ?? String(rank)
+      };
+    }
+    const coins = spec.valuables?.denominations ?? [];
+    const main = coins.find(c => c.value === 100) ?? coins[0] ?? null;
+    return {
+      kind: spec.kind ?? (actor.type === "character" ? "pc" : "npc"),
+      level: spec.level ?? actor.level ?? 0,
+      cls: actor.class ? { slug: actor.class.slug ?? slugOf(actor.class), name: actor.class.name } : null,
+      background: actor.background ? { slug: actor.background.slug ?? slugOf(actor.background), name: actor.background.name } : null,
+      features,
+      abilities,
+      traits: [...(actor.system?.traits?.value ?? [])].map(String),
+      font,
+      deity,
+      strikes,
+      weapons,
+      casting: { slots, innate },
+      social,
+      languages: (spec.social?.languages ?? actor.system?.details?.languages?.value ?? []).length,
+      immune: (spec.iwr?.immune ?? []).map(type => ({ type, name: word(CONFIG.PF2E?.immunityTypes?.[type]) ?? type })),
+      mending,
+      formation,
+      bomb,
+      shield: !!spec.shield,
+      purse: main ? { money: spec.valuables?.money ?? 0, coin: main.value } : null
+    };
   }
 
   /** Its biography (a character's backstory, beliefs, edicts and anathema ...; a creature's notes and blurb) as text. */

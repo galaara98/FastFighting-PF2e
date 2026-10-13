@@ -101,11 +101,24 @@ When FastFighting sets a character up by itself (the first time it sees it: see 
   - a Rogue a Thief; a Ranger or Gunslinger a Wallflower; a Swashbuckler an Instigator; a Barbarian a Brawler, impatient; a Monk a Speed-Runner;
   - an Alchemist, Inventor, Investigator or Thaumaturge a Puzzle-Maniac (an Investigator, Thaumaturge or Wizard a Lore-Collector too);
   - the spellcasters, a Kineticist and a Magus Un-Mundane.
-  - Its fighting style follows: a Champion or Guardian protects its friends; the martial classes hold the front line or skirmish; the casters lead with spells. A Cleric heals readily.
 - **Ancestry, by slug,** only where its own abilities lean somewhere (an orc's ferocity, a kobold's traps, a goblin's haste, a dwarf's toughness).
 - **A creature's traits:** undead, mindless, constructs, oozes and plants Relentless (the mindless and constructs never run); a fiend or the unholy Cruel; the holy and celestials Moralists; fey Wildcards; animals and giants Brawlers.
 - **Gear:** a shield or heavy armor makes a Tank likelier.
 - **Keywords:** a character's biography (backstory, beliefs, edicts, anathema and the rest), a creature's notes and blurb.
+
+### "Let this character decide"
+
+PF2e's data answers the tactics questions (and what a character offers and expects in a standoff) wherever it says something, each answer with its reason shown to the GM in the system's own words: a class's, feature's or spell list's name, a trait's label. Features are recognised by slug, and reactions by what their trigger says they do. Where the data says nothing, the core's reading of the hidden scores stands.
+
+- **Fighting style:** a class and the choice made in it (a cloistered cleric or warpriest, a ruffian, an untamed druid, a magus's study, a gunslinger's way, a bomber or mutagenist, an inventor's innovation); a martial character with only ranged weapons shoots, a ranger with none closes in. A creature: a troop or swarm closes in; one with a reaction or action that guards an ally protects; one with spell slots leads with spells; Pack Attack or Sneak Attack skirmishes; Formation or Reactive Strike holds the line.
+- **Whom it attacks:** a champion (whose cause's reaction guards allies), a guardian, or anyone with such a reaction protects its friends; a commander picks the most dangerous foe; the mindless, swarms and troops take the nearest.
+- **Favorite weapon:** a champion's or warpriest's deity's favored weapon.
+- **Magic and specialties:** spellcasting classes strongly (a warpriest a little), a kineticist always, an investigator's stratagems, a thaumaturge's Exploit Vulnerability; a creature with spell slots strongly, innate spells a little. **Spell slots:** a summoned creature spends everything.
+- **Consumables:** an alchemist, the alchemist, talisman dabbler and scroll trickster dedications, an Alchemical Sciences investigator and a creature with bombs, freely; a merchant background or Bargain Hunter, sparingly.
+- **Talking:** the mindless and creatures without a language never; a devil first; a character by its best rank in Diplomacy, Deception or Intimidation; a creature by its best of them against a high modifier for its level.
+- **Healing and the dying:** a cleric with a healing font, a chirurgeon, a life oracle or a medic keeps everyone up and rescues the dying; so does one with a reaction to an ally falling; the mindless and constructs keep fighting.
+- **Potions, after being revived, retreat, shield, others nearby:** void healing (the undead) or an immunity to healing: never drink one; regeneration or fast healing waits until it's dire and gets back up; the mindless, constructs, the summoned and those immune to fear never run; Reactive Shield raises the shield as the blow comes, Shield Block keeps it up; a pack hunts down enemies nearby, the mindless, the summoned and animals stay.
+- **Offer and expect:** the mindless, the summoned and those without a language nothing; a devil lets them pass for a price; a redemption champion or the holy offer not to harm; a merchant buys its way out (a tenth of its coin); a bandit wants paying.
 
 ## Installation
 

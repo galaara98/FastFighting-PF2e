@@ -1,9 +1,12 @@
 /**
  * What PF2e says about a character, for the one time FastFighting sets it up by itself (the core's
- * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions, from its class and
- * ancestry (by slug), a creature's traits (by slug: undead, mindless, fiend, holy ...), and its gear; and its biography
- * as plain text for the keywords. Pure.
+ * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions ("Let this character
+ * decide"), from its class and the choices it made in it (by slug), its feats, features and abilities (by slug, and by
+ * what they do), a creature's traits (by slug: undead, mindless, devil, holy ...), its spellcasting, skills, languages
+ * and gear; and its biography as plain text for the keywords. Pure.
  */
+import { listJoin } from "./core.js";
+import { t, traitName } from "./words.js";
 
 /** What each class leans toward. */
 const CLASSES = Object.freeze({
@@ -43,25 +46,300 @@ export function pf2eHints({ cls = null, ancestry = null, traits = [], shield = f
   return out;
 }
 
+/* -------------------------------------------- */
+/*  The tactics questions                       */
+/* -------------------------------------------- */
+
 /** A class's fighting style. */
 const CLASS_STYLE = Object.freeze({
   champion: "protector", guardian: "protector", barbarian: "frontline", fighter: "frontline", exemplar: "frontline", magus: "frontline",
   monk: "skirmisher", rogue: "skirmisher", swashbuckler: "skirmisher", ranger: "ranged", gunslinger: "ranged",
   wizard: "caster", sorcerer: "caster", witch: "caster", psychic: "caster", oracle: "caster", druid: "caster", cleric: "caster",
-  bard: "caster", summoner: "caster", animist: "caster", kineticist: "caster"
+  bard: "caster", summoner: "caster", animist: "caster", kineticist: "caster", necromancer: "caster"
 });
 
-/** PF2e's own answers to the tactics questions, where it knows better than the numbers: {key: answer}. */
-export function pf2eTactics({ cls = null, traits = [] } = {}) {
+/**
+ * What a choice made in a class makes of its fighting style, by the choice's slug (a granted class feature: a
+ * cleric's doctrine, a druid's order, a rogue's racket, a magus's hybrid study, a gunslinger's way, an alchemist's
+ * research field, an inventor's innovation).
+ */
+const SUBCLASS_STYLE = Object.freeze({
+  cleric: { warpriest: "frontline", "battle-creed": "frontline", "cloistered-cleric": "caster" },
+  druid: { "untamed-order": "frontline" },
+  rogue: { ruffian: "frontline" },
+  magus: { "laughing-shadow": "skirmisher", "starlit-span": "ranged" },
+  gunslinger: { "way-of-the-vanguard": "frontline", "way-of-the-drifter": "skirmisher", "way-of-the-triggerbrand": "skirmisher",
+    "way-of-the-pistolero": "ranged", "way-of-the-sniper": "ranged", "way-of-the-spellshot": "ranged" },
+  alchemist: { bomber: "ranged", mutagenist: "frontline" },
+  inventor: { "weapon-innovation": "frontline", "armor-innovation": "frontline", "light-mortar-innovation": "ranged" }
+});
+
+/** Classes built on their spells (or a kineticist's impulses): they reach for them first. */
+const CASTERS = new Set(["wizard", "sorcerer", "witch", "psychic", "oracle", "druid", "cleric", "bard", "animist", "summoner", "magus", "necromancer"]);
+
+/** Reactions that guard an ally (a champion's reaction for a holy cause, a guardian's Intercept Attack ...), by slug. */
+const GUARD_SLUGS = new Set(["intercept-attack", "retributive-strike", "glimpse-of-redemption", "liberating-step", "flash-of-grandeur",
+  "guardians-deflection-fighter", "shield-from-arrows", "shield-of-reckoning", "defensive-swap", "standard-bearers-sacrifice"]);
+/** A champion's reaction that guards only itself (an unholy cause's, obedience's), by slug. */
+const SELF_GUARD_SLUGS = new Set(["iron-command", "selfish-shield", "destructive-vengeance"]);
+/** Reactions for an ally who falls, by slug. */
+const RESCUE_SLUGS = new Set(["rapid-response"]);
+
+/** Archetypes and methods built on consumables (an alchemist's, a talisman dabbler's, a scroll trickster's), by slug. */
+const CONSUMABLE_FEATS = ["alchemist-dedication", "talisman-dabbler-dedication", "scroll-trickster-dedication", "alchemical-sciences-methodology"];
+
+/** Skills that end an argument with words: persuading, bluffing, threatening. */
+const SOCIAL = ["diplomacy", "deception", "intimidation"];
+
+/**
+ * A creature's high skill modifier at its level (the Monster Core's and NPC Core's social skills: about three in four
+ * creatures with one are below it).
+ */
+export const highSkill = level => Math.floor((Number(level) || 0) * 1.45) + 7;
+
+/* Reading what a reaction or action does: its trigger, as PF2e writes it (in English, which a translation keeps). */
+
+const words = html => String(html ?? "").replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
+/** A reaction's trigger, as plain words ("" when it has none). */
+export function triggerOf(html) {
+  const m = /<strong>\s*Trigger\s*<\/strong>([\s\S]*?)(?:<\/p>|<hr|<strong>)/i.exec(String(html ?? ""));
+  return m ? words(m[1]) : "";
+}
+
+const FOE_STRIKES_ALLY = /\b(?:enem(?:y|ies)|creatures?|opponents?|foes?)\b[^.]*\b(?:damages?|attacks?|hits?|targets?|grabs?)\b[^.]*\ball(?:y|ies)\b/i;
+const ALLY_STRUCK = /\ball(?:y|ies)\b[^.]*\b(?:would take|takes?|is hit|are hit|is the target|are the target|is targeted|are targeted)\b/i;
+const ALLY_FALLS = /\ball(?:y|ies)\b[^.]*\b(?:reduced to 0 Hit Points|falls? unconscious|is dying|gains? the dying condition)\b/i;
+const FOE_STRIKES_SELF = /\benem(?:y|ies)\b[^.]*\bdamages you\b/i;
+const SHIELDS_ALLY = /\b(?:grants?|gives?)\b[^.]*\ball(?:y|ies)\b[^.]*\bbonus to (?:AC|Armor Class)\b/i;
+
+/**
+ * Does it guard an ally? A reaction set off by a foe striking an ally (or an ally about to be hurt), or an action that
+ * shields one (a bonus to its AC).
+ * @param {{type: string, text: string}} ability   its action type ("reaction", "action") and description (HTML)
+ */
+export function guardsAllies({ type, text } = {}) {
+  if ( type === "reaction" ) {
+    const trigger = triggerOf(text);
+    return FOE_STRIKES_ALLY.test(trigger) || ALLY_STRUCK.test(trigger);
+  }
+  return type === "action" && SHIELDS_ALLY.test(words(text));
+}
+
+/** Is it a reaction to an ally falling (reduced to 0 Hit Points, dying)? */
+export const rescuesAllies = ({ type, text } = {}) => type === "reaction" && ALLY_FALLS.test(triggerOf(text));
+
+/** Is it a reaction that guards only itself (set off by a foe damaging it)? */
+export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_STRIKES_SELF.test(triggerOf(text));
+
+/**
+ * PF2e's own answers to the tactics questions, and what a character offers and expects to end an argument: what its
+ * class and the choices it made in it, its feats and features, its kind and its stat block say, each with its reason
+ * (the system's own name for it). Questions its data says nothing about are left out (the core's reading stands).
+ *
+ * @param {object} f
+ * @param {string} [f.kind]       "pc" | "npc" | "companion" | "minion" (spec.kind)
+ * @param {number} [f.level]
+ * @param {{slug: string, name: string}} [f.cls]          a character's class
+ * @param {{slug: string, name: string}} [f.background]   a character's background
+ * @param {Record<string, string>} [f.features]   its feats, features and actions: slug -> its name
+ * @param {{slug: string, name: string, type: string, text: string}[]} [f.abilities]   its actions and reactions, with
+ *   their descriptions (HTML)
+ * @param {string[]} [f.traits]    its traits (slugs: undead, mindless, holy, summoned ...)
+ * @param {{value: string, name: string}} [f.font]   a cleric's divine font ("heal" or "harm")
+ * @param {{name: string, weapons: string[]}} [f.deity]   its deity and favored weapons (base weapon slugs)
+ * @param {{id: string, base: string}[]} [f.strikes]   its weapon Strikes: the action's id, the base weapon
+ * @param {{melee: number, ranged: number}} [f.weapons]   how many melee and ranged weapons it fights with
+ * @param {{slots: string|null, innate: string|null}} [f.casting]   its spellcasting with spell slots (prepared or
+ *   spontaneous), and innate: each one's name, or null
+ * @param {Record<string, {rank: number, mod: number, listed: boolean, name: string, rankName: string}>} [f.social]
+ *   Diplomacy, Deception and Intimidation
+ * @param {number} [f.languages]   how many languages it speaks
+ * @param {{type: string, name: string}[]} [f.immune]   its immunities
+ * @param {string|null} [f.mending]    the name of its regeneration or fast healing
+ * @param {string|null} [f.formation]  the name of an ability that has it fight in formation
+ * @param {string|null} [f.bomb]       the name of a bomb it throws
+ * @param {boolean} [f.shield]         a shield, ready
+ * @param {{money: number, coin: number}} [f.purse]   its money (in the smallest coin), and its main coin's value
+ * @returns {Record<string, {value: *, why: string}>}
+ */
+export function pf2eTactics(f = {}) {
   const out = {};
-  if ( CLASS_STYLE[cls] ) out.style = CLASS_STYLE[cls];
-  if ( ["champion", "guardian"].includes(cls) ) Object.assign(out, { target: "protect", allyDying: "rescue" });
-  if ( cls === "cleric" ) out.healAggro = "aggressive";
-  if ( cls === "commander" ) out.target = "dangerous";
-  const has = t => traits.includes(t);
-  // (The mindless and constructs never run; animals stay where the fight is.)
-  if ( has("mindless") || has("construct") ) out.retreat = "never";
-  if ( has("animal") ) out.beyond = "stay";
+  // (The first answer to a question stands: the rules below go from the surest reading to the least.)
+  const say = (key, value, why) => {
+    if ( key in out || value === undefined || value === null || value === "" ) return;
+    out[key] = { value, why: why ?? "" };
+  };
+  const features = f.features ?? {};
+  const has = slug => Object.hasOwn(features, slug);
+  const named = slug => features[slug] || slug;
+  const traits = new Set(f.traits ?? []);
+  const trait = slug => (traits.has(slug) ? traitName(slug) : null);
+  const pc = f.kind === "pc";
+  const cls = f.cls?.slug ?? null;
+  const clsName = f.cls?.name || cls;
+  const abilities = f.abilities ?? [];
+  const find = (slugs, reads) => abilities.find(a => slugs.has(a.slug) || reads(a)) ?? null;
+  const guard = find(GUARD_SLUGS, guardsAllies);
+  const rescue = find(RESCUE_SLUGS, rescuesAllies);
+  const selfGuard = find(SELF_GUARD_SLUGS, guardsSelf);
+  // (The choice it made in its class that changes its style, if any.)
+  const choice = Object.keys(SUBCLASS_STYLE[cls] ?? {}).find(has) ?? null;
+  const choiceStyle = choice ? SUBCLASS_STYLE[cls][choice] : null;
+  const unthinking = trait("mindless") ?? trait("construct");
+  const summoned = trait("summoned");
+  // (A creature known to speak no language: a player character always has one.)
+  const noWords = !pc && Number.isFinite(f.languages) && f.languages <= 0 ? t("Why.NoLanguage") : null;
+  // A champion guards its friends, unless its cause's reaction guards only itself (an unholy cause's, obedience's).
+  const selfish = cls === "champion" && !!selfGuard && !guard;
+  const guardian = ["champion", "guardian"].includes(cls) && !selfish;
+  const guardWhy = guard?.name ?? clsName;
+  const healer = (cls === "cleric" && f.font?.value === "heal" && f.font.name)
+    || (cls === "alchemist" && has("chirurgeon") && named("chirurgeon"))
+    || (cls === "oracle" && has("life") && named("life"))
+    || (has("medic-dedication") && named("medic-dedication")) || null;
+  const immune = type => (f.immune ?? []).find(i => i.type === type) ?? null;
+  const immuneWhy = i => t("Why.Immune", { what: i.name || i.type });
+
+  // Its favorite weapon: its deity's favored weapon, for one trained to fight with it (a champion's Deific Weapon, a
+  // warpriest's doctrine).
+  const fighting = cls === "champion" || (cls === "cleric" && choiceStyle === "frontline");
+  if ( fighting && f.deity ) {
+    const favored = (f.strikes ?? []).find(s => (f.deity.weapons ?? []).includes(s.base));
+    if ( favored ) say("preferredAction", favored.id, f.deity.name);
+  }
+
+  // Its fighting style.
+  if ( pc && cls ) {
+    let style = CLASS_STYLE[cls] ?? null;
+    let why = clsName;
+    if ( choiceStyle ) { style = choiceStyle; why = named(choice); }
+    if ( guardian && style === "protector" ) why = guardWhy;
+    if ( selfish ) { style = "frontline"; why = selfGuard.name; }
+    // (A martial character's weapons: one with nothing but ranged weapons shoots; a ranger with none closes in.)
+    const w = f.weapons;
+    if ( w && !choiceStyle && style === "ranged" && !w.ranged && w.melee ) style = "skirmisher";
+    else if ( w && ["frontline", "skirmisher"].includes(style) && w.ranged && !w.melee ) style = "ranged";
+    say("style", style, why);
+  } else if ( !pc ) {
+    const crowd = trait("troop") ?? trait("swarm");
+    if ( crowd ) say("style", "frontline", crowd);
+    if ( guard ) say("style", "protector", guard.name);
+    if ( f.casting?.slots ) say("style", "caster", f.casting.slots);
+    for ( const slug of ["pack-attack", "sneak-attack"] ) if ( has(slug) ) say("style", "skirmisher", named(slug));
+    if ( f.weapons?.melee ) {
+      if ( f.formation ) say("style", "frontline", f.formation);
+      if ( has("reactive-strike") ) say("style", "frontline", named("reactive-strike"));
+    }
+  }
+
+  // Whom it goes for.
+  const crowd = trait("mindless") ?? trait("swarm") ?? trait("troop");
+  if ( crowd ) say("target", "nearest", crowd);
+  if ( guardian ) say("target", "protect", guardWhy);
+  if ( guard ) say("target", "protect", guard.name);
+  if ( cls === "commander" ) say("target", "dangerous", clsName);
+
+  // Spell slots and other limited abilities: a summoned creature has nothing to save them for.
+  if ( summoned ) say("resourceUse", "nova", summoned);
+
+  // Magic and its specialties.
+  if ( pc && cls ) {
+    if ( cls === "kineticist" ) say("specialty", "always", clsName);
+    if ( cls === "cleric" && choiceStyle === "frontline" ) say("specialty", "some", named(choice));
+    if ( CASTERS.has(cls) ) say("specialty", "strong", clsName);
+    if ( cls === "investigator" ) say("specialty", "strong", has("devise-a-stratagem") ? named("devise-a-stratagem") : clsName);
+    if ( cls === "thaumaturge" ) say("specialty", "some", has("exploit-vulnerability") ? named("exploit-vulnerability") : clsName);
+  } else if ( !pc ) {
+    if ( f.casting?.slots ) say("specialty", "strong", f.casting.slots);
+    if ( f.casting?.innate ) say("specialty", "some", f.casting.innate);
+  }
+
+  // Consumables: an alchemist's and those built on them, freely; a merchant's eye for what things cost, sparingly.
+  if ( cls === "alchemist" ) say("consumables", "freely", clsName);
+  for ( const slug of CONSUMABLE_FEATS ) if ( has(slug) ) say("consumables", "freely", named(slug));
+  if ( !pc && f.bomb ) say("consumables", "freely", f.bomb);
+  if ( f.background?.slug === "merchant" ) say("consumables", "sparing", f.background.name || f.background.slug);
+  if ( has("bargain-hunter") ) say("consumables", "sparing", named("bargain-hunter"));
+
+  // Talking: the mindless and those without a language never; a devil deals; otherwise its social skills.
+  if ( trait("mindless") ) say("talk", "never", trait("mindless"));
+  if ( noWords ) say("talk", "never", noWords);
+  if ( trait("devil") ) say("talk", "first", trait("devil"));
+  const social = SOCIAL.map(slug => ({ slug, ...(f.social?.[slug] ?? {}) }));
+  if ( pc && f.social ) {
+    const best = social.reduce((a, b) => ((b.rank ?? 0) > (a.rank ?? 0) ? b : a));
+    const rank = best.rank ?? 0;
+    const why = t("Reason.Proficient", { name: best.name || best.slug, rank: best.rankName ?? rank });
+    if ( rank >= 2 ) say("talk", "first", why);
+    else if ( rank === 1 ) say("talk", "opportune", why);
+    else say("talk", "never", t("Why.Untrained", { rank: best.rankName ?? rank, skills: listJoin(social.map(s => s.name || s.slug)) }));
+  } else if ( f.social ) {
+    const listed = social.filter(s => s.listed && Number.isFinite(s.mod));
+    const best = listed.reduce((a, b) => (!a || b.mod > a.mod ? b : a), null);
+    const sign = n => `${n >= 0 ? "+" : ""}${n}`;
+    if ( best ) say("talk", best.mod >= highSkill(f.level) ? "first" : "opportune", t("Why.Skill", { skill: best.name || best.slug, mod: sign(best.mod) }));
+  }
+
+  // Healing others, and an ally dying.
+  if ( healer ) say("healAggro", "aggressive", healer);
+  if ( unthinking ) say("allyDying", "fight", unthinking);
+  if ( rescue ) say("allyDying", "rescue", rescue.name);
+  if ( guardian ) say("allyDying", "rescue", guardWhy);
+  if ( healer ) say("allyDying", "rescue", healer);
+
+  // Its own potions: vitality hurts the undead (void healing), and some can't be healed at all; one that mends by
+  // itself waits until it's dire.
+  const voidHealing = has("void-healing") ? named("void-healing") : trait("undead");
+  if ( voidHealing ) say("potionThreshold", "never", voidHealing);
+  const unhealable = immune("healing") ?? immune("vitality");
+  if ( unhealable ) say("potionThreshold", "never", immuneWhy(unhealable));
+  if ( f.mending ) say("potionThreshold", "25", f.mending);
+
+  // Back up after going down.
+  if ( f.mending ) say("selfRevived", "rejoin", f.mending);
+  if ( unthinking ) say("selfRevived", "rejoin", unthinking);
+
+  // Running: never for the mindless, constructs, the summoned, or one immune to fear.
+  if ( unthinking ) say("retreat", "never", unthinking);
+  if ( summoned ) say("retreat", "never", summoned);
+  const fearless = immune("fear-effects");
+  if ( fearless ) say("retreat", "never", immuneWhy(fearless));
+
+  // Its shield: Reactive Shield raises it as the blow comes; Shield Block wants it up.
+  if ( f.shield ) {
+    if ( has("reactive-shield") ) say("shield", "spare", named("reactive-shield"));
+    if ( has("shield-block") ) say("shield", "always", named("shield-block"));
+  }
+
+  // Others nearby: a pack hunts; the mindless, constructs, the summoned and animals stay with the fight.
+  if ( has("pack-attack") ) say("beyond", "hunt", named("pack-attack"));
+  for ( const why of [unthinking, summoned, trait("minion"), trait("animal")] ) if ( why ) say("beyond", "stay", why);
+
+  // What it offers and expects to end an argument.
+  const quiet = trait("mindless") ?? noWords ?? summoned;
+  if ( quiet ) {
+    say("offer", { kind: "" }, quiet);
+    say("expect", { kind: "" }, quiet);
+  }
+  const coin = Number(f.purse?.coin) || 0;
+  // (So much of its main coin by its level, as the core asks it: tens of gold.)
+  const price = () => (coin ? { kind: "money", amount: coin >= 100 ? 10 * Math.max(1, Number(f.level) || 1) : Math.max(1, Math.ceil((Number(f.level) || 1) / 2)), coin } : null);
+  // (A tenth of what it carries.)
+  const share = () => {
+    const amount = coin ? Math.floor((Number(f.purse?.money) || 0) / coin / 10) : 0;
+    return amount >= 1 ? { kind: "money", amount, coin } : null;
+  };
+  const devil = trait("devil");
+  if ( devil ) {
+    say("offer", { kind: "passage" }, devil);
+    say("expect", price(), devil);
+  }
+  const mercy = (cls === "champion" && has("redemption") ? named("redemption") : null) ?? trait("holy");
+  if ( mercy ) say("offer", { kind: "noHarm" }, mercy);
+  const background = f.background?.name || f.background?.slug;
+  if ( f.background?.slug === "merchant" ) say("offer", share(), background);
+  if ( f.background?.slug === "bandit" ) say("expect", price(), background);
   return out;
 }
 

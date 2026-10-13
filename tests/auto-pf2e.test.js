@@ -1,6 +1,15 @@
-/** Setting a character up by itself, as PF2e reads it: class and ancestry by slug, a creature's traits, gear. */
+/**
+ * Setting a character up by itself, as PF2e reads it: the playstyles that fit (class and ancestry by slug, a
+ * creature's traits, gear), and its own answers to the tactics questions and to what it offers and expects, each
+ * with its reason ("Let this character decide").
+ */
 import { describe, expect, test } from "vitest";
-import { pf2eHints, pf2eTactics, textOf } from "../scripts/auto.js";
+import { pf2eHints, pf2eTactics, textOf, triggerOf, guardsAllies, rescuesAllies, guardsSelf, highSkill } from "../scripts/auto.js";
+import { traitName } from "../scripts/words.js";
+import { listJoin } from "../scripts/core.js";
+import { TACTIC_CHOICES } from "../../fast-fighting/scripts/engine/tactics.js";
+import { withHints } from "../../fast-fighting/scripts/foundry/auto-config.js";
+import { text } from "./foundry-i18n.js";
 
 describe("the playstyles PF2e says fit", () => {
   test("a class; a shield and heavy armor make a Tank likelier", () => {
@@ -15,16 +24,279 @@ describe("the playstyles PF2e says fit", () => {
     expect(pf2eHints({ traits: ["fiend", "unholy"] }).cruel).toBeCloseTo(0.7);
     expect(pf2eHints({ ancestry: "goblin", traits: ["goblin", "humanoid"] })).toEqual({ impatient: 0.15 });
   });
-});
-
-describe("PF2e's answers to the tactics questions", () => {
-  test("a class's style; a champion guards; the mindless never run", () => {
-    expect(pf2eTactics({ cls: "guardian" })).toMatchObject({ style: "protector", target: "protect" });
-    expect(pf2eTactics({ cls: "wizard" }).style).toBe("caster");
-    expect(pf2eTactics({ traits: ["mindless"] }).retreat).toBe("never");
-  });
 
   test("a biography's every field as text", () => {
     expect(textOf({ backstory: "<p>A greedy <b>sellsword</b>.</p>", edicts: ["Never back down"], anathema: [] })).toBe("A greedy sellsword .. Never back down");
+  });
+});
+
+/* Characters and creatures, as the adapter reads them (made-up wording for their abilities' text). */
+
+const RANKS = ["Untrained", "Trained", "Expert", "Master", "Legendary"];
+const pcSocial = (diplomacy = 0, deception = 0, intimidation = 0) => Object.fromEntries(Object.entries({ diplomacy, deception, intimidation })
+  .map(([slug, rank]) => [slug, { rank, mod: rank * 3, listed: rank >= 1, name: slug.charAt(0).toUpperCase() + slug.slice(1), rankName: RANKS[rank] }]));
+const npcSocial = list => Object.fromEntries(Object.entries(list).map(([slug, mod]) => [slug, { rank: 0, mod, listed: true, name: slug.charAt(0).toUpperCase() + slug.slice(1) }]));
+const reaction = (slug, name, trigger) => ({ slug, name, type: "reaction", text: `<p><strong>Trigger</strong> ${trigger}</p><hr /><p><strong>Effect</strong> It acts.</p>` });
+
+const kyra = (extra = {}) => ({
+  kind: "pc", level: 1, cls: { slug: "cleric", name: "Cleric" }, background: { slug: "acolyte", name: "Acolyte" },
+  features: { "cloistered-cleric": "Cloistered Cleric", "divine-font": "Divine Font (Healing)", "domain-initiate": "Domain Initiate" },
+  traits: ["human", "humanoid", "holy"], font: { value: "heal", name: "Divine Font (Healing)" }, deity: { name: "Sarenrae", weapons: ["scimitar"] },
+  strikes: [{ id: "kyra.strike.scimitar.0", base: "scimitar" }, { id: "kyra.strike.sling.1", base: "sling" }], weapons: { melee: 1, ranged: 1 },
+  casting: { slots: "Divine Prepared Spells", innate: null }, social: pcSocial(1, 0, 0), languages: 2, purse: { money: 150, coin: 100 }, ...extra
+});
+const valeros = (extra = {}) => ({
+  kind: "pc", level: 1, cls: { slug: "fighter", name: "Fighter" }, background: { slug: "farmhand", name: "Farmhand" },
+  features: { "shield-block": "Shield Block", "reactive-shield": "Reactive Shield", "reactive-strike": "Reactive Strike", "double-slice": "Double Slice" },
+  abilities: [reaction("shield-block", "Shield Block", "While your shield is raised, you would take damage from a physical attack."),
+    reaction("reactive-strike", "Reactive Strike", "A creature within your reach uses a move action.")],
+  traits: ["human", "humanoid"], shield: true, weapons: { melee: 1, ranged: 1 }, social: pcSocial(1, 0, 1), languages: 3, ...extra
+});
+const ezren = (extra = {}) => ({
+  kind: "pc", level: 1, cls: { slug: "wizard", name: "Wizard" }, background: { slug: "merchant", name: "Merchant" },
+  features: { "bargain-hunter": "Bargain Hunter", "arcane-school": "Arcane School" }, traits: ["human", "humanoid"], weapons: { melee: 1, ranged: 0 },
+  casting: { slots: "Arcane Prepared Spells" }, social: pcSocial(1, 0, 0), languages: 5, purse: { money: 2500, coin: 100 }, ...extra
+});
+const merisiel = (extra = {}) => ({
+  kind: "pc", level: 1, cls: { slug: "rogue", name: "Rogue" }, background: { slug: "criminal", name: "Criminal" },
+  features: { thief: "Thief", "sneak-attack": "Sneak Attack", "rogues-racket": "Rogue's Racket" }, traits: ["elf", "humanoid"],
+  weapons: { melee: 2, ranged: 1 }, social: pcSocial(0, 1, 1), languages: 2, ...extra
+});
+const champion = (cause, react, extra = {}) => ({
+  kind: "pc", level: 3, cls: { slug: "champion", name: "Champion" }, features: { [cause.slug]: cause.name, [react.slug]: react.name, "shield-block": "Shield Block" },
+  abilities: [react], deity: { name: "Iomedae", weapons: ["longsword"] }, strikes: [{ id: "c.strike.longsword.0", base: "longsword" }],
+  weapons: { melee: 1, ranged: 0 }, shield: true, social: pcSocial(1, 0, 0), languages: 1, ...extra
+});
+
+const zombie = { kind: "npc", level: 2, traits: ["undead", "mindless", "zombie"], features: { "void-healing": "Void Healing" }, languages: 0, weapons: { melee: 1 }, social: {} };
+const wolf = { kind: "npc", level: 1, traits: ["animal"], features: { "pack-attack": "Pack Attack" }, languages: 0, weapons: { melee: 1 }, social: {} };
+const bodyguard = { kind: "npc", level: 1, traits: ["human", "humanoid"], languages: 1, weapons: { melee: 2, ranged: 1 }, social: npcSocial({ intimidation: 7 }),
+  abilities: [{ slug: "bodyguards-defense", name: "Bodyguard's Defense", type: "action", text: "<p>Grants an adjacent ally a +2 circumstance bonus to AC until its next turn.</p>" }] };
+const herbalist = { kind: "npc", level: 1, traits: ["human", "humanoid"], languages: 1, weapons: { melee: 1 }, social: npcSocial({ diplomacy: 6 }),
+  abilities: [reaction("saving-touch", "Saving Touch", "An ally within reach is reduced to 0 Hit Points.")] };
+const chanter = { kind: "npc", level: 1, traits: ["goblin", "humanoid"], languages: 2, weapons: { melee: 1, ranged: 1 }, casting: { slots: "Occult Spontaneous Spells", innate: null }, social: npcSocial({ deception: 7 }) };
+const serpentfolk = { kind: "npc", level: 2, traits: ["serpentfolk", "humanoid"], languages: 3, weapons: { melee: 2, ranged: 1 }, casting: { slots: null, innate: "Occult Innate Spells" }, social: npcSocial({ deception: 11 }) };
+const hobgoblin = { kind: "npc", level: 1, traits: ["hobgoblin", "humanoid"], languages: 2, formation: "Formation", shield: true, weapons: { melee: 1, ranged: 1 },
+  features: { "shield-block": "Shield Block", "reactive-strike": "Reactive Strike" }, social: {} };
+const devil = { kind: "npc", level: 5, traits: ["devil", "fiend", "unholy"], languages: 3, weapons: { melee: 1 }, social: npcSocial({ deception: 14 }), purse: { money: 0, coin: 100 } };
+const troll = { kind: "npc", level: 5, traits: ["giant", "troll"], languages: 1, weapons: { melee: 2 }, mending: "Regeneration 20", social: {} };
+const golem = { kind: "npc", level: 4, traits: ["construct", "mindless"], languages: 0, weapons: { melee: 1 }, immune: [{ type: "healing", name: "Healing" }], social: {} };
+const goblin = { kind: "npc", level: -1, traits: ["goblin", "humanoid"], languages: 2, weapons: { melee: 1, ranged: 1 }, social: {} };
+
+const values = hints => Object.fromEntries(Object.entries(hints).map(([k, v]) => [k, v.value]));
+
+describe("reading what an ability does from its trigger", () => {
+  test("a reaction's trigger, as words (links read as their text)", () => {
+    expect(triggerOf("<p><strong>Trigger</strong> An enemy @UUID[Compendium.pf2e.conditionitems.Item.x]{grabs} your ally</p><hr /><p>...</p>")).toBe("An enemy grabs your ally");
+    expect(triggerOf("<p>No trigger here.</p>")).toBe("");
+  });
+
+  test("guarding an ally: a foe striking one, an ally about to be hurt, an action that shields one", () => {
+    expect(guardsAllies(reaction("x", "X", "An enemy damages your ally, and both are in your aura"))).toBe(true);
+    expect(guardsAllies(reaction("x", "X", "An ally within 10 feet of you takes physical damage."))).toBe(true);
+    expect(guardsAllies(reaction("x", "X", "An adjacent ally is the target of a ranged Strike."))).toBe(true);
+    expect(guardsAllies({ type: "action", text: "<p>It grants an adjacent ally a +1 circumstance bonus to AC.</p>" })).toBe(true);
+    // (Not: moving when an ally does, helping an ally's roll, being hurt itself.)
+    expect(guardsAllies(reaction("x", "X", "A goblin ally ends a move action adjacent to the goblin."))).toBe(false);
+    expect(guardsAllies(reaction("x", "X", "An ally is about to attempt an attack roll."))).toBe(false);
+    expect(guardsAllies(reaction("x", "X", "An enemy in your aura damages you"))).toBe(false);
+    expect(guardsAllies({ type: "passive", text: "<p>It grants an adjacent ally a +1 bonus to AC.</p>" })).toBe(false);
+  });
+
+  test("a reaction to a fallen ally; a reaction that guards only itself", () => {
+    expect(rescuesAllies(reaction("x", "X", "An ally is reduced to 0 Hit Points."))).toBe(true);
+    expect(rescuesAllies(reaction("x", "X", "An enemy damages your ally"))).toBe(false);
+    expect(guardsSelf(reaction("x", "X", "An enemy in your champion's aura damages you"))).toBe(true);
+    expect(guardsSelf(reaction("x", "X", "An enemy damages your ally"))).toBe(false);
+  });
+});
+
+describe("PF2e's answers for player characters", () => {
+  test("a cloistered cleric with a healing font: leads with spells, keeps everyone up, offers mercy (holy)", () => {
+    const got = pf2eTactics(kyra());
+    expect(got.style).toEqual({ value: "caster", why: "Cloistered Cleric" });
+    expect(got.specialty).toEqual({ value: "strong", why: "Cleric" });
+    expect(got.healAggro).toEqual({ value: "aggressive", why: "Divine Font (Healing)" });
+    expect(got.allyDying).toEqual({ value: "rescue", why: "Divine Font (Healing)" });
+    expect(got.talk).toEqual({ value: "opportune", why: text("FFPF2E.Reason.Proficient", { name: "Diplomacy", rank: "Trained" }) });
+    expect(got.offer).toEqual({ value: { kind: "noHarm" }, why: traitName("holy") });
+    // (A cloistered cleric doesn't fight with its deity's weapon; nothing else on its sheet speaks to these.)
+    for ( const k of ["preferredAction", "target", "shield", "retreat", "beyond", "expect", "consumables", "resourceUse"] ) expect(got[k], k).toBeUndefined();
+  });
+
+  test("a warpriest fights with its deity's favored weapon; a harmful font isn't a healer's", () => {
+    const got = pf2eTactics(kyra({ features: { warpriest: "Warpriest" } }));
+    expect(got.preferredAction).toEqual({ value: "kyra.strike.scimitar.0", why: "Sarenrae" });
+    expect(got.style).toEqual({ value: "frontline", why: "Warpriest" });
+    expect(got.specialty).toEqual({ value: "some", why: "Warpriest" });
+    const harm = pf2eTactics(kyra({ font: { value: "harm", name: "Divine Font (Harmful)" } }));
+    expect(harm.healAggro).toBeUndefined();
+    expect(harm.allyDying).toBeUndefined();
+  });
+
+  test("a fighter holds the line; Reactive Shield raises the shield only as the blow comes; an archer shoots", () => {
+    const got = pf2eTactics(valeros());
+    expect(got.style).toEqual({ value: "frontline", why: "Fighter" });
+    expect(got.shield).toEqual({ value: "spare", why: "Reactive Shield" });
+    expect(got.talk.value).toBe("opportune");
+    expect(pf2eTactics(valeros({ features: { "shield-block": "Shield Block" } })).shield).toEqual({ value: "always", why: "Shield Block" });
+    expect(pf2eTactics(valeros({ weapons: { melee: 0, ranged: 2 } })).style.value).toBe("ranged");
+    // (No shield: nothing to say about raising one.)
+    expect(pf2eTactics(valeros({ shield: false })).shield).toBeUndefined();
+  });
+
+  test("a wizard with a merchant's background: spells first, consumables sparingly, buys its way out", () => {
+    const got = pf2eTactics(ezren());
+    expect(values(got)).toMatchObject({ style: "caster", specialty: "strong", consumables: "sparing", talk: "opportune", offer: { kind: "money", amount: 2, coin: 100 } });
+    expect(got.consumables.why).toBe("Merchant");
+    expect(got.offer.why).toBe("Merchant");
+    // (A merchant with less than ten gold has nothing to spare.)
+    expect(pf2eTactics(ezren({ purse: { money: 900, coin: 100 } })).offer).toBeUndefined();
+    // (Bargain Hunter alone, too.)
+    expect(pf2eTactics(ezren({ background: null })).consumables).toEqual({ value: "sparing", why: "Bargain Hunter" });
+  });
+
+  test("a rogue's racket: a thief skirmishes, a ruffian holds the front", () => {
+    expect(pf2eTactics(merisiel()).style).toEqual({ value: "skirmisher", why: "Rogue" });
+    expect(pf2eTactics(merisiel({ features: { ruffian: "Ruffian" } })).style).toEqual({ value: "frontline", why: "Ruffian" });
+  });
+
+  test("a champion: its cause's reaction says whether it guards its friends", () => {
+    const justice = pf2eTactics(champion({ slug: "justice", name: "Justice" }, reaction("retributive-strike", "Retributive Strike", "An enemy damages your ally, and both are in your champion's aura")));
+    expect(values(justice)).toMatchObject({ style: "protector", target: "protect", allyDying: "rescue", shield: "always", preferredAction: "c.strike.longsword.0" });
+    expect(justice.target.why).toBe("Retributive Strike");
+    expect(justice.preferredAction.why).toBe("Iomedae");
+    const redemption = pf2eTactics(champion({ slug: "redemption", name: "Redemption" }, reaction("glimpse-of-redemption", "Glimpse of Redemption", "An enemy damages your ally")));
+    expect(redemption.offer).toEqual({ value: { kind: "noHarm" }, why: "Redemption" });
+    // An unholy cause's reaction guards only itself: no protector.
+    const desecration = pf2eTactics(champion({ slug: "desecration", name: "Desecration" }, reaction("selfish-shield", "Selfish Shield", "An enemy in your champion's aura damages you")));
+    expect(desecration.style).toEqual({ value: "frontline", why: "Selfish Shield" });
+    expect(desecration.target).toBeUndefined();
+    expect(desecration.allyDying).toBeUndefined();
+    // (A champion whose reaction isn't on its sheet yet guards, as its class does.)
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "champion", name: "Champion" } }).target).toEqual({ value: "protect", why: "Champion" });
+  });
+
+  test("an alchemist's consumables, freely; a bomber throws from afar; a kineticist is all impulses", () => {
+    const bomber = pf2eTactics({ kind: "pc", cls: { slug: "alchemist", name: "Alchemist" }, features: { bomber: "Bomber" } });
+    expect(bomber.style).toEqual({ value: "ranged", why: "Bomber" });
+    expect(bomber.consumables).toEqual({ value: "freely", why: "Alchemist" });
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "fighter", name: "Fighter" }, features: { "talisman-dabbler-dedication": "Talisman Dabbler Dedication" } }).consumables)
+      .toEqual({ value: "freely", why: "Talisman Dabbler Dedication" });
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "kineticist", name: "Kineticist" } }).specialty).toEqual({ value: "always", why: "Kineticist" });
+  });
+
+  test("a ranger with no ranged weapon closes in; a commander picks the most dangerous foe", () => {
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "ranger", name: "Ranger" }, weapons: { melee: 2, ranged: 0 } }).style.value).toBe("skirmisher");
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "ranger", name: "Ranger" }, weapons: { melee: 1, ranged: 1 } }).style.value).toBe("ranged");
+    expect(pf2eTactics({ kind: "pc", cls: { slug: "commander", name: "Commander" } }).target).toEqual({ value: "dangerous", why: "Commander" });
+  });
+
+  test("talking: an expert talks first; one untrained in every social skill never bothers", () => {
+    expect(pf2eTactics(valeros({ social: pcSocial(0, 2, 1) })).talk).toEqual({ value: "first", why: text("FFPF2E.Reason.Proficient", { name: "Deception", rank: "Expert" }) });
+    expect(pf2eTactics(valeros({ social: pcSocial(0, 0, 0) })).talk)
+      .toEqual({ value: "never", why: text("FFPF2E.Why.Untrained", { rank: "Untrained", skills: listJoin(["Diplomacy", "Deception", "Intimidation"]) }) });
+  });
+});
+
+describe("PF2e's answers for creatures", () => {
+  test("a mindless undead: never talks or runs, goes for the nearest, can't drink vitality, offers and wants nothing", () => {
+    const got = pf2eTactics(zombie);
+    const mindless = traitName("mindless");
+    expect(values(got)).toMatchObject({ talk: "never", target: "nearest", retreat: "never", allyDying: "fight", selfRevived: "rejoin", beyond: "stay",
+      potionThreshold: "never", offer: { kind: "" }, expect: { kind: "" } });
+    expect(got.talk.why).toBe(mindless);
+    expect(got.potionThreshold.why).toBe("Void Healing");
+    expect(got.offer.why).toBe(mindless);
+  });
+
+  test("a wolf: a pack hunter flanks and hunts down whoever's near; no language, no talk", () => {
+    const got = pf2eTactics(wolf);
+    expect(got.style).toEqual({ value: "skirmisher", why: "Pack Attack" });
+    expect(got.beyond).toEqual({ value: "hunt", why: "Pack Attack" });
+    expect(got.talk).toEqual({ value: "never", why: text("FFPF2E.Why.NoLanguage") });
+    expect(got.offer.value).toEqual({ kind: "" });
+  });
+
+  test("a bodyguard shields its charge; a herbalist runs to a fallen friend", () => {
+    const guard = pf2eTactics(bodyguard);
+    expect(guard.style).toEqual({ value: "protector", why: "Bodyguard's Defense" });
+    expect(guard.target).toEqual({ value: "protect", why: "Bodyguard's Defense" });
+    expect(guard.talk).toEqual({ value: "opportune", why: text("FFPF2E.Why.Skill", { skill: "Intimidation", mod: "+7" }) });
+    expect(pf2eTactics(herbalist).allyDying).toEqual({ value: "rescue", why: "Saving Touch" });
+  });
+
+  test("a creature with spell slots leads with spells; innate spells lean a little; a smooth talker talks first", () => {
+    expect(values(pf2eTactics(chanter))).toMatchObject({ style: "caster", specialty: "strong", talk: "opportune" });
+    expect(pf2eTactics(chanter).style.why).toBe("Occult Spontaneous Spells");
+    const zyss = pf2eTactics(serpentfolk);
+    expect(zyss.specialty).toEqual({ value: "some", why: "Occult Innate Spells" });
+    expect(zyss.style).toBeUndefined();
+    expect(zyss.talk.value).toBe(serpentfolk.social.deception.mod >= highSkill(2) ? "first" : "opportune");
+    expect(zyss.talk.value).toBe("first");
+  });
+
+  test("a hobgoblin soldier holds its formation and keeps its shield up", () => {
+    const got = pf2eTactics(hobgoblin);
+    expect(got.style).toEqual({ value: "frontline", why: "Formation" });
+    expect(got.shield).toEqual({ value: "always", why: "Shield Block" });
+    expect(got.talk).toBeUndefined();
+  });
+
+  test("a devil deals: talks first, lets them pass for a price", () => {
+    const got = pf2eTactics(devil);
+    const why = traitName("devil");
+    expect(got.talk).toEqual({ value: "first", why });
+    expect(got.offer).toEqual({ value: { kind: "passage" }, why });
+    expect(got.expect).toEqual({ value: { kind: "money", amount: 50, coin: 100 }, why });
+  });
+
+  test("regeneration gets back up; a construct can't be healed by a potion; one immune to fear never runs", () => {
+    expect(values(pf2eTactics(troll))).toMatchObject({ selfRevived: "rejoin", potionThreshold: "25" });
+    expect(pf2eTactics(troll).selfRevived.why).toBe("Regeneration 20");
+    const got = pf2eTactics(golem);
+    expect(got.potionThreshold).toEqual({ value: "never", why: text("FFPF2E.Why.Immune", { what: "Healing" }) });
+    expect(got.retreat.value).toBe("never");
+    const brave = pf2eTactics({ kind: "npc", languages: 1, immune: [{ type: "fear-effects", name: "Fear Effects" }] });
+    expect(brave.retreat).toEqual({ value: "never", why: text("FFPF2E.Why.Immune", { what: "Fear Effects" }) });
+  });
+
+  test("a summoned creature: spends everything, never runs, stays, bargains for nothing", () => {
+    const got = pf2eTactics({ kind: "minion", traits: ["summoned", "minion", "celestial"], languages: 2, social: {} });
+    const why = traitName("summoned");
+    expect(values(got)).toMatchObject({ resourceUse: "nova", retreat: "never", beyond: "stay", offer: { kind: "" }, expect: { kind: "" } });
+    expect(got.resourceUse.why).toBe(why);
+    expect(got.offer.why).toBe(why);
+  });
+
+  test("where its data says nothing, it says nothing (the core's reading stands)", () => {
+    expect(pf2eTactics()).toEqual({});
+    expect(pf2eTactics(goblin)).toEqual({});
+  });
+});
+
+describe("every answer is one the core takes", () => {
+  const everyone = [kyra(), kyra({ features: { warpriest: "Warpriest" } }), valeros(), valeros({ social: pcSocial() }), ezren(), merisiel(),
+    champion({ slug: "justice", name: "Justice" }, reaction("retributive-strike", "Retributive Strike", "An enemy damages your ally")),
+    champion({ slug: "desecration", name: "Desecration" }, reaction("selfish-shield", "Selfish Shield", "An enemy damages you")),
+    zombie, wolf, bodyguard, herbalist, chanter, serpentfolk, hobgoblin, devil, troll, golem, goblin,
+    { kind: "pc", cls: { slug: "alchemist", name: "Alchemist" }, features: { chirurgeon: "Chirurgeon" } },
+    { kind: "pc", cls: { slug: "oracle", name: "Oracle" }, features: { life: "Life" } },
+    { kind: "minion", traits: ["summoned", "minion"], languages: 0 }];
+
+  test("each one of its question's choices, with a reason, and the core's withHints keeps every one", () => {
+    for ( const f of everyone ) {
+      const hints = pf2eTactics(f);
+      const actions = (f.strikes ?? []).map(s => ({ id: s.id }));
+      for ( const [k, { value, why }] of Object.entries(hints) ) {
+        expect(typeof why === "string" && why.length > 0, `${k}: a reason`).toBe(true);
+        if ( k === "preferredAction" ) expect(actions.map(a => a.id)).toContain(value);
+        else if ( k === "offer" || k === "expect" ) expect(["", "money", "noHarm", "passage", "leave"]).toContain(value.kind);
+        else expect(TACTIC_CHOICES[k], `${k}: ${value}`).toContain(value);
+      }
+      const kept = withHints({}, hints, { actions });
+      expect(Object.keys(kept.why).sort()).toEqual(Object.keys(hints).sort());
+      for ( const k of Object.keys(hints) ) expect(kept.lets[k]).toEqual(hints[k].value);
+    }
   });
 });
