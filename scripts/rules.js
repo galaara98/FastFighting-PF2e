@@ -26,6 +26,27 @@ const CONDITION_IMMUNITY = {
 /** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
 const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
 
+/**
+ * Ferocity (spec.ferocity {label, uses, untilWounded, temp}), as it would fall: with its reaction to spend (and able to
+ * react), it stays up at 1 Hit Point and its wounded value goes up by 1. A character's Orc Ferocity as often as it has
+ * left today; a creature's until it's wounded 3. Undying Ferocity: temporary Hit Points too.
+ * @returns {boolean} whether it stayed up
+ */
+function holdsOn(c) {
+  const f = c.spec?.ferocity;
+  const k = c.conds ?? {};
+  if ( !f || (c.reactionsLeft ?? 0) <= 0 || k.incapacitated || k.paralyzed || k.stunned ) return false;
+  if ( Number.isFinite(f.uses) && (c.ferocityUsed ?? 0) >= f.uses ) return false;
+  if ( Number.isFinite(f.untilWounded) && (c.wounded ?? 0) >= f.untilWounded ) return false;
+  c.reactionsLeft -= 1;
+  c.ferocityUsed = (c.ferocityUsed ?? 0) + 1;
+  c.hp = 1;
+  c.wounded = (c.wounded ?? 0) + 1;
+  if ( f.temp > 0 ) c.temp = Math.max(c.temp ?? 0, f.temp);
+  c.ferocityNote = f.label || "";
+  return true;
+}
+
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
@@ -263,9 +284,10 @@ export const pf2eRules = {
 
   /**
    * Called when a combatant is reduced to 0 HP or damaged while already down.
-   * Mutates `c` and returns its new status.
+   * Mutates `c` and returns its new status. One with Ferocity may stay up instead.
    */
   onDropped(c, { crit = false, model = DOWNED_MODELS.SIMULATE } = {}) {
+    if ( c.status === STATUS.STANDING && holdsOn(c) ) return c.status;
     if ( model === DOWNED_MODELS.DEAD || c.spec.diesAtZero ) {
       c.status = STATUS.DEAD;
       return c.status;
@@ -283,8 +305,17 @@ export const pf2eRules = {
     return c.status;
   },
 
+  /** The dying value it dies at: 4 (5 with Diehard: spec.dyingMax), less its doomed value. */
   dyingLimit(c) {
-    return 4 - (c.doomed ?? 0);
+    return (c.spec?.dyingMax ?? 4) - (c.doomed ?? 0);
+  },
+
+  /** Ferocity that kept it up, said once the blow is done (the core's line for staying up at 1 hit point). */
+  afterHarm(run, u) {
+    if ( !u.ferocityNote ) return null;
+    const label = u.ferocityNote;
+    u.ferocityNote = null;
+    return { text: label, data: { type: "holdOn", label } };
   },
 
   /** Healing a downed creature brings it back up (prone) and increases wounded. */
@@ -301,12 +332,13 @@ export const pf2eRules = {
   },
 
   /**
-   * Start of turn for a downed, dying creature: recovery check (flat DC 10 + dying).
+   * Start of turn for a downed, dying creature: recovery check (flat DC 10 + dying; 9 + dying with Toughness:
+   * spec.recoveryDC).
    * @returns {string} log text, or null
    */
   recoveryCheck(c, rng) {
     if ( c.status !== STATUS.DOWN || c.stable || c.dying <= 0 ) return null;
-    const dc = 10 + c.dying;
+    const dc = (c.spec?.recoveryDC ?? 10) + c.dying;
     const natural = rng.d20();
     const degree = this.degreeOfSuccess(natural, natural, dc);
     c.dying += [2, 1, -1, -2][degree];

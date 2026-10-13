@@ -1,9 +1,37 @@
 /**
- * What the adapter does with a PF2e item that needs no Foundry: how an item's text is enriched to work out its formulas
- * (PF2e's own enrichers only, nothing that rolls, links or embeds).
+ * What the adapter reads of a PF2e character that needs no Foundry: its dying numbers, its Ferocity, and how an item's
+ * text is enriched to work out its formulas (PF2e's own enrichers only, nothing that rolls, links or embeds).
  */
 import { afterEach, describe, expect, test } from "vitest";
-import { resolvedText } from "../scripts/adapter.js";
+import { dyingOf, ferocityOf, resolvedText } from "../scripts/adapter.js";
+
+describe("its dying numbers, as PF2e works them out", () => {
+  test("Diehard's dying 5 and Toughness's recovery DC 9; the doomed value PF2e took off goes back on", () => {
+    expect(dyingOf({ dying: { value: 0, max: 4, recoveryDC: 10 }, doomed: { value: 0 } })).toEqual({ dyingMax: 4, recoveryDC: 10 });
+    expect(dyingOf({ dying: { value: 0, max: 5, recoveryDC: 9 }, doomed: { value: 0 } })).toEqual({ dyingMax: 5, recoveryDC: 9 });
+    expect(dyingOf({ dying: { value: 0, max: 3, recoveryDC: 10 }, doomed: { value: 2 } }).dyingMax).toBe(5);
+    // (A hazard has none: the rules' own numbers stand.)
+    expect(dyingOf({})).toEqual({});
+    expect(dyingOf(undefined)).toEqual({});
+  });
+});
+
+describe("its Ferocity, by slug", () => {
+  const item = (slug, name, extra = {}) => ({ slug, name, system: { slug, ...extra } });
+
+  test("a character's Orc Ferocity: as often as its frequency has left today; Undying Ferocity adds its level", () => {
+    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day" } })], 5))
+      .toEqual({ label: "Orc Ferocity", uses: 1, untilWounded: null, temp: 0 });
+    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day", value: 0 } })], 5).uses).toBe(0);
+    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day" } }), item("undying-ferocity", "Undying Ferocity")], 5).temp).toBe(5);
+  });
+
+  test("a creature's Ferocity: no frequency, until it's wounded 3; none without it", () => {
+    expect(ferocityOf([item("ferocity", "Ferocity")], 2)).toEqual({ label: "Ferocity", uses: null, untilWounded: 3, temp: 0 });
+    expect(ferocityOf([item("diehard", "Diehard")], 2)).toBeNull();
+    expect(ferocityOf(undefined, 2)).toBeNull();
+  });
+});
 
 describe("working out an item's formulas", () => {
   const before = { foundry: globalThis.foundry, DOMParser: globalThis.DOMParser };

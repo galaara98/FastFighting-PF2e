@@ -138,6 +138,41 @@ function staminaOf(actor, hp) {
   if ( actor.type !== "character" || !game.pf2e?.settings?.variants?.stamina || !hp?.sp ) return {};
   return { stamina: { value: Math.max(0, Number(hp.sp.value) || 0), max: Math.max(0, Number(hp.sp.max) || 0) } };
 }
+
+/**
+ * Its dying numbers (spec.dyingMax, spec.recoveryDC), as PF2e works them out from its feats' rules: the dying value it
+ * dies at with no doom (PF2e's maximum has its doomed value off already) and the DC its recovery checks start from.
+ * Nothing for a creature without them (a hazard): the rules' own 4 and 10 stand.
+ */
+export function dyingOf(attributes) {
+  const dying = attributes?.dying;
+  const out = {};
+  if ( Number.isFinite(dying?.max) ) out.dyingMax = dying.max + (Number(attributes.doomed?.value) || 0);
+  if ( Number.isFinite(dying?.recoveryDC) ) out.recoveryDC = dying.recoveryDC;
+  return out;
+}
+
+/** A creature's Ferocity, a character's Orc Ferocity (by slug). */
+const FEROCITY = new Set(["ferocity", "orc-ferocity"]);
+
+/**
+ * Its Ferocity (spec.ferocity, for rules.onDropped): a reaction as it would fall, to stay up at 1 Hit Point. A
+ * character's as often as its frequency has left (once a day); a creature's until it's wounded 3. Undying Ferocity
+ * adds temporary Hit Points, its level. Null when it has none.
+ */
+export function ferocityOf(items, level) {
+  const list = [...(items ?? [])];
+  const item = list.find(i => FEROCITY.has(slugOf(i)));
+  if ( !item ) return null;
+  const often = item.system?.frequency;
+  return {
+    label: item.name ?? "",
+    uses: Number(often?.max) > 0 ? Math.max(0, Number(often.value ?? often.max) || 0) : null,
+    untilWounded: slugOf(item) === "ferocity" ? 3 : null,
+    temp: list.some(i => slugOf(i) === "undying-ferocity") ? Math.max(0, Number(level) || 0) : 0
+  };
+}
+
 export class Pf2eAdapter extends SystemAdapter {
   /** Building a summoned creature (which doesn't summon in turn). */
   #summoning = false;
@@ -252,6 +287,11 @@ export class Pf2eAdapter extends SystemAdapter {
       wounded: sys.attributes?.wounded?.value ?? 0,
       doomed: sys.attributes?.doomed?.value ?? 0,
       dying: sys.attributes?.dying?.value ?? 0,
+      // The dying value it dies at before any doom (4; 5 with Diehard) and its recovery checks' DC (10; 9 with
+      // Toughness), as PF2e works them out from its feats' rules.
+      ...dyingOf(sys.attributes),
+      // Ferocity, Orc Ferocity: a reaction that keeps it up at 1 Hit Point (rules.onDropped).
+      ferocity: ferocityOf(actor.items, level),
       // A fight resumed mid-way starts from where things stand.
       conditions: this.#conditions(actor),
       persistent: this.#persistent(actor),

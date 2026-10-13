@@ -69,6 +69,65 @@ describe("pf2e dying", () => {
     pf2eRules.onDropped(a);
     expect(a.status).toBe(STATUS.DEAD);
   });
+
+  test("Diehard: dying 5 is death (spec.dyingMax), doomed still lowers it", () => {
+    const a = { ...pc(), spec: { diesAtZero: false, dyingMax: 5 }, wounded: 2 };
+    pf2eRules.onDropped(a, { crit: true });
+    expect([a.status, a.dying]).toEqual([STATUS.DOWN, 4]);
+    const b = { ...pc(), spec: { diesAtZero: false, dyingMax: 5 }, wounded: 2, doomed: 1 };
+    pf2eRules.onDropped(b, { crit: true });
+    expect(b.status).toBe(STATUS.DEAD);
+  });
+
+  test("Toughness: recovery checks against 9 + dying (spec.recoveryDC)", () => {
+    const ten = { d20: () => 10 };
+    const plain = { ...pc(), status: STATUS.DOWN, dying: 1 };
+    pf2eRules.recoveryCheck(plain, ten);
+    expect(plain.dying).toBe(2);
+    const tough = { ...pc(), spec: { diesAtZero: false, recoveryDC: 9 }, status: STATUS.DOWN, dying: 1 };
+    pf2eRules.recoveryCheck(tough, ten);
+    expect([tough.dying, tough.stable]).toEqual([0, true]);
+  });
+});
+
+describe("pf2e Ferocity", () => {
+  const orc = (extra = {}) => ({ spec: { diesAtZero: false, ferocity: { label: "Orc Ferocity", uses: 1, untilWounded: null, temp: 0 } }, status: STATUS.STANDING,
+    hp: 0, temp: 0, maxHp: 20, dying: 0, wounded: 0, doomed: 0, reactionsLeft: 1, conds: {}, ...extra });
+
+  test("Orc Ferocity: its reaction keeps it up at 1 Hit Point, wounded 1, once; said once the blow is done", () => {
+    const a = orc();
+    expect(pf2eRules.onDropped(a)).toBe(STATUS.STANDING);
+    expect([a.hp, a.wounded, a.dying, a.reactionsLeft]).toEqual([1, 1, 0, 0]);
+    expect(pf2eRules.afterHarm({}, a)).toEqual({ text: "Orc Ferocity", data: { type: "holdOn", label: "Orc Ferocity" } });
+    expect(pf2eRules.afterHarm({}, a)).toBeNull();
+    // (Its reaction back, the next blow drops it: once a day, and it's spent. Wounded 1 makes it dying 2.)
+    a.reactionsLeft = 1;
+    a.hp = 0;
+    pf2eRules.onDropped(a);
+    expect([a.status, a.dying]).toEqual([STATUS.DOWN, 2]);
+  });
+
+  test("not without its reaction, not stunned, not when today's use is gone; Undying Ferocity's temporary Hit Points", () => {
+    expect(pf2eRules.onDropped(orc({ reactionsLeft: 0 }))).toBe(STATUS.DOWN);
+    expect(pf2eRules.onDropped(orc({ conds: { stunned: 1 } }))).toBe(STATUS.DOWN);
+    expect(pf2eRules.onDropped(orc({ spec: { diesAtZero: false, ferocity: { label: "Orc Ferocity", uses: 0 } } }))).toBe(STATUS.DOWN);
+    const undying = orc({ spec: { diesAtZero: false, ferocity: { label: "Orc Ferocity", uses: 1, temp: 7 } } });
+    pf2eRules.onDropped(undying);
+    expect([undying.hp, undying.temp]).toEqual([1, 7]);
+  });
+
+  test("a creature's Ferocity: as often as it can react, until it's wounded 3 (then it dies at 0, as creatures do)", () => {
+    const boar = orc({ spec: { diesAtZero: true, ferocity: { label: "Ferocity", uses: null, untilWounded: 3, temp: 0 } }, wounded: 1 });
+    for ( const wounded of [2, 3] ) {
+      boar.hp = 0;
+      boar.reactionsLeft = 1;
+      expect(pf2eRules.onDropped(boar)).toBe(STATUS.STANDING);
+      expect(boar.wounded).toBe(wounded);
+    }
+    boar.hp = 0;
+    boar.reactionsLeft = 1;
+    expect(pf2eRules.onDropped(boar)).toBe(STATUS.DEAD);
+  });
 });
 
 describe("pf2e Reactive Strike", () => {
