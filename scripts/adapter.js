@@ -187,6 +187,11 @@ export class Pf2eAdapter extends SystemAdapter {
     return pf2eRules;
   }
 
+  /** Make it So leaves a fallen creature's gear as loot: a lootable corpse, or a pile (that may take the body's place). */
+  get supportsLoot() {
+    return true;
+  }
+
   canHandle(actor) {
     return !!actor && ["character", "npc", "familiar", "hazard"].includes(actor.type);
   }
