@@ -1016,7 +1016,7 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
       const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered") });
-      out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
+      out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, maneuver: "distract", traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
         check: { mod: skill("diplomacy").mod ?? 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] });
     }
     return out;
