@@ -806,6 +806,7 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( !spec ) return null;
     spec.creatureTraits = [...new Set([...(spec.creatureTraits ?? []), "minion", "summoned"])];
+    spec.sourceUuid = src.uuid; // (a live battle places it from here)
     return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true };
   }
 
