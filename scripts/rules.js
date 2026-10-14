@@ -70,12 +70,14 @@ export const pf2eRules = {
   },
 
   /**
-   * Reactive Strike: only creatures that have it strike a foe leaving their reach (one reaction a round). A Step
-   * (an action, five feet) gets out of reach without triggering it.
+   * Reactive Strike: only creatures that have it strike a foe in their reach that leaves it, makes a ranged attack or
+   * uses a manipulate action, or stands up there (one reaction a round). A Step (an action, five feet) gets out of
+   * reach without triggering it.
    */
   reactions() {
     return 1;
   },
+  opportunityOn: Object.freeze(["foeLeavesReach", "foeOpening", "foeMovesInReach"]),
   opportunity(reactor) {
     if ( !reactor.spec.flags?.reactiveStrike ) return null;
     const c = reactor.conds ?? {};

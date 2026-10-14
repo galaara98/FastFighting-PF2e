@@ -9,7 +9,7 @@ import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, commitPf2eChanges, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
-import { readPf2eTurn } from "./read-turn.js";
+import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1316,6 +1316,11 @@ export class Pf2eAdapter extends SystemAdapter {
   /** A player's turn in a live battle, read from the cards PF2e made for it (read-turn.js). */
   readTurn(messages, context) {
     return readPf2eTurn(messages, context);
+  }
+
+  /** A ranged attack or a manipulate action in a foe's reach: Reactive Strike's other triggers (read-turn.js). */
+  liveOpening(message, tokenId) {
+    return pf2eOpening(message, tokenId);
   }
 
   /** Hero Points buy a reroll (and, all of them, a way back from death). */

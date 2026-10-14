@@ -94,6 +94,23 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
   return events;
 }
 
+/**
+ * A card that lowers the character's guard in a foe's reach (Reactive Strike's other triggers): a ranged attack, or
+ * anything with the manipulate trait (a spell cast with its hands, a potion drawn and drunk).
+ */
+export function pf2eOpening(message, tokenId) {
+  const f = message.flags?.pf2e ?? {};
+  const c = f.context;
+  const mine = (c?.token && tokenIdOf(c.token) === tokenId) || message.speaker?.token === tokenId;
+  if ( !mine ) return false;
+  if ( c?.type === "attack-roll" ) {
+    const melee = (c.options ?? []).includes("item:melee") || (c.domains ?? []).includes("melee-attack-roll") || (c.domains ?? []).includes("melee-strike-attack-roll");
+    return !melee;
+  }
+  const options = [...(f.origin?.rollOptions ?? []), ...(c?.options ?? [])];
+  return options.some(o => /(^|:)trait:manipulate$/.test(String(o)));
+}
+
 /** The item a card came from, by its name, where the card says. */
 function itemName(m) {
   const uuid = m.flags?.pf2e?.origin?.uuid;
