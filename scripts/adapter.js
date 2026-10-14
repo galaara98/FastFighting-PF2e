@@ -535,6 +535,8 @@ export class Pf2eAdapter extends SystemAdapter {
         bonus: s.totalModifier ?? 0,
         maps: traits.includes("agile") ? [0, -4, -8] : [0, -5, -10],
         melee: !ranged,
+        // (Thrown, the weapon flies itself; any other ranged weapon sends a shot: the story tells which.)
+        thrown: ranged && traits.some(x => x === "thrown" || x.startsWith("thrown-") || x === "bomb"),
         reach,
         range: ranged && range ? { increment: range.increment ?? range.max ?? 30, max: range.max ?? (range.increment ?? 30) * 6 } : null,
         damage,
