@@ -8,7 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eOutcome, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
+import { commitPf2eOutcome, commitPf2eChanges, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1283,6 +1283,28 @@ export class Pf2eAdapter extends SystemAdapter {
 
   async commitOutcome(tokenDoc, spec, final, options) {
     return commitPf2eOutcome(tokenDoc, spec, final, options);
+  }
+
+  get supportsLive() {
+    return true;
+  }
+
+  /** A live battle: one turn's changes, and only those (commit.js commitPf2eChanges). */
+  async commitChanges(tokenDoc, spec, changes, final, options) {
+    return commitPf2eChanges(tokenDoc, spec, changes, final, options);
+  }
+
+  /**
+   * What PF2e does itself in a live battle: the persistent damage roll at the end of a creature's turn, and the
+   * recovery check of one dying (FastFighting leaves them to it, and reads what came of them from the sheet).
+   */
+  liveOwnership() {
+    return { persistent: true, recovery: true };
+  }
+
+  /** Hero Points buy a reroll (and, all of them, a way back from death). */
+  rerollResource() {
+    return game.i18n.localize("FFPF2E.HeroPoints");
   }
 
   resourceLabel(key) {
