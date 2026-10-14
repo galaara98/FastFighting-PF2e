@@ -9,6 +9,7 @@ import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eOutcome, commitPf2eChanges, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
+import { readPf2eTurn } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1310,6 +1311,11 @@ export class Pf2eAdapter extends SystemAdapter {
     const out = (spec?.reactions ?? []).map(r => ({ id: r.id, label: r.label ?? r.id }));
     if ( spec?.flags?.reactiveStrike ) out.push({ id: "opportunity", label: actionName("ReactiveStrike") });
     return out;
+  }
+
+  /** A player's turn in a live battle, read from the cards PF2e made for it (read-turn.js). */
+  readTurn(messages, context) {
+    return readPf2eTurn(messages, context);
   }
 
   /** Hero Points buy a reroll (and, all of them, a way back from death). */
