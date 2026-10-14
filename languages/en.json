@@ -60,7 +60,8 @@
       "Trip": "Trip",
       "Grapple": "Grapple",
       "Feint": "Feint",
-      "Disarm": "Disarm"
+      "Disarm": "Disarm",
+      "ReactiveStrike": "Reactive Strike"
     },
     "Feature": {
       "devise-a-stratagem": "Devise a Stratagem",

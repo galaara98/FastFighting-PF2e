@@ -1302,6 +1302,16 @@ export class Pf2eAdapter extends SystemAdapter {
     return { persistent: true, recovery: true };
   }
 
+  /**
+   * Its reactions, for its player to say always / ask / never: its own (Shield Block, Nimble Dodge ...) and Reactive Strike
+   * where it has it (by that name, as PF2e has it).
+   */
+  reactionsOf(spec) {
+    const out = (spec?.reactions ?? []).map(r => ({ id: r.id, label: r.label ?? r.id }));
+    if ( spec?.flags?.reactiveStrike ) out.push({ id: "opportunity", label: actionName("ReactiveStrike") });
+    return out;
+  }
+
   /** Hero Points buy a reroll (and, all of them, a way back from death). */
   rerollResource() {
     return game.i18n.localize("FFPF2E.HeroPoints");
