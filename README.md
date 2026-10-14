@@ -33,7 +33,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - Grapple for anyone trained in Athletics (grabbed, restrained on a critical success)
   - summon spells: a creature of the trait the spell calls, at the highest level its rank allows, from the installed bestiaries (the Monster Core first), as a minion with two actions that its summoner must Sustain each turn or lose
   - Spell Effects already on a creature count through PF2e's own totals; ones still running when the fight ends are left on by Do it For Real Now, for the rounds left
-  - senses: darkvision and its kin (in the dark), scent, tremorsense, echolocation and the other senses that need no sight, with their ranges; blinded and deafened
+  - senses, sorted into the core's with their ranges: darkvision, greater darkvision, infrared vision and truesight see in the dark; scent is smell; tremorsense, lifesense, echolocation and every other sense of a creature's own are felt; no vision, no sight (low-light vision and see invisibility don't count); blinded and deafened
   - Hero Points: spent to keep someone from dying (a reroll), or all of them for one's own Heroic Recovery; Do it For Real Now takes them away
   - prepared and spontaneous slots, focus points
   - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet; a healing spell with no range, area or target, cast on yourself, heals only its caster)

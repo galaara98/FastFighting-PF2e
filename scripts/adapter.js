@@ -196,6 +196,13 @@ export function storyLook(traits = [], group = null, damage = []) {
   return traits.map(t => ELEMENT_LOOKS[t]).find(Boolean);
 }
 
+/** The system's senses (by slug) that are the core's lowlight or smell; any other, but these, is felt. */
+const SENSES = Object.freeze({
+  darkvision: "lowlight", "greater-darkvision": "lowlight", "infrared-vision": "lowlight", truesight: "lowlight",
+  scent: "smell"
+});
+const NOT_SENSES = new Set(["vision", "low-light-vision", "see-invisibility"]);
+
 export class Pf2eAdapter extends SystemAdapter {
   /** Building a summoned creature (which doesn't summon in turn). */
   #summoning = false;
@@ -324,7 +331,6 @@ export class Pf2eAdapter extends SystemAdapter {
       conditions: this.#conditions(actor),
       persistent: this.#persistent(actor),
       perception: actor.perception?.mod ?? actor.initiative?.mod ?? 0,
-      darkvision: !!actor.hasDarkvision,
       senses: this.#senses(actor),
       fateLabel: game.i18n.localize("FFPF2E.HeroPoints"),
       // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
@@ -416,17 +422,21 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
-   * What it senses beyond plain sight and hearing: darkvision (and its greater kin) to see in the dark, and the
-   * senses that need no sight at all (scent, tremorsense, echolocation, lifesense ...), each with its range.
+   * Its senses, sorted into the core's (spec.senses), the farthest of each in feet (no range: no limit): darkvision
+   * and its kin see in the dark (lowlight); scent is smell; every other sense of its own (tremorsense, lifesense,
+   * echolocation, electromagnetic sense ...) is felt. No vision: no sight. Low-light vision sees only in dim light,
+   * which the core doesn't tell apart from bright, and see invisibility only what's invisible: neither counts.
    */
   #senses(actor) {
-    const out = [];
+    const out = {};
     for ( const s of Array.from(actor.perception?.senses ?? []) ) {
       const type = String(s?.type ?? "");
+      const sense = SENSES[type] ?? (type && !NOT_SENSES.has(type) ? "feel" : null);
+      if ( !sense || out[sense] === null ) continue;
       const range = Number.isFinite(Number(s?.range)) ? Number(s.range) : null;
-      if ( /darkvision|truesight|see-invisibility/.test(type) ) out.push({ type, range, dark: true });
-      else if ( type && !/low-light|vision/.test(type) ) out.push({ type, range, blind: true });
+      out[sense] = range === null ? null : Math.max(out[sense] ?? 0, range);
     }
+    if ( actor.perception?.hasVision === false ) out.sight = 0;
     return out;
   }
 
