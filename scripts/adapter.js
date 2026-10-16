@@ -20,6 +20,7 @@ import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
 import { skillManeuvers, strikeMove } from "./maneuvers.js";
+import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -400,6 +401,8 @@ export class Pf2eAdapter extends SystemAdapter {
       ...(hazard ? {} : escapeOf(actor)),
       // Getting past a foe on the way: Tumble Through, for those trained in Acrobatics (rules.passThrough).
       acrobatics: hazard ? undefined : acrobaticsOf(actor),
+      // What its Swallow Whole or Engulf does to whoever is inside it (gullet.js; rules.conditionHarm and cutFree).
+      gullet: gulletsOf(actions),
       creatureTraits: traits,
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
@@ -606,6 +609,8 @@ export class Pf2eAdapter extends SystemAdapter {
         held: ["simple", "martial", "advanced"].includes(item?.category) || undefined,
         // The free hands it takes (hands.js): its grip; a fist one, jaws none.
         hands: strikeHands(item),
+        // (Light enough to attack with from inside a gullet: unarmed, a creature's own, a weapon of light Bulk.)
+        light: lightStrike(item) || undefined,
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
       };
       out.push(strike);
@@ -947,6 +952,18 @@ export class Pf2eAdapter extends SystemAdapter {
     for ( const item of actor.items ) {
       // Its actions, and feats that are actions of their own (a kineticist's impulses, Dragon's Rage Breath).
       if ( item.type !== "action" && !(item.type === "feat" && item.system.actionType?.value === "action") ) continue;
+      // Swallow Whole and Engulf (gullet.js), by slug: the core's swallowed and engulfed.
+      if ( GULLETS[slugOf(item)] ) {
+        const reach = Math.max(5, ...actions.filter(a => a.kind === "strike" && a.melee).map(a => Number(a.reach) || 5));
+        const speed = Number(actor.system.movement?.speeds?.land?.value ?? actor.system.movement?.speeds?.land) || 25;
+        const gulp = gulletAction({
+          id: `${actor.id}.${item.id}`, name: item.name, slug: slugOf(item), html: await resolvedText(item), traits: item.system.traits?.value ?? [],
+          actions: item.system.actions?.value, athletics: actor.skills?.athletics?.mod, athleticsDC: escapeOf(actor).escapeDC,
+          size: sizeOf(actor.size ?? actor.system.traits?.size?.value), speed, reach
+        });
+        if ( gulp ) out.push({ ...gulp.action, gullet: gulp.gullet, itemId: item.id });
+        continue;
+      }
       if ( item.type === "feat" && !/@Check\[/i.test(item.system.description?.value ?? "") ) continue;
       const action = abilityAction({
         id: `${actor.id}.${item.id}`, name: item.name, html: await resolvedText(item),
@@ -1441,6 +1458,13 @@ export class Pf2eAdapter extends SystemAdapter {
 
 function levelOf(actor) {
   return actor.level ?? 0;
+}
+
+/** Its gullets (spec.gullet), by the core's condition each lays: {swallowed: {damage, rupture, most}}; undefined with none. */
+export function gulletsOf(actions) {
+  const out = {};
+  for ( const a of actions ?? [] ) if ( a.gullet?.key ) out[a.gullet.key] = { damage: a.gullet.damage, rupture: a.gullet.rupture, most: a.gullet.most };
+  return Object.keys(out).length ? out : undefined;
 }
 
 /**

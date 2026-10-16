@@ -1,9 +1,10 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition } from "./core.js";
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
+import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
 
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
@@ -189,13 +190,74 @@ export const pf2eRules = {
     const work = who.spec?.escapeWork;
     const binder = hold.key === "bound" && hold.byId ? run.byId?.get(hold.byId) : null;
     const dc = Number.isFinite(binder?.spec?.tiesDC) ? binder.spec.tiesDC : hold.dc;
-    if ( !Number.isFinite(work?.mod) || !Number.isFinite(dc) ) return null;
+    const escapes = Number.isFinite(work?.mod) && Number.isFinite(dc);
+    // (Inside a gullet: cutting itself free instead, where that's likelier.)
+    if ( hold.key === "swallowed" || hold.key === "engulfed" ) {
+      const odds = escapes ? degreeDistribution(this, work.mod - statusPenalty(who), dc, { kind: "check" }) : null;
+      const cut = this.cutFree(run, who, hold, odds ? odds[2] + odds[3] : 0);
+      if ( cut ) return cut;
+    }
+    if ( !escapes ) return null;
     const mod = work.mod - statusPenalty(who);
     const { natural, total, degree } = this.roll(run.rng, mod, dc);
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
     // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself.)
     if ( degree >= 2 && hold.key === "grabbed" && hold.byId ) who.effects = (who.effects ?? []).filter(e => !grabbing(e, hold.byId));
     return { success: degree >= 2, degree, natural, mod, total, dc };
+  },
+
+  /**
+   * Cutting itself free from inside a gullet (gullet.js): its best Strike from in there (cuttingStrike) at whoever holds
+   * it, off-guard to it, whose piercing or slashing damage comes to the holder's Rupture value or more (doubled on a
+   * critical hit). Null when it can't, or an Escape (`escape`: its chance) is likelier. The blow's damage isn't dealt.
+   */
+  cutFree(run, who, hold, escape = 0) {
+    const by = run.byId?.get(hold.byId);
+    const rupture = by?.spec?.gullet?.[hold.key]?.rupture;
+    const cut = Number.isFinite(rupture) ? cuttingStrike(who) : null;
+    if ( !cut ) return null;
+    const mod = cut.strike.bonus - statusPenalty(who);
+    const ac = (Number(by.spec.defenses?.ac) || 10) - 2;
+    const odds = degreeDistribution(this, mod, ac, { kind: "attack" });
+    const chance = odds[2] * chanceAtLeast(cut.parts, rupture) + odds[3] * chanceAtLeast(cut.parts, rupture, 2);
+    if ( chance <= escape ) return null;
+    const { natural, total, degree } = this.roll(run.rng, mod, ac);
+    const dealt = degree >= 2 ? cut.parts.reduce((s, p) => s + Math.max(0, samplePart(p, run.rng)), 0) * (degree === 3 ? 2 : 1) : 0;
+    return { success: dealt >= rupture, degree, natural, mod, total, dc: ac, said: { text: t("Gullet.Cut", { strike: cut.strike.name, damage: dealt, rupture }) } };
+  },
+
+  /** Inside a gullet: the damage its holder's Swallow Whole or Engulf lists, at the end of each of its turns (else the core's). */
+  conditionHarm(key, value, u, by) {
+    const inside = by?.spec?.gullet?.[key];
+    return inside ? inside.damage : undefined;
+  },
+
+  /**
+   * What it can do now, as PF2e says: Swallow Whole only on a creature it has grabbed (and none more once it holds one
+   * of the largest size it lists); from inside a gullet, Strikes only with unarmed attacks or light weapons.
+   */
+  usable(run, u, action, t) {
+    if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderId(t) && !full(run, u);
+    if ( action?.kind === "strike" && !action.light && holderId(u) ) return false;
+    return true;
+  },
+
+  /** Whom it can go for: from inside a gullet, only whoever holds it; one held inside another, nobody (its holder neither). */
+  canTarget(run, a, t) {
+    const holder = holderId(a);
+    if ( holder ) return t.id === holder;
+    return !holderId(t);
+  },
+
+  /** The start of its turn: inside a gullet, its holder's jaws no longer grab it (what holds it is the gullet now). */
+  startTurn(run, u) {
+    const holder = holderId(u);
+    if ( holder && u.grabbedBy === holder ) {
+      u.grabbedBy = null;
+      u.grabKey = null;
+      for ( const key of ["grabbed", "restrained"] ) dropCondition(u, key);
+    }
+    return null;
   },
 
   /** Cover is PF2e's (standard, greater: coverBonus), not the core's. */
@@ -358,8 +420,9 @@ export const pf2eRules = {
     exposed(ctx) {
       // (exposedTo: off-guard to this attacker only, after a Feint. Each fact read only if the ones before don't settle
       // it: the situation works them out as they're read.)
+      // (And whoever swallowed or engulfed the attacker: off-guard to it from inside.)
       const t = ctx.target;
-      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo);
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (ctx.attacker && holderId(ctx.attacker) === t.id));
     },
     defense(ctx) {
       const t = ctx.target;
@@ -391,7 +454,8 @@ export const pf2eRules = {
     },
     actionsLost(u) {
       if ( u.conds.paralyzed || u.conds.fleeing ) return 99; // fleeing spends every action getting away
-      return (u.conds.slowed ?? 0) + (u.conds.stunned ?? 0);
+      // (Inside a gullet: slowed 1.)
+      return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0) + (u.conds.stunned ?? 0);
     }
   },
 

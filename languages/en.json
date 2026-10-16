@@ -96,6 +96,9 @@
       "Immune": "Immune to {what}",
       "Skill": "{skill} {mod}",
       "Untrained": "{rank} in {skills}"
+    },
+    "Gullet": {
+      "Cut": "cuts at it from inside with {strike}: {damage} damage against Rupture {rupture}"
     }
   }
 }
