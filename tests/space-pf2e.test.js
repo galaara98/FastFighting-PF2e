@@ -97,9 +97,10 @@ describe("Tumble Through", () => {
     expect(pf2eRules.tumbleThrough(table(1), mover(16), foe(7))).toMatchObject({ success: false, degree: 1, total: 17 });
   });
 
-  test("less what frightens or sickens it, and its clumsiness; the foe's the same off its DC", () => {
-    expect(pf2eRules.tumbleThrough(table(10), mover(7, { frightened: 2, sickened: 1, clumsy: 1 }), foe(7))).toMatchObject({ mod: 4, total: 14, dc: 17 });
-    expect(pf2eRules.tumbleThrough(table(10), mover(7), foe(7, { sickened: 1, clumsy: 2 }))).toMatchObject({ dc: 14, success: true });
+  test("less what frightens or sickens it, or its clumsiness (status penalties: the worst counts); the foe's the same off its DC", () => {
+    expect(pf2eRules.tumbleThrough(table(10), mover(7, { frightened: 2, sickened: 1, clumsy: 1 }), foe(7))).toMatchObject({ mod: 5, total: 15, dc: 17 });
+    expect(pf2eRules.tumbleThrough(table(10), mover(7, { clumsy: 3 }), foe(7))).toMatchObject({ mod: 4 });
+    expect(pf2eRules.tumbleThrough(table(10), mover(7), foe(7, { sickened: 1, clumsy: 2 }))).toMatchObject({ dc: 15, success: true });
   });
 });
 

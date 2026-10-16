@@ -35,13 +35,76 @@ const CONDITION_IMMUNITY = {
  */
 const coverBonus = cover => (cover === "some" ? 2 : cover === "most" || cover === "total" ? 4 : 0);
 
-/** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
-const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
+/**
+ * The status penalties PF2e's conditions give, by what a roll is based on (they don't stack: the worst counts):
+ * frightened and sickened to every check and DC; clumsy (and encumbered, which makes it clumsy 1) to Dexterity's (AC,
+ * Reflex, ranged attacks, Acrobatics); enfeebled to Strength's (melee attacks); stupefied to the mind's (Will, spell
+ * attacks); drained to Constitution's (Fortitude); fascinated -2 to skill checks.
+ */
+const STATUS_ON = Object.freeze({
+  dex: Object.freeze(["clumsy", "encumbered"]), str: Object.freeze(["enfeebled"]), mind: Object.freeze(["stupefied"]), con: Object.freeze(["drained"]),
+  skill: Object.freeze(["fascinated"])
+});
+/** Those with a penalty of their own, not their value. */
+const FIXED = Object.freeze({ encumbered: 1, fascinated: 2 });
+const SAVE_ON = Object.freeze({ fortitude: "con", reflex: "dex", will: "mind" });
 
-/** Its Acrobatics for a tumble (spec.acrobatics), less what frightens or sickens it and its clumsiness (Dexterity's). */
-const tumbleMod = u => (Number(u.spec?.acrobatics?.mod) || 0) - statusPenalty(u) - (u.conds.clumsy ?? 0);
-/** Its Reflex DC: 10 + its Reflex, less the same. */
-const reflexDC = o => 10 + (Number(o.spec?.defenses?.reflex) || 0) - statusPenalty(o) - (o.conds.clumsy ?? 0);
+/** The worst status penalty some conditions give a roll based on all of `on` (none: every roll's alone). */
+function worstStatus(conds, on) {
+  let n = Math.max(Number(conds?.frightened) || 0, Number(conds?.sickened) || 0);
+  for ( const base of on ) {
+    for ( const k of STATUS_ON[base] ?? [] ) n = Math.max(n, Number(conds?.[k]) > 0 || conds?.[k] === true ? FIXED[k] ?? Number(conds[k]) : 0);
+  }
+  return n;
+}
+
+/**
+ * The status penalty on its roll (based on `on`: "dex", "str", "mind", "con", "skill") that its own numbers don't
+ * already have: the worst of what's on it now, less the worst its sheet showed when its numbers were read
+ * (spec.conditions: a fight resumed mid-way, a live battle), which PF2e's totals took in already. Less than none (the
+ * sheet's frightened 2 now 1) gives that back.
+ */
+const statusPenalty = (u, ...on) => worstStatus(u.conds, on) - worstStatus(u.spec?.conditions, on);
+
+/** Off guard on its sheet when its AC was read (PF2e's AC took the -2 in already): off-guard, or what brings it. */
+const sheetOffGuard = u => {
+  const c = u.spec?.conditions ?? {};
+  return ["offGuard", "prone", "grabbed", "restrained", "paralyzed", "unconscious"].some(k => Number(c[k]) > 0 || c[k] === true);
+};
+
+/** Its Acrobatics for a tumble (spec.acrobatics), less the status penalty on it (a Dexterity skill). */
+const tumbleMod = u => (Number(u.spec?.acrobatics?.mod) || 0) - statusPenalty(u, "dex", "skill");
+/** Its Reflex DC: 10 + its Reflex, less the status penalty on it. */
+const reflexDC = o => 10 + (Number(o.spec?.defenses?.reflex) || 0) - statusPenalty(o, "dex");
+
+/**
+ * Drained since it was last looked at (since its sheet's numbers were read, at first): the Hit Points it loses, its
+ * level (at least 1) a step, and its maximum as much lower (not damage; at least 1 left, as the core has no fall for
+ * it); drained less, its maximum back up but not what it lost. Not in a live battle: there the sheet does it itself.
+ */
+function drain(run, u) {
+  if ( run?.live ) return;
+  const now = Number(u.conds?.drained) || 0;
+  const seen = u.drainSeen ?? (Number(u.spec?.conditions?.drained) || 0);
+  if ( now === seen ) return;
+  const step = Math.max(1, Number(u.spec?.level) || 0);
+  u.maxHp = Math.max(1, (u.maxHp ?? 1) - step * (now - seen));
+  if ( now > seen ) u.hp = Math.max(Math.min(1, u.hp ?? 0), (u.hp ?? 0) - step * (now - seen));
+  u.hp = Math.min(u.hp ?? 0, u.maxHp);
+  u.drainSeen = now;
+}
+
+/**
+ * The flat check a creature must make to affect another with an attack (PF2e's): DC 11 against one hidden from it, DC 5
+ * against one concealed from it, or from it dazzled (unless it has a precise sense besides sight); 0 for none. Not
+ * against an area.
+ */
+function flatCheckDC(attacker, target, action) {
+  if ( action?.area || !target ) return 0;
+  if ( Number(target.conds?.hidden) > 0 ) return 11;
+  if ( Number(target.conds?.concealed) > 0 ) return 5;
+  return Number(attacker?.conds?.dazzled) > 0 && !attacker.spec?.otherPrecise ? 5 : 0;
+}
 
 /**
  * Can it share another's space? A Tiny creature can (the Player Core: Tiny creatures can occupy the same space as larger
@@ -226,7 +289,7 @@ export const pf2eRules = {
     const rupture = by?.spec?.gullet?.[hold.key]?.rupture;
     const cut = Number.isFinite(rupture) ? cuttingStrike(who) : null;
     if ( !cut ) return null;
-    const mod = cut.strike.bonus - statusPenalty(who);
+    const mod = cut.strike.bonus - statusPenalty(who, "str");
     const ac = (Number(by.spec.defenses?.ac) || 10) - 2;
     const odds = degreeDistribution(this, mod, ac, { kind: "attack" });
     const chance = odds[2] * chanceAtLeast(cut.parts, rupture) + odds[3] * chanceAtLeast(cut.parts, rupture, 2);
@@ -259,8 +322,25 @@ export const pf2eRules = {
     return !holderId(t);
   },
 
-  /** The start of its turn: inside a gullet, its holder's jaws no longer grab it (what holds it is the gullet now). */
+  /**
+   * An attack's flat check (flatCheckDC: against one hidden from it, or concealed, or with it dazzled), rolled once the
+   * attack would hit: failed, the blow doesn't affect the target.
+   */
+  adjustRoll(run, u, roll, ctx = {}) {
+    if ( ctx.kind !== "attack" || !(roll?.degree >= 2) ) return roll;
+    const dc = flatCheckDC(u, ctx.target, ctx.action);
+    if ( !dc ) return roll;
+    const natural = run.rng.d20();
+    if ( natural >= dc ) return roll;
+    return { ...roll, degree: 1, said: { text: t("FlatCheck", { target: ctx.target.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc } } };
+  },
+
+  /**
+   * The start of its turn: drained since (drain), the Hit Points it loses; inside a gullet, its holder's jaws no longer
+   * grab it (what holds it is the gullet now).
+   */
   startTurn(run, u) {
+    drain(run, u);
     const holder = holderId(u);
     if ( holder && u.grabbedBy === holder ) {
       u.grabbedBy = null;
@@ -377,7 +457,12 @@ export const pf2eRules = {
    * Conditions as numbers, so a frightened or tripped foe is weighed like any other penalty: frightened and sickened
    * to everything, clumsy to AC and Reflex, enfeebled to melee, off-guard -2 AC (and grabbed, which is off-guard; held
    * in place too, as the engine weighs it), prone (off-guard, -2 to attack, an action to stand), slowed and stunned in
-   * actions, fascinated -2 to its checks (PF2e's: it can still act; not the core's, which takes its turn).
+   * actions, fascinated -2 to its checks (PF2e's: it can still act; not the core's, which takes its turn). And PF2e's
+   * own meaning of those the core has too (the core's step aside for them): stupefied to Will and its checks (and its
+   * spells, which it may lose), drained to Fortitude (and Hit Points), dazzled and concealed as the flat check an attack
+   * needs (DC 5: about 2 points), encumbered as clumsy 1 and 10 feet slower, quickened an action more. Where PF2e's
+   * totals already have one (a sheet's conditions when its numbers were read), the rolls don't count it again
+   * (statusPenalty, sheetOffGuard).
    */
   conditionMods(key, value = 1) {
     const v = Number(value) || 1;
@@ -392,6 +477,12 @@ export const pf2eRules = {
       case "fascinated": return { checks: -2 };
       case "slowed": return { actions: -v };
       case "stunned": return { actions: -Math.min(3, v) };
+      case "stupefied": return { saves: -Math.ceil(v / 3), checks: -v };
+      case "drained": return { saves: -Math.ceil(v / 3) };
+      case "dazzled": return { attack: -2 };
+      case "concealed": return { ac: 2 };
+      case "encumbered": return { ac: -1, speed: -10 };
+      case "quickened": return { actions: 1 };
       default: return null;
     }
   },
@@ -422,9 +513,10 @@ export const pf2eRules = {
 
   /**
    * What the situation is worth. The engine reports the facts; these are PF2e's numbers:
-   * off-guard -2 AC; frightened and sickened (the worse) to checks and DCs; clumsy to AC and Reflex; enfeebled to
-   * melee attacks; prone -2 to attack; -2 to melee underwater without a swim speed; -2 per range increment; fascinated
-   * -2 to its skill checks.
+   * off-guard -2 AC; the status penalties (statusPenalty: frightened and sickened to checks and DCs, clumsy to AC,
+   * Reflex and ranged attacks, enfeebled to melee attacks, stupefied to Will and spell attacks, drained to Fortitude,
+   * fascinated to skill checks; the worst of them) as far as its own numbers don't have them already; prone -2 to
+   * attack; -2 to melee underwater without a swim speed; -2 per range increment.
    */
   modifiers: {
     exposed(ctx) {
@@ -435,15 +527,18 @@ export const pf2eRules = {
       return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (ctx.attacker && holderId(ctx.attacker) === t.id));
     },
     defense(ctx) {
+      // (Off guard on its sheet already: its AC has the -2.)
       const t = ctx.target;
-      return -(this.exposed(ctx) ? 2 : 0) - (t.conds.clumsy ?? 0) - statusPenalty(t) + coverBonus(ctx.cover);
+      return (sheetOffGuard(t) ? 2 : 0) - (this.exposed(ctx) ? 2 : 0) - statusPenalty(t, "dex") + coverBonus(ctx.cover);
     },
     attack(ctx) {
       const { attacker, action } = ctx;
       let bonus = 0;
+      // (Prone on its sheet already: its Strikes have the -2.)
       if ( attacker.prone ) bonus -= 2;
-      bonus -= statusPenalty(attacker);
-      if ( action?.melee ) bonus -= attacker.conds.enfeebled ?? 0;
+      if ( Number(attacker.spec?.conditions?.prone) > 0 ) bonus += 2;
+      // (A spell attack the mind's, a melee Strike Strength's, a ranged one Dexterity's.)
+      bonus -= statusPenalty(attacker, action?.spellId ? "mind" : action?.melee ? "str" : "dex");
       if ( action?.melee && attacker.spec.environment?.aquatic && !(attacker.spec.speeds?.swim > 0) ) bonus -= 2;
       if ( action?.range && !action.range.noPenalty && ctx.positioning ) {
         bonus -= 2 * Math.max(0, Math.ceil(ctx.distance / action.range.increment) - 1);
@@ -451,12 +546,13 @@ export const pf2eRules = {
       return { bonus, advantage: 0 };
     },
     save({ unit, type, cover }) {
-      let bonus = -statusPenalty(unit);
-      if ( type === "reflex" ) bonus -= (unit.conds.clumsy ?? 0) - coverBonus(cover);
+      let bonus = 0 - statusPenalty(unit, SAVE_ON[type]);
+      if ( type === "reflex" ) bonus += coverBonus(cover);
       return { bonus, advantage: 0 };
     },
+    /** A skill check (the core doesn't say which): frightened, sickened and fascinated, the worst. */
     check({ unit } = {}) {
-      return { bonus: unit?.conds?.fascinated ? -2 : 0, advantage: 0 };
+      return { bonus: unit ? 0 - statusPenalty(unit, "skill") : 0, advantage: 0 };
     },
     /** Steal in combat: -5 to the Thievery check. */
     steal() {
@@ -464,8 +560,8 @@ export const pf2eRules = {
     },
     actionsLost(u) {
       if ( u.conds.paralyzed || u.conds.fleeing ) return 99; // fleeing spends every action getting away
-      // (Inside a gullet: slowed 1.)
-      return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0) + (u.conds.stunned ?? 0);
+      // (Inside a gullet: slowed 1. Quickened: an action more.)
+      return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0) + (u.conds.stunned ?? 0) - (Number(u.conds.quickened) > 0 ? 1 : 0);
     }
   },
 
@@ -517,8 +613,12 @@ export const pf2eRules = {
     return (c.spec?.dyingMax ?? 4) - (c.doomed ?? 0);
   },
 
-  /** Ferocity that kept it up, said once the blow is done (the core's line for staying up at 1 hit point). */
+  /**
+   * Ferocity that kept it up, said once the blow is done (the core's line for staying up at 1 hit point); and drained
+   * by it (a draining blow, a poison's stage), the Hit Points that costs (drain).
+   */
   afterHarm(run, u) {
+    if ( u.status === STATUS.STANDING ) drain(run, u);
     if ( !u.ferocityNote ) return null;
     const label = u.ferocityNote;
     u.ferocityNote = null;
@@ -618,7 +718,7 @@ export const pf2eRules = {
   stopBleeding(run, who, held, hold) {
     const base = Number(who.spec?.firstAid?.mod);
     if ( !Number.isFinite(base) || !held ) return { success: false };
-    const mod = base - statusPenalty(who);
+    const mod = base - statusPenalty(who, "mind", "skill");
     const { natural, total, degree } = this.roll(run.rng, mod, hold.dc);
     const flat = degree >= 2 ? run.rng.d20() : null;
     const success = flat !== null && flat >= APPROPRIATE_DC;

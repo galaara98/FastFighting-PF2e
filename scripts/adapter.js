@@ -251,6 +251,11 @@ const SENSES = Object.freeze({
   scent: "smell"
 });
 const NOT_SENSES = new Set(["vision", "low-light-vision", "see-invisibility"]);
+/** The senses that see (dazzled clouds them all). */
+const SIGHTS = new Set([...NOT_SENSES, "darkvision", "greater-darkvision", "infrared-vision", "truesight"]);
+
+/** Has it a precise sense besides sight (so dazzled doesn't conceal everything from it: rules.js flatCheckDC)? */
+export const otherPrecise = senses => Array.from(senses ?? []).some(s => s?.acuity === "precise" && !SIGHTS.has(String(s?.type ?? "")));
 
 export class Pf2eAdapter extends SystemAdapter {
   /** Building a summoned creature (which doesn't summon in turn). */
@@ -383,6 +388,7 @@ export class Pf2eAdapter extends SystemAdapter {
       persistent: this.#persistent(actor),
       perception: actor.perception?.mod ?? actor.initiative?.mod ?? 0,
       senses: this.#senses(actor),
+      otherPrecise: otherPrecise(actor.perception?.senses) || undefined,
       fateLabel: game.i18n.localize("FFPF2E.HeroPoints"),
       // Administer First Aid needs training in Medicine (and a healer's toolkit, which trained characters carry).
       firstAid: actor.skills?.medicine?.proficient ? { mod: actor.skills.medicine.mod } : null,
