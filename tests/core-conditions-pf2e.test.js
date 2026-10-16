@@ -16,3 +16,14 @@ describe("the core's conditions, in PF2e's terms", () => {
     expect(pf2eRules.modifiers.check({ unit: { conds: {} } }).bonus).toBe(0);
   });
 });
+
+describe("cover from the walls, PF2e's", () => {
+  test("standard cover (some of it hidden) +2 to AC and Reflex, greater (most) +4; the core's own none", () => {
+    expect(pf2eRules.handlesCover).toBe(true);
+    const t = { conds: {}, prone: false };
+    const ac = cover => pf2eRules.modifiers.defense({ target: t, cover, grabbed: false, flanked: false, exposedTo: false });
+    expect([ac("none"), ac("some"), ac("most")]).toEqual([0, 2, 4]);
+    expect(pf2eRules.modifiers.save({ unit: t, type: "reflex", cover: "most" }).bonus).toBe(4);
+    expect(pf2eRules.modifiers.save({ unit: t, type: "will", cover: "most" }).bonus).toBeCloseTo(0);
+  });
+});

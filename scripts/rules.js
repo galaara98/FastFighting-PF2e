@@ -24,6 +24,12 @@ const CONDITION_IMMUNITY = {
   stunned: "stunned", frightened: "frightened", sickened: "sickened", clumsy: "clumsy", enfeebled: "enfeebled", fleeing: "fleeing", prone: "prone"
 };
 
+/**
+ * Cover from the walls (the core's: some of the target hidden, most of it): standard cover, +2 to AC and Reflex; greater
+ * cover, +4.
+ */
+const coverBonus = cover => (cover === "some" ? 2 : cover === "most" || cover === "total" ? 4 : 0);
+
 /** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
 const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
 
@@ -149,6 +155,9 @@ export const pf2eRules = {
     if ( degree >= 2 && hold.key === "grabbed" && hold.byId ) who.effects = (who.effects ?? []).filter(e => !grabbing(e, hold.byId));
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
+
+  /** Cover is PF2e's (standard, greater: coverBonus), not the core's. */
+  handlesCover: true,
 
   /** A fall: bludgeoning damage of half the distance in feet; landing from it, prone. */
   fallDamage(feet) {
@@ -312,7 +321,7 @@ export const pf2eRules = {
     },
     defense(ctx) {
       const t = ctx.target;
-      return -(this.exposed(ctx) ? 2 : 0) - (t.conds.clumsy ?? 0) - statusPenalty(t);
+      return -(this.exposed(ctx) ? 2 : 0) - (t.conds.clumsy ?? 0) - statusPenalty(t) + coverBonus(ctx.cover);
     },
     attack(ctx) {
       const { attacker, action } = ctx;
@@ -326,9 +335,9 @@ export const pf2eRules = {
       }
       return { bonus, advantage: 0 };
     },
-    save({ unit, type }) {
+    save({ unit, type, cover }) {
       let bonus = -statusPenalty(unit);
-      if ( type === "reflex" ) bonus -= unit.conds.clumsy ?? 0;
+      if ( type === "reflex" ) bonus -= (unit.conds.clumsy ?? 0) - coverBonus(cover);
       return { bonus, advantage: 0 };
     },
     check({ unit } = {}) {
