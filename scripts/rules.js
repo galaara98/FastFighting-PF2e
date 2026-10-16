@@ -7,8 +7,8 @@ import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
 import { ASSISTED, APPROPRIATE_DC, SICK_ANNOYANCE, sickDC, bleedDC, lower } from "./remedies.js";
 
-/** A friend's bleed, as a hold a friend breaks (Administer First Aid). */
-const BLEED = "persistent:bleed";
+/** A friend's persistent bleed, as a hold a friend breaks (Administer First Aid): the core's bleeding, as the story tells it. */
+const BLEED = "bleeding";
 
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);

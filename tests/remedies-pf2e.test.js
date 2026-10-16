@@ -78,10 +78,10 @@ describe("Administer First Aid on a friend's bleed", () => {
     const run = fight([creature("hero", "friendly", 0), creature("medic", "friendly", 5, { firstAid: { mod: 12 } }), creature("ally", "friendly", 10), creature("orc", "hostile", 40, { level: 4 })]);
     const [hero, medic, ally] = ["hero", "medic", "ally"].map(id => run.byId.get(id));
     hero.persistent = [bleed()];
-    const hold = holdsOf(run, hero).find(h => h.key === "persistent:bleed");
+    const hold = holdsOf(run, hero).find(h => h.key === "bleeding");
     expect(hold).toMatchObject({ others: "check", via: "medicine", friendOnly: true, dc: 19, byId: "orc" });
     expect(bleedDC(run, hero, hero.persistent[0])).toBe(19);
-    expect(ownHolds(run, hero).some(h => h.key === "persistent:bleed")).toBe(false);
+    expect(ownHolds(run, hero).some(h => h.key === "bleeding")).toBe(false);
     expect(freeable(run, hero)).toEqual(hold);
     expect(untieCost(pf2eRules, medic, hero, hold)).toEqual({ actions: 2 });
     expect(untieCost(pf2eRules, ally, hero, hold)).toEqual({ actions: Infinity });
@@ -98,7 +98,7 @@ describe("Administer First Aid on a friend's bleed", () => {
     hero.persistent = [bleed("2d6")];
     turnUpkeep(run, medic);
     takeTurn(run, medic);
-    expect(run.log.find(e => e.actorId === "medic" && e.type === "free")).toMatchObject({ targetId: "hero", hold: "persistent:bleed" });
+    expect(run.log.find(e => e.actorId === "medic" && e.type === "free")).toMatchObject({ targetId: "hero", hold: "bleeding" });
   });
 
   test("a failed check, or a failed flat check: still bleeding; and the bleeder can't treat itself this way", () => {
