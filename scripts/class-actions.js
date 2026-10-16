@@ -86,7 +86,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
     if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? named("vicious-swing") : named("power-attack")} (${swing.name})`, cost: 2, attacks: 2,
       damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, ...doubled([extra])] : null, classAction: "vicious-swing" });
   }
-  // Double Slice: a Strike with each of two melee weapons, both at the current penalty.
+  // Double Slice: a Strike with each of two melee weapons, both at the current penalty (one in each hand: both hands).
   if ( has("double-slice") ) {
     const weapons = [];
     for ( const s of [...melee].filter(x => !x.traits?.includes("unarmed")).sort((a, b) => score(b) - score(a)) ) {
@@ -95,6 +95,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
     }
     if ( weapons.length === 2 ) {
       out.push({ ...weapons[0], id: `${actorId}.double-slice`, name: named("double-slice"), cost: 2, reach: Math.min(weapons[0].reach ?? 5, weapons[1].reach ?? 5),
+        hands: weapons.reduce((n, w) => n + Math.max(1, Number(w.hands) || 0), 0),
         sequence: weapons.map((w, i) => ({ ...w, id: `${actorId}.double-slice.${i}` })), sameMap: true, classAction: "double-slice" });
     }
   }

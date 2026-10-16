@@ -3,6 +3,7 @@
  */
 import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize } from "./core.js";
 import { t } from "./words.js";
+import { levelDC, sheetHold } from "./holds.js";
 
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
@@ -87,6 +88,60 @@ export const pf2eRules = {
   disengage() {
     return { cost: { actions: 1 }, label: t("StepsAway") };
   },
+
+  /** Every action says how many free hands it needs (`hands`, hands.js): what a creature with its hands tied can still do. */
+  handsKnown: true,
+
+  /**
+   * Tied up is restrained: no action with the attack trait (a Strike, a spell attack), hands or not. (Escape is the
+   * core's own, never an action of the creature's.)
+   */
+  tiedBars(action) {
+    return (action?.traits ?? []).includes("attack") || (Number.isFinite(action?.bonus) && !action?.save);
+  },
+
+  /** A grab keeps its creature off guard and in place; broken free of it, neither (core holds.js release). */
+  holdBrings(key) {
+    return key === "grabbed" || key === "restrained" ? ["offGuard", "immobilized"] : [];
+  },
+
+  /**
+   * Breaking free (holds.js): Escape, against what holds it. A grab its sheet shows, or a restraint, at the GM Core's
+   * DC for its level (the sheet doesn't say who's holding it), and with it go the off-guard and immobilized it brought;
+   * a grab the fight knows of, against the grabber's Athletics DC (spec.escapeDC). A friend can't Escape for it.
+   */
+  escapeFrom(run, u, key) {
+    return sheetHold(u, key);
+  },
+  /**
+   * FastFighting's improvised bonds (rope, a strap): the Thievery DC of whoever tied them, the rules' DC for bonds
+   * (breakFree finds it); tied by no one the fight knows, the GM Core's DC for the prisoner's level.
+   */
+  bondsDC(u) {
+    return levelDC(u.spec?.level ?? 0);
+  },
+  /** Escape takes one action; after a critical failure there's none to spend on it until its next turn. */
+  escapeCost(u) {
+    return u.escapeBarred === (u.turnsTaken ?? 0) ? { actions: Infinity } : { actions: 1 };
+  },
+  /**
+   * An Escape: its best way out (spec.escapeWork) against the hold's DC (bonds against the Thievery DC of whoever tied
+   * them, spec.tiesDC, where the fight knows who), less what frightens or sickens it. A critical failure bars another
+   * try this turn. Null for the core's way: freeing a friend (untying it: an Interact action, no roll), or nothing to
+   * roll with.
+   */
+  breakFree(run, who, hold, { freeing = false } = {}) {
+    if ( freeing ) return null;
+    const work = who.spec?.escapeWork;
+    const binder = hold.key === "bound" && hold.byId ? run.byId?.get(hold.byId) : null;
+    const dc = Number.isFinite(binder?.spec?.tiesDC) ? binder.spec.tiesDC : hold.dc;
+    if ( !Number.isFinite(work?.mod) || !Number.isFinite(dc) ) return null;
+    const mod = work.mod - statusPenalty(who);
+    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
+    return { success: degree >= 2, degree, natural, mod, total, dc };
+  },
+
   /** A wooden door (Hardness 5, 20 HP), a simple lock (DC 20 to Force Open or Pick a Lock). */
   door: { ac: 10, hp: 20, hardness: 5, forceDC: 20, pickDC: 20 },
   /** Opening a door is an Interact action; Force Open one action; Pick a Lock two. */

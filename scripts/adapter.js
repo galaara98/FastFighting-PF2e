@@ -8,7 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
@@ -17,6 +17,8 @@ import { t, actionName, traitName, featureName, conditionLabel, coin, englishNam
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
+import { escapeOf } from "./holds.js";
+import { strikeHands, traitHands } from "./hands.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -87,11 +89,6 @@ async function linkedEffect(uuid) {
 }
 /** PF2e conditions the engine keeps elsewhere (its own numbers and its persistent damage), not as conditions. */
 const NOT_CONDITIONS = new Set(["dying", "wounded", "doomed", "persistent-damage"]);
-/**
- * What a PF2e condition also means to the engine (each condition is read as its own key too): grabbed and restrained
- * hold it in place, off guard; unconscious, unable to act and off guard; paralyzed, off guard.
- */
-const IMPLIES = Object.freeze({ grabbed: ["offGuard", "immobilized"], restrained: ["offGuard", "immobilized"], unconscious: ["incapacitated", "offGuard"], paralyzed: ["offGuard"] });
 
 /** What a character calls its feats, features and actions, by slug (a translated compendium's names). */
 function ownNames(actor) {
@@ -271,6 +268,8 @@ export class Pf2eAdapter extends SystemAdapter {
       ...this.#skillActions(actor, traits, martial.strikes)
     ];
     actions.push(...own(await this.#abilities(actor, actions)));
+    // The free hands each needs (hands.js): what hasn't said already (a Strike by its weapon's grip), by its traits.
+    for ( const a of actions ) a.hands ??= traitHands(a.traits);
 
     const speeds = {};
     for ( const [key, value] of Object.entries(sys.movement?.speeds ?? {}) ) {
@@ -356,6 +355,9 @@ export class Pf2eAdapter extends SystemAdapter {
       },
       // Sizing a foe up (a Lore-Collector): Recall Knowledge, with its best knowledge skill.
       sizeUp: this.#recallKnowledge(actor, traits),
+      // Breaking free (holds.js): its best way out (escapeWork), and how hard its own grab (escapeDC, Athletics) and its
+      // knots (tiesDC, Thievery) are to break. (A hazard doesn't struggle.)
+      ...(hazard ? {} : escapeOf(actor)),
       creatureTraits: traits,
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
@@ -560,6 +562,8 @@ export class Pf2eAdapter extends SystemAdapter {
         storyType: storyLook(traits, item?.system?.group ?? null, damage),
         // (A weapon in hand, one that can be knocked away: a character's weapon, or a creature's that has one.)
         held: ["simple", "martial", "advanced"].includes(item?.category) || undefined,
+        // The free hands it takes (hands.js): its grip; a fist one, jaws none.
+        hands: strikeHands(item),
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
       };
       out.push(strike);
@@ -713,12 +717,14 @@ export class Pf2eAdapter extends SystemAdapter {
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
         const isHeal = kinds.has?.("healing") && traits.includes("healing");
+        // (A hand for one cast with gestures: the manipulate trait, or a somatic or material component before the remaster.)
+        const hands = traitHands(traits, spell.system.components);
         if ( summon ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, ...summon });
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, ...summon });
           continue;
         }
         if ( support ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, ...support });
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, ...support });
           continue;
         }
 
@@ -734,7 +740,7 @@ export class Pf2eAdapter extends SystemAdapter {
           const feet = variable ? 30 : rangeFeet;
           const reach = touch ? { reach: 5 } : feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {};
           out.push({
-            id, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank,
+            id, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, hands,
             targetTrait: animalOnly ? "animal" : null, ...reach, ...(selfOnlySpell(spell.system) ? { selfOnly: true } : {})
           });
           continue;
@@ -742,7 +748,7 @@ export class Pf2eAdapter extends SystemAdapter {
         const defense = spell.system.defense;
         if ( control ) {
           const action = {
-            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits,
+            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands,
             melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
           };
           if ( defense?.save ) {
@@ -763,7 +769,7 @@ export class Pf2eAdapter extends SystemAdapter {
         if ( !kinds.has?.("damage") ) continue;
         const action = {
           id, name: spell.name, cost, damage: parts, resource, pool, uses,
-          spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, storyType: storyLook(traits, null, parts),
+          spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
           melee: false,
           range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
         };
@@ -1007,9 +1013,9 @@ export class Pf2eAdapter extends SystemAdapter {
     const out = [];
     const near = { melee: false, range: { increment: 30, max: 30, noPenalty: true } };
     // Aid: for a friend's next roll at whoever it's set on (edges.js); for one that can tell a friend what it means to
-    // do (a language: not a wolf).
+    // do (a language: not a wolf). (Helping with Medicine takes a hand, as tending does; with words, none.)
     const aid = !(actor.system.details?.languages?.value ?? []).length ? null : aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
-      skills: ["diplomacy", "medicine", "intimidation", "deception"].map(skill).filter(Boolean).map(s => ({ mod: s.mod, rank: s.rank ?? 0 })) });
+      skills: ["diplomacy", "medicine", "intimidation", "deception"].filter(skill).map(slug => ({ mod: skill(slug).mod, rank: skill(slug).rank ?? 0, hands: slug === "medicine" ? 1 : 0 })) });
     if ( aid ) out.push(aid);
     const intimidation = skill("intimidation");
     if ( intimidation ) {
@@ -1019,19 +1025,19 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( trained("athletics") ) {
       const prone = { conditions: { prone: 1 }, rounds: 1, label: conditionLabel("prone") };
-      // (Only a creature at most one size larger.)
-      out.push({ id: `${actor.id}.trip`, name: actionName("Trip"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+      // (Only a creature at most one size larger; Trip, Grapple and Disarm each need a free hand.)
+      out.push({ id: `${actor.id}.trip`, name: actionName("Trip"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
       // Grapple (Athletics against Fortitude, an attack): grabbed until the end of its next turn, restrained on a
       // critical success; a critical failure puts you on the ground.
       const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: conditionLabel("grabbed") };
-      out.push({ id: `${actor.id}.grapple`, name: actionName("Grapple"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+      out.push({ id: `${actor.id}.grapple`, name: actionName("Grapple"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
         check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: conditionLabel("restrained") }] });
       // Disarm (Athletics against Reflex, an attack; a foe with a weapon in hand, no more than one size larger): -2 to
       // its attacks with it until its next turn; on a critical success it drops it (an action gone picking it up). A
       // critical failure leaves you off-guard.
       const loosened = { mods: { attack: -2 }, rounds: 1, label: t("Loosened") };
-      out.push({ id: `${actor.id}.disarm`, name: actionName("Disarm"), kind: "control", cost: 1, traits: ["attack"], melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1, disarm: true,
+      out.push({ id: `${actor.id}.disarm`, name: actionName("Disarm"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1, disarm: true,
         check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true },
         onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, loosened, { mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }] });
     }
@@ -1064,7 +1070,8 @@ export class Pf2eAdapter extends SystemAdapter {
         resource: `item:${item.id}`,
         pool: quantity,
         selfOnly: true,
-        itemId: item.id
+        itemId: item.id,
+        hands: 1 // (drinking it, or applying it, is an Interact action)
       });
     }
     return out;
@@ -1084,7 +1091,8 @@ export class Pf2eAdapter extends SystemAdapter {
         heal: [{ dice: [{ n: 2, faces: 8, mult: 1 }], flat: bonus, type: "healing", persistent: false, category: null }],
         healCheck: { mod: medicine.mod, dc },
         oncePerTarget: true,
-        reach: 5 // yourself or an adjacent creature
+        reach: 5, // yourself or an adjacent creature
+        hands: 1 // (manipulate, with a healer's toolkit)
       });
     }
     return out;
