@@ -19,7 +19,7 @@ import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
-import { skillManeuvers } from "./maneuvers.js";
+import { skillManeuvers, strikeMove } from "./maneuvers.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -188,6 +188,45 @@ export function ferocityOf(items, level) {
     untilWounded: slugOf(item) === "ferocity" ? 3 : null,
     temp: list.some(i => slugOf(i) === "undying-ferocity") ? Math.max(0, Number(level) || 0) : 0
   };
+}
+
+/** Is it trained in a skill (by slug): its rank, or for a creature, a skill its stat block lists. */
+function trainedIn(actor, slug) {
+  const skill = actor?.skills?.[slug];
+  return !!skill && ((skill.rank ?? 0) >= 1 || (actor.type === "npc" && !!actor.system?.skills?.[slug]));
+}
+
+/** Its Acrobatics, for Tumble Through (rules.passThrough): {mod}, for one trained in it; undefined otherwise. */
+export function acrobaticsOf(actor) {
+  return trainedIn(actor, "acrobatics") ? { mod: Number(actor.skills.acrobatics.mod) || 0 } : undefined;
+}
+
+/**
+ * What a Strike carries beyond its damage, by the attack effects it lists (their slugs): a poison, disease or curse of
+ * the creature's (afflictions.js), Knockdown and Trip (prone), Grab, and Push or Pull (maneuvers.js strikeMove). Each
+ * as the core plays a hit's rider.
+ */
+export function attackEffects(actor, item) {
+  const effects = [];
+  const items = [...(actor?.items ?? [])];
+  for ( const slug of item?.system?.attackEffects?.value ?? [] ) {
+    const source = items.find(i => slugOf(i) === slug);
+    const traits = source?.system?.traits?.value ?? [];
+    const moved = strikeMove(slug, englishName(source));
+    if ( source && traits.some(t => AFFLICTION_TRAITS.has(t)) ) {
+      const parsed = parseAffliction({
+        id: `${actor.id}.${slug}`,
+        name: source.name,
+        slug,
+        description: englishDescription(source),
+        traits
+      });
+      if ( parsed ) effects.push(parsed);
+    } else if ( PRONE_EFFECTS.has(slug) ) effects.push({ kind: "prone" });
+    else if ( GRAB_EFFECTS.has(slug) ) effects.push({ kind: "grabbed" });
+    else if ( moved ) effects.push(moved);
+  }
+  return effects;
 }
 
 /** Elements that show in the story (an attack's trait, by slug), and the damage they may be told over: a plain blow. */
@@ -359,6 +398,8 @@ export class Pf2eAdapter extends SystemAdapter {
       // Breaking free (holds.js): its best way out (escapeWork), and how hard its own grab (escapeDC, Athletics) and its
       // knots (tiesDC, Thievery) are to break. (A hazard doesn't struggle.)
       ...(hazard ? {} : escapeOf(actor)),
+      // Getting past a foe on the way: Tumble Through, for those trained in Acrobatics (rules.passThrough).
+      acrobatics: hazard ? undefined : acrobaticsOf(actor),
       creatureTraits: traits,
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
@@ -519,7 +560,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const normal = await formula();
       const crit = await formula([], true);
       const damage = normal ? parseTypedFormula(normal) : [];
-      const effects = this.#attackEffects(actor, item);
+      const effects = attackEffects(actor, item);
       if ( !damage.length && !effects.length ) continue;
       const traits = item?.system?.traits?.value ?? [];
       const ranged = !!item?.isRanged;
@@ -615,26 +656,6 @@ export class Pf2eAdapter extends SystemAdapter {
       console.warn(`fast-fighting-pf2e | could not read ${actor.name}'s Elemental Blast`, err);
     }
     return out.filter(a => a.damage.length);
-  }
-
-  #attackEffects(actor, item) {
-    const effects = [];
-    for ( const slug of item?.system?.attackEffects?.value ?? [] ) {
-      const source = actor.items.find(i => slugOf(i) === slug);
-      const traits = source?.system?.traits?.value ?? [];
-      if ( source && traits.some(t => AFFLICTION_TRAITS.has(t)) ) {
-        const parsed = parseAffliction({
-          id: `${actor.id}.${slug}`,
-          name: source.name,
-          slug,
-          description: englishDescription(source),
-          traits
-        });
-        if ( parsed ) effects.push(parsed);
-      } else if ( PRONE_EFFECTS.has(slug) ) effects.push({ kind: "prone" });
-      else if ( GRAB_EFFECTS.has(slug) ) effects.push({ kind: "grabbed" });
-    }
-    return effects;
   }
 
   /** Dice from an ability's description, e.g. Pack Attack "an extra 1d4 damage". */
@@ -1011,7 +1032,7 @@ export class Pf2eAdapter extends SystemAdapter {
   #skillActions(actor, traits, strikes = []) {
     if ( traits.includes("mindless") ) return [];
     const skill = slug => actor.skills?.[slug] ?? null;
-    const trained = slug => !!skill(slug) && ((skill(slug).rank ?? 0) >= 1 || (actor.type === "npc" && !!actor.system.skills?.[slug]));
+    const trained = slug => trainedIn(actor, slug);
     const out = [];
     const near = { melee: false, range: { increment: 30, max: 30, noPenalty: true } };
     // Aid: for a friend's next roll at whoever it's set on (edges.js); for one that can tell a friend what it means to

@@ -2,7 +2,8 @@
  * PF2e's maneuvers as the core plays them (maneuvers.js, the core's engine/maneuvers.js): each names its maneuver and
  * gives PF2e's outcomes by degree; a Shove or a Reposition by a drop sends the foe over it, and the fall is PF2e's
  * (half the distance in bludgeoning damage, prone); a Grapple grabs, and on a critical success restrains as well, both
- * broken by one Escape.
+ * broken by one Escape; botched, the foe grabs you, and a botched Reposition has the foe move you. A creature's Push
+ * (or Pull) on a Strike, by the attack effect's slug, the distance its name lists: shoved on the hit.
  */
 import { describe, expect, test } from "vitest";
 import { beginRun, beginRound, takeTurn, prepareBattle, endOfTurn } from "../../fast-fighting/scripts/engine/simulator.js";
@@ -12,7 +13,8 @@ import { applyOutcome } from "../../fast-fighting/scripts/engine/behavior/effect
 import { controlValue } from "../../fast-fighting/scripts/engine/behavior/control.js";
 import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
-import { skillManeuvers } from "../scripts/maneuvers.js";
+import { skillManeuvers, strikeMove } from "../scripts/maneuvers.js";
+import { attackEffects } from "../scripts/adapter.js";
 
 const all = (over = {}) => Object.fromEntries(skillManeuvers({ actorId: "a", maxSize: 3, athletics: 10, deception: 8, intimidation: 6, ...over }).map(a => [a.maneuver, a]));
 const move = o => o?.move ?? null;
@@ -44,22 +46,25 @@ describe("PF2e's maneuvers, by degree (critical failure, failure, success, criti
     expect([onHit[2].move, onHit[3].move, onHit[0].conditions]).toEqual([MANEUVERS.shove.success.move, MANEUVERS.shove.crit.move, MANEUVERS.shove.critFail.conditions]);
   });
 
-  test("Reposition: moved 5 feet within your reach, 10 on a critical success; a critical failure does nothing here", () => {
-    expect(all().reposition.onHit.map(move)).toEqual([null, null, { kind: "place", feet: 5 }, { kind: "place", feet: 10 }]);
-    expect(all().reposition.onHit[0]).toBeNull();
+  test("Reposition: moved 5 feet within your reach, 10 on a critical success; a critical failure, it moves you 5", () => {
+    expect(all().reposition.onHit.map(move)).toEqual([{ kind: "place", feet: 5 }, null, { kind: "place", feet: 5 }, { kind: "place", feet: 10 }]);
+    expect(all().reposition.onHit.map(o => !!o?.self)).toEqual([true, false, false, false]);
   });
 
-  test("Trip: prone; a critical failure, you are", () => {
+  test("Trip: prone, and 1d6 bludgeoning on a critical success only; a critical failure, you are", () => {
     const { onHit } = all().trip;
     expect(onHit.map(o => o?.conditions ?? null)).toEqual([{ prone: 1 }, null, { prone: 1 }, { prone: 1 }]);
     expect(onHit.map(o => !!o?.self)).toEqual([true, false, false, false]);
+    expect(onHit[3].damage).toEqual([parseFormula("1d6", "bludgeoning")]);
+    expect([onHit[0].damage, onHit[2].damage]).toEqual([undefined, undefined]);
   });
 
-  test("Grapple: grabbed, restrained on a critical success, for a round; a critical failure, you fall", () => {
+  test("Grapple: grabbed, restrained on a critical success, for a round; a critical failure, the foe grabs you", () => {
     const { onHit } = all().grapple;
     expect(onHit[2]).toMatchObject({ grab: true, conditions: { grabbed: 1 }, rounds: 1 });
     expect(onHit[3]).toMatchObject({ grab: true, conditions: { restrained: 1 }, rounds: 1 });
-    expect(onHit[0]).toMatchObject({ self: true, conditions: { prone: 1 } });
+    expect(onHit[0]).toMatchObject({ self: true, grab: true });
+    expect(onHit[0].conditions).toBeUndefined();
     expect(onHit[1]).toBeNull();
   });
 
@@ -86,6 +91,35 @@ describe("PF2e's maneuvers, by degree (critical failure, failure, success, criti
   test("only what it can: untrained in Athletics or Deception, none of theirs; no Intimidation at all, no Demoralize", () => {
     expect(Object.keys(all({ athletics: null, deception: null }))).toEqual(["demoralize"]);
     expect(Object.keys(all({ intimidation: null, deception: null }))).toEqual(["trip", "grapple", "disarm", "shove", "reposition"]);
+  });
+});
+
+describe("a creature's Push or Pull on a Strike, by slug", () => {
+  const pushed = (feet, kind = "push") => ({ kind: "move", move: { kind, feet } });
+
+  test("Push and Improved Push: 5 feet, or as far as its slug or its name lists; Push or Pull, a push; Pull, toward it", () => {
+    expect(strikeMove("push")).toEqual(pushed(5));
+    expect(strikeMove("improved-push", "Improved Push 20 feet")).toEqual(pushed(20));
+    expect(strikeMove("push-15-feet", "Push 15 feet")).toEqual(pushed(15));
+    expect(strikeMove("improved-push-10-feet")).toEqual(pushed(10));
+    expect(strikeMove("push-or-pull-10-feet")).toEqual(pushed(10));
+    expect(strikeMove("push-or-pull", "Push or Pull 5 feet")).toEqual(pushed(5));
+    expect(strikeMove("pull", "Pull 10 feet")).toEqual(pushed(10, "pull"));
+    // (However the books write the distance in the name.)
+    for ( const name of ["Push 10ft", "Push (10 feet)", "Push 10 Feet", "Improved Push (10 Feet)"] ) expect(strikeMove("push", name)).toEqual(pushed(10));
+  });
+
+  test("nothing else: Knockdown, Grab, a creature's own Tongue Pull", () => {
+    for ( const slug of ["knockdown", "grab", "tongue-pull", "pushy", "", null] ) expect(strikeMove(slug, "Push 10 feet")).toBeNull();
+  });
+
+  test("a Strike's attack effects: the distance from the ability's English name (a translated compendium's original), 5 feet with no ability", () => {
+    const item = (slug, name, extra = {}) => ({ name, system: { slug }, ...extra });
+    const actor = { id: "a", items: [item("push", "Push 10 feet"), item("improved-push", "Poussée améliorée 6 m", { flags: { babele: { originalName: "Improved Push 20 feet" } } })] };
+    const strike = list => ({ system: { attackEffects: { value: list } } });
+    expect(attackEffects(actor, strike(["push", "improved-grab", "knockdown"]))).toEqual([pushed(10), { kind: "grabbed" }, { kind: "prone" }]);
+    expect(attackEffects(actor, strike(["improved-push"]))).toEqual([pushed(20)]);
+    expect(attackEffects({ id: "b", items: [] }, strike(["improved-push"]))).toEqual([pushed(5)]);
   });
 });
 
@@ -165,5 +199,40 @@ describe("PF2e's maneuvers in a fight", () => {
     endOfTurn(run, orc);
     expect(orc.conds.grabbed).toBeUndefined();
     expect(controlValue(run, hero, grapple, orc)).toBeGreaterThan(0);
+  });
+
+  test("a Trip done well: prone, and the 1d6 bludgeoning as it lands", () => {
+    const run = fight([unit("hero", "friendly", 0, { actions: [only("trip")] }), unit("orc", "hostile", 5, { traits: minded(40) })]);
+    const orc = run.byId.get("orc");
+    takeTurn(run, run.byId.get("hero"));
+    const trips = run.log.filter(e => e.type === "control" && e.actorId === "hero");
+    expect(trips[0]).toMatchObject({ maneuver: "trip", degree: 3 });
+    for ( const trip of trips ) {
+      expect(trip.damage).toBeGreaterThanOrEqual(1);
+      expect(trip.damage).toBeLessThanOrEqual(6);
+    }
+    expect(orc.prone).toBe(true);
+    expect(orc.hp).toBe(60 - trips.reduce((s, e) => s + e.damage, 0));
+  });
+
+  test("botched: a Grapple leaves the foe holding you; a Reposition has it move you", () => {
+    const botch = id => skillManeuvers({ actorId: "hero", maxSize: 3, athletics: -60 }).find(a => a.maneuver === id);
+    const run = fight([unit("hero", "friendly", 0, { actions: [botch("grapple")] }), unit("orc", "hostile", 5, { traits: minded(40) })]);
+    const hero = run.byId.get("hero");
+    takeTurn(run, hero);
+    expect(run.log.find(e => e.type === "control" && e.actorId === "hero")).toMatchObject({ maneuver: "grapple", degree: 0, backfired: true });
+    expect(hero.grabbedBy).toBe("orc");
+    const moved = fight([unit("hero", "friendly", 0, { actions: [botch("reposition")] }), unit("orc", "hostile", 5, { traits: minded(40) })]);
+    takeTurn(moved, moved.byId.get("hero"));
+    expect(moved.log.find(e => e.type === "control" && e.actorId === "hero")).toMatchObject({ maneuver: "reposition", degree: 0, backfired: true });
+    expect(moved.log.find(e => e.type === "forced")).toMatchObject({ how: "place", actorId: "orc", targetId: "hero" });
+  });
+
+  test("a creature's Push 10 feet: the hit shoves its foe back 10 feet", () => {
+    const fists = { ...fist(), bonus: 60, effects: [strikeMove("push", "Push 10 feet")] };
+    const run = fight([unit("hero", "friendly", 0, { hp: { value: 300, max: 300 } }), unit("brute", "hostile", 5, { actions: [fists] })]);
+    takeTurn(run, run.byId.get("brute"));
+    expect(run.log.find(e => e.type === "attack" && e.actorId === "brute")).toBeTruthy();
+    expect(run.log.find(e => e.type === "forced")).toMatchObject({ how: "push", feet: 10, actorId: "brute", targetId: "hero", from: { x: 0, y: 0 }, to: { x: -10, y: 0 } });
   });
 });

@@ -33,6 +33,11 @@ const coverBonus = cover => (cover === "some" ? 2 : cover === "most" || cover ==
 /** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
 const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
 
+/** Its Acrobatics for a tumble (spec.acrobatics), less what frightens or sickens it and its clumsiness (Dexterity's). */
+const tumbleMod = u => (Number(u.spec?.acrobatics?.mod) || 0) - statusPenalty(u) - (u.conds.clumsy ?? 0);
+/** Its Reflex DC: 10 + its Reflex, less the same. */
+const reflexDC = o => 10 + (Number(o.spec?.defenses?.reflex) || 0) - statusPenalty(o) - (o.conds.clumsy ?? 0);
+
 /** What a creature's grab laid on its bearer (its Grapple, the GM's grab): grabbed or restrained, from it (or anyone). */
 const grabbing = (e, id = null) => !!e.sourceId && (id === null || e.sourceId === id) && !!(e.conditions?.grabbed || e.conditions?.restrained);
 
@@ -96,6 +101,28 @@ export const pf2eRules = {
   },
   disengage() {
     return { cost: { actions: 1 }, label: t("StepsAway") };
+  },
+
+  /**
+   * Getting past another creature on the way (the core's behavior/space.js): through a willing one's space (a friend's,
+   * on its side) and one that's down, freely; a foe on its feet, Tumble Through for one trained in Acrobatics with even
+   * odds or better (a 10 on the die will do), round it otherwise. Anyone else (a bystander), the core's way.
+   */
+  passThrough(run, u, o) {
+    if ( o.status !== STATUS.STANDING || o.side === u.side ) return "free";
+    if ( !run.prep?.sides?.[u.side]?.enemies?.has?.(o.side) ) return null;
+    return u.spec?.acrobatics && tumbleMod(u) + 10 >= reflexDC(o) ? "tumble" : "around";
+  },
+  /**
+   * Tumble Through: Acrobatics against the foe's Reflex DC. Through its space on a success; on a failure the move ends
+   * short of it (the core's). Not played: its space as difficult terrain on the way through (the core charges a tumble
+   * nothing more), one foe a Tumble Through, and the reactions a failure draws as if it had left where it started.
+   */
+  tumbleThrough(run, u, o) {
+    const mod = tumbleMod(u);
+    const dc = reflexDC(o);
+    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    return { success: degree >= 2, degree, natural, mod, total, dc };
   },
 
   /** Every action says how many free hands it needs (`hands`, hands.js): what a creature with its hands tied can still do. */
