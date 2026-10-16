@@ -46,14 +46,15 @@ function toRounds(n, unit) {
  * @param {string} [data.slug]
  * @param {string} data.description   HTML description of the affliction
  * @param {string[]} [data.traits]
+ * @param {object} [data.save]        {type, dc}: the save against it, where its text doesn't say (a spell's, its DC)
  * @returns {object|null}  {kind:"affliction", id, name, slug, traits, save:{type,dc}, maxDuration, onset, stages:[{damage, conditions, duration}]}
  */
-export function parseAffliction({ id, name, slug = null, description, traits = [] }) {
+export function parseAffliction({ id, name, slug = null, description, traits = [], save: given = null }) {
   const text = stripHtml(description);
-  let save = null;
-  const check = /CHECK⟦(\w+)\|[^⟧]*?dc:(\d+)/i.exec(text);
+  let save = given;
+  const check = save ? null : /CHECK⟦(\w+)\|[^⟧]*?dc:(\d+)/i.exec(text);
   if ( check ) save = { type: check[1].toLowerCase(), dc: Number(check[2]) };
-  else {
+  else if ( !save ) {
     const plain = /DC (\d+) (Fortitude|Reflex|Will)/i.exec(text);
     if ( plain ) save = { type: plain[2].toLowerCase(), dc: Number(plain[1]) };
   }
@@ -95,4 +96,42 @@ export function parseAffliction({ id, name, slug = null, description, traits = [
     onset: onset ? toRounds(onset[1], onset[2]) : 0,
     stages
   };
+}
+
+/** The traits that make something an affliction (a poison, a disease, a curse). */
+export const AFFLICTION_TRAITS = Object.freeze(["poison", "disease", "curse"]);
+
+/** A paragraph of an affliction's block: its level, how long it lasts, its onset, its save. */
+const DETAIL = /^\s*<strong>\s*(?:Level|Maximum Duration|Onset|Saving Throw)\b/i;
+const STAGE = /^\s*<strong>\s*Stage \d+\s*<\/strong>/i;
+
+/**
+ * The affliction a spell lays (Spider Sting's spider venom, Goblin Pox, Curse of Death), from its block of the spell's
+ * text: the heading that names it and its traits ("Spider Venom (poison)"), its level and how long it lasts, and its
+ * stages; worked off with saves against the spell DC (`save`). The spell's own save is its exposure: a failure, stage
+ * 1; a critical failure, stage 2 (the core's afflictionStep), so it's marked `bySave` (the action's save decides how it
+ * takes hold). Null when the text has none.
+ * @param {object} data
+ * @param {string} data.id
+ * @param {string} data.html     the spell's description
+ * @param {object} data.save     {type, dc}: the spell's save, and its DC
+ * @param {string} [data.name]   the spell's name, where the block names none
+ * @param {string[]} [data.traits]  the spell's traits, where the block lists none
+ */
+export function spellAffliction({ id, html, save, name = "", traits = [] }) {
+  const paras = [...String(html ?? "").matchAll(/<p>([\s\S]*?)<\/p>/g)].map(m => m[1]);
+  const first = paras.findIndex(p => STAGE.test(p));
+  if ( first < 0 || !save ) return null;
+  let start = first;
+  while ( start > 0 && DETAIL.test(paras[start - 1]) ) start -= 1;
+  const heading = start > 0 ? /^\s*<strong>([^<]+)<\/strong>\s*(?:\(([^)]*)\))?/.exec(paras[start - 1]) : null;
+  let end = first;
+  while ( end < paras.length && STAGE.test(paras[end]) ) end += 1;
+  const listed = heading?.[2]?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) ?? [];
+  const own = listed.length ? listed : traits.filter(t => AFFLICTION_TRAITS.includes(t));
+  const a = parseAffliction({
+    id, name: heading?.[1]?.trim() || name, description: [heading ? paras[start - 1] : "", ...paras.slice(start, end)].map(p => `<p>${p}</p>`).join(""),
+    traits: own, save
+  });
+  return a ? { ...a, bySave: true } : null;
 }

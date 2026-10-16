@@ -4,7 +4,7 @@
  */
 import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart } from "./core.js";
 import { pf2eRules } from "./rules.js";
-import { parseAffliction } from "./afflictions.js";
+import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
@@ -309,6 +309,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...own(this.#marks(actor)),
       ...await this.#spells(actor),
       ...this.#consumables(actor),
+      ...this.#poisons(actor, martial.strikes),
       ...own(this.#feats(actor)),
       ...own(await this.#selfEffects(actor)),
       ...this.#skillActions(actor, traits, martial.strikes)
@@ -709,15 +710,20 @@ export class Pf2eAdapter extends SystemAdapter {
         const kinds = roll?.kinds ?? new Set();
         const traits = spell.system.traits?.value ?? [];
         const parts = roll ? parseTypedFormula(roll.formula) : [];
+        // An affliction it lays (Spider Sting's spider venom, Goblin Pox): its save the exposure, then stages worked off
+        // with saves against the spell DC (afflictions.js).
+        const saved = spell.system.defense?.save;
+        const afflicts = saved ? spellAffliction({ id: `${actor.id}.spell.${spell.id}.affliction`, html: await resolvedText(spell), name: spell.name, traits,
+          save: { type: saved.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor) } }) : null;
         // No damage: maybe it's crowd control, conditions by degree of the target's save or of a spell attack.
-        const control = !parts.length && (spell.system.defense?.save || spell.isAttack)
+        const control = !parts.length && !afflicts && (saved || spell.isAttack)
           ? parseControl({ description: englishDescription(spell), duration: spell.system.duration?.value })
           : null;
         // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
-        const support = !parts.length && !control ? await this.#spellSupport(spell, stat) : null;
+        const support = !parts.length && !control && !afflicts ? await this.#spellSupport(spell, stat) : null;
         // A summon spell: the creature it most likely calls, which must be Sustained.
         const summon = traits.includes("summon") && !this.#summoning ? await this.#summon(spell) : null;
-        if ( !parts.length && !control && !support && !summon ) continue;
+        if ( !parts.length && !control && !support && !summon && !afflicts ) continue;
 
         // Resource
         let resource = null;
@@ -801,7 +807,7 @@ export class Pf2eAdapter extends SystemAdapter {
           out.push(action);
           continue;
         }
-        if ( !kinds.has?.("damage") ) continue;
+        if ( !kinds.has?.("damage") && !afflicts ) continue;
         const action = {
           id, name: spell.name, cost, damage: parts, resource, pool, uses,
           spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
@@ -826,6 +832,8 @@ export class Pf2eAdapter extends SystemAdapter {
           // lays by degree: Impaling Spike's immobilized, an Escape against the spell DC away.
           const rider = parseCritRider(englishDescription(spell));
           const laid = rider ? [rider] : failureRiders(escapeAt(parseControl({ description: englishDescription(spell), duration: spell.system.duration?.value }), action.save.dc));
+          // (And its affliction, on a failed save.)
+          if ( afflicts ) laid.unshift(afflicts);
           if ( laid.length ) action.effects = laid;
         } else {
           action.kind = "auto";
@@ -1116,6 +1124,26 @@ export class Pf2eAdapter extends SystemAdapter {
         itemId: item.id,
         hands: 1 // (drinking it, or applying it, is an Interact action)
       });
+    }
+    return out;
+  }
+
+  /**
+   * The injury poisons it carries (by trait): each as its best piercing or slashing Strike with the poison applied first
+   * (the poison's activation, two actions as a rule), the hit's target saving against it (afflictions.js). One use a
+   * dose. Not played: a missed Strike keeping the poison on the weapon for the next.
+   */
+  #poisons(actor, strikes) {
+    const best = injuryWeapon(strikes);
+    if ( !best ) return [];
+    const out = [];
+    for ( const item of actor.itemTypes?.consumable ?? [] ) {
+      const traits = item.system.traits?.value ?? [];
+      const quantity = Number(item.system.quantity ?? 1);
+      if ( !traits.includes("injury") || !traits.includes("poison") || !(quantity > 0) ) continue;
+      const html = englishDescription(item);
+      const poison = parseAffliction({ id: `${actor.id}.poison.${item.id}`, name: item.name, slug: slugOf(item), description: html, traits });
+      if ( poison ) out.push(poisonedStrike(best, { item, poison, quantity, apply: activationOf(html) }));
     }
     return out;
   }
@@ -1484,6 +1512,30 @@ export class Pf2eAdapter extends SystemAdapter {
 
 function levelOf(actor) {
   return actor.level ?? 0;
+}
+
+/** The damage types an injury poison gets in by. */
+const INJURES = new Set(["piercing", "slashing"]);
+
+/** Its best Strike to carry an injury poison: a weapon's (not a bomb), dealing piercing or slashing damage. */
+export function injuryWeapon(strikes) {
+  const mean = a => (a.damage ?? []).reduce((s, p) => s + meanPart(p), 0) + (a.bonus ?? 0);
+  return (strikes ?? []).filter(a => a.kind === "strike" && !a.resource && (a.damage ?? []).some(p => INJURES.has(p.type) && !p.persistent))
+    .sort((a, b) => mean(b) - mean(a))[0] ?? null;
+}
+
+/** How many actions its activation takes ("Activate ◆◆": the action glyph), two where it doesn't say. */
+export function activationOf(html) {
+  const m = /<strong>\s*Activate\s*<\/strong>\s*<span class="action-glyph">\s*(\d)\s*<\/span>/i.exec(String(html ?? ""));
+  return m ? Number(m[1]) : 2;
+}
+
+/** A Strike with an injury poison applied first: the activation and then the Strike, the poison on a hit, a dose a use. */
+export function poisonedStrike(strike, { item, poison, quantity, apply = 2 }) {
+  return {
+    ...strike, id: `${strike.id}.poison.${item.id}`, name: t("Poisoned", { strike: strike.name, poison: item.name }), cost: (strike.cost ?? 1) + apply, oncePerTurn: true,
+    effects: [...(strike.effects ?? []), poison], resource: `item:${item.id}`, pool: quantity, itemId: item.id
+  };
 }
 
 /** Its gullets (spec.gullet), by the core's condition each lays: {swallowed: {damage, rupture, most}}; undefined with none. */

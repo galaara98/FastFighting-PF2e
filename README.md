@@ -39,7 +39,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - prepared and spontaneous slots, focus points
   - healing spells, potions and elixirs, Battle Medicine (one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet; a healing spell with no range, area or target, cast on yourself, heals only its caster)
   - sneak attack and pack attack, knockdown and grab, and a creature's Push, Improved Push and Pull (as far as the ability lists, 5 feet otherwise; played on the hit, without the Shove's own roll)
-  - poisons and diseases parsed stage by stage from their text
+  - poisons and diseases parsed stage by stage from their text: a creature's (on its Strikes), a spell's (Spider Sting's spider venom, Goblin Pox, Curse of Death: its failed save the exposure, a critical failure stage 2, then saves against the spell DC), and the injury poisons a character carries (its best piercing or slashing Strike with the poison applied first, the poison's activation and then the Strike; the hit's target saves against the poison; a dose a use)
   - immunities, weaknesses and resistances
   - speeds by movement type
   - getting past others on the map: through a friend's space or a fallen creature's freely; past a foe on its feet with Tumble Through (Acrobatics against its Reflex DC; a failure ends the move short of it) for those trained in Acrobatics with at least even odds, around it otherwise. A Tiny creature (which can share a larger creature's space) and a swarm (which can share anyone's) go through others' spaces freely and may end a move in one
