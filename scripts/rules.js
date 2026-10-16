@@ -5,6 +5,10 @@ import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize, degreeDis
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
+import { ASSISTED, APPROPRIATE_DC, SICK_ANNOYANCE, sickDC, bleedDC, lower } from "./remedies.js";
+
+/** A friend's bleed, as a hold a friend breaks (Administer First Aid). */
+const BLEED = "persistent:bleed";
 
 /** Damage types grouped for IWR keys such as "physical" or "energy". */
 const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
@@ -185,7 +189,9 @@ export const pf2eRules = {
    * try this turn. Null for the core's way: freeing a friend (untying it: an Interact action, no roll), or nothing to
    * roll with.
    */
-  breakFree(run, who, hold, { freeing = false } = {}) {
+  breakFree(run, who, hold, { freeing = false, held = null } = {}) {
+    // (A friend's bleed: Administer First Aid.)
+    if ( hold.key === BLEED ) return freeing ? this.stopBleeding(run, who, held, hold) : null;
     if ( freeing ) return null;
     const work = who.spec?.escapeWork;
     const binder = hold.key === "bound" && hold.byId ? run.byId?.get(hold.byId) : null;
@@ -572,6 +578,67 @@ export const pf2eRules = {
   /** End of turn persistent damage: take it, then a DC 15 flat check to remove each instance. */
   persistentFlatCheck(rng) {
     return rng.d20() >= 15;
+  },
+
+  /** Assisted recovery against persistent damage (remedies.js): two actions, where something would reasonably help. */
+  persistentRemedyCost(u, type) {
+    return ASSISTED[type] ? { actions: 2 } : { actions: Infinity };
+  },
+
+  /** One more flat check (remedies.js ASSISTED): against fire, dropping and rolling, at the lower DC 10, and prone after. */
+  persistentRemedy(run, u, type) {
+    const help = ASSISTED[type];
+    if ( !help ) return { success: false };
+    if ( help.prone ) u.prone = true;
+    const natural = run.rng.d20();
+    return { success: natural >= help.dc, said: { text: t("Remedy.Flat", { natural, dc: help.dc }) } };
+  },
+
+  /** A bleed a friend can stop with Administer First Aid (remedies.js): Medicine against its DC; only a friend tries it. */
+  holds(run, u) {
+    const bleed = (u.persistent ?? []).find(e => e.part?.type === "bleed");
+    return bleed ? [{ key: BLEED, byId: bleed.sourceId ?? null, dc: bleedDC(run, u, bleed), others: "check", via: "medicine", friendOnly: true }] : [];
+  },
+
+  /** Freeing a friend: untying it is an Interact action; Administer First Aid on its bleed two, for one trained in Medicine. */
+  untieCost(u, t, hold) {
+    if ( hold?.key === BLEED ) return u.spec?.firstAid ? { actions: 2 } : { actions: Infinity };
+    return { actions: 1 };
+  },
+
+  /**
+   * Administer First Aid on a friend's bleed: Medicine (less what frightens or sickens the healer) against the bleed's
+   * DC; a success lets the friend try an assisted recovery at once, at the lower DC for particularly appropriate help,
+   * and the bleed ends on that.
+   */
+  stopBleeding(run, who, held, hold) {
+    const base = Number(who.spec?.firstAid?.mod);
+    if ( !Number.isFinite(base) || !held ) return { success: false };
+    const mod = base - statusPenalty(who);
+    const { natural, total, degree } = this.roll(run.rng, mod, hold.dc);
+    const flat = degree >= 2 ? run.rng.d20() : null;
+    const success = flat !== null && flat >= APPROPRIATE_DC;
+    if ( success ) held.persistent = (held.persistent ?? []).filter(e => e.part?.type !== "bleed");
+    return { success, degree, natural, mod, total, dc: hold.dc, ...(flat !== null ? { said: { text: t("Remedy.Flat", { natural: flat, dc: APPROPRIATE_DC }) } } : {}) };
+  },
+
+  /** Retching while sickened (remedies.js): one action, a Fortitude save against what sickened it. */
+  remedies(run, u) {
+    const sick = Number(u.conds?.sickened) || 0;
+    if ( !(sick > 0) ) return [];
+    return [{
+      key: "retch", condition: "sickened", label: t("Remedy.Retch"), cost: { actions: 1 }, annoyance: SICK_ANNOYANCE.base + SICK_ANNOYANCE.step * sick,
+      try: (r, w) => this.retch(r, w)
+    }];
+  },
+
+  /** A retch: a Fortitude save against the DC of what sickened it; sickened 1 lower on a success, 2 on a critical success. */
+  retch(run, u) {
+    const dc = sickDC(run, u);
+    const mod = (Number(u.spec?.defenses?.fortitude) || 0) + this.modifiers.save({ unit: u, type: "fortitude" }).bonus + (Number(u.mods?.saves) || 0);
+    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    if ( degree >= 2 ) lower(u, "sickened", degree === 3 ? 2 : 1);
+    return { success: degree >= 2, said: { text: t("Remedy.RetchRoll", { natural, total, dc }) } };
   },
 
   /** The story's family for a damage type: the remaster's are the story's own; older content's are mapped. */

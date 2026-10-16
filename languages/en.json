@@ -99,6 +99,11 @@
     },
     "Gullet": {
       "Cut": "cuts at it from inside with {strike}: {damage} damage against Rupture {rupture}"
+    },
+    "Remedy": {
+      "Retch": "Retch",
+      "RetchRoll": "Fortitude save {total} against DC {dc}",
+      "Flat": "flat check {natural} against DC {dc}"
     }
   }
 }

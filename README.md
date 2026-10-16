@@ -51,7 +51,8 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - the multiple attack penalty and three actions a turn;
   - off-guard, frightened, sickened, clumsy, enfeebled, prone, slowed, stunned, paralyzed and fleeing, each weighed as the penalties it is (frightened 1 is −1 to everything) when a creature decides whether it's worth inflicting;
   - range increments, and Steal at −5 in combat;
-  - persistent damage with flat checks;
+  - persistent damage with flat checks, and assisted recovery: two actions for one more flat check where something would reasonably help (dropping and rolling against fire, at DC 10 and prone after; pressing a bleed or scraping off acid, DC 15), and a friend's Administer First Aid on a bleed (two actions, trained in Medicine, against the GM Core's DC for the level of what caused it; a success, then the flat check at DC 10);
+  - retching while sickened: one action, a Fortitude save against the DC of what sickened it (1 lower, 2 on a critical success);
   - dying, wounded and doomed with recovery checks, and Administer First Aid (DC 15 + dying); the dying value a creature dies at and its recovery DC as PF2e works them out from its feats (Diehard's dying 5, Toughness's DC 9 + dying);
   - Ferocity (a creature's) and Orc Ferocity (a character's), by slug: its reaction as it would fall keeps it up at 1 HP, wounded 1 higher; a creature's until it's wounded 3, a character's as often as its frequency has left today (Undying Ferocity adds temporary HP);
   - immunity by trait (mental, fear, emotion, sleep and others; the mindless shrug off mental effects), and incapacitation;
