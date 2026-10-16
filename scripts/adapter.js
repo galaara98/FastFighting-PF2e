@@ -10,7 +10,7 @@ import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.j
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
-import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
+import { parseControl, parseCritRider, conditionsIn, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, englishName, englishDescription, wordList } from "./words.js";
@@ -778,15 +778,17 @@ export class Pf2eAdapter extends SystemAdapter {
             id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands,
             melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
           };
+          // (A hold it lays that an Escape breaks, Web's, Tangle Vine's: against the spell DC.)
+          const spellDC = stat.dc?.value ?? 10 + levelOf(actor);
           if ( defense?.save ) {
-            action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor), basic: false };
+            action.save = { type: defense.save.statistic, dc: spellDC, basic: false };
             // (Dominate: a save at the end of each of its turns, against the caster's DC.)
-            action.onSave = control.map(o => (o?.repeatSave ? { ...o, repeatSave: { type: action.save.type, dc: action.save.dc } } : o));
+            action.onSave = escapeAt(control.map(o => (o?.repeatSave ? { ...o, repeatSave: { type: action.save.type, dc: action.save.dc } } : o)), spellDC);
           } else {
             // A spell attack: the degrees are the caster's (critical success, success ...).
             action.bonus = stat.check?.mod ?? 0;
             action.maps = [0, -5, -10];
-            action.onHit = control;
+            action.onHit = escapeAt(control, spellDC);
           }
           const targets = areaTargets(area, spell.system.target?.value);
           if ( targets > 1 ) action.area = { targets };
@@ -814,9 +816,11 @@ export class Pf2eAdapter extends SystemAdapter {
         } else if ( defense?.save ) {
           action.kind = "save";
           action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor), basic: !!defense.save.basic };
-          // "If the target critically fails the save, it is also stunned 1."
+          // "If the target critically fails the save, it is also stunned 1." Else what a failure (or a critical failure)
+          // lays by degree: Impaling Spike's immobilized, an Escape against the spell DC away.
           const rider = parseCritRider(englishDescription(spell));
-          if ( rider ) action.effects = [rider];
+          const laid = rider ? [rider] : failureRiders(escapeAt(parseControl({ description: englishDescription(spell), duration: spell.system.duration?.value }), action.save.dc));
+          if ( laid.length ) action.effects = laid;
         } else {
           action.kind = "auto";
           if ( spell.slug === "force-barrage" ) action.damage = parts.map(p => ({ ...p, dice: p.dice.map(d => ({ ...d, n: d.n * 2 })), flat: p.flat * 2 }));

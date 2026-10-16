@@ -74,12 +74,48 @@ export function conditionsIn(text) {
 const label = conds => (conds.unconscious ? conditionLabel("unconscious")
   : Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null))).join(", "));
 
+/** A hold its words say an Escape breaks: "It can attempt to Escape", "until it Escapes (against your spell DC)". */
+const ESCAPES = /\bEscapes?\b/;
+/** The conditions that hold it, the first that's laid the one an Escape is against (the core's holds.js HOLDING). */
+const HOLDING = ["restrained", "grabbed", "immobilized", "paralyzed"];
+
+/**
+ * The hold a degree's conditions put on it, where its words say an Escape breaks it: {key, dc, others, with}, the DC
+ * the one its words name ("Escape DC 22"), else null for the spell's (or ability's) own DC, filled in by whoever
+ * reads it (escapeAt); what it lays with the hold (off-guard) goes with it; nobody can Escape for it.
+ */
+function escapeOf(text, conditions) {
+  const key = HOLDING.find(k => conditions[k]);
+  if ( !key ) return null;
+  const listed = /\bEscape DC (\d+)/i.exec(text);
+  return { key, dc: listed ? Number(listed[1]) : null, others: null, with: Object.keys(conditions).filter(k => k === "offGuard") };
+}
+
+/** The hold some words lay with these conditions, where they say an Escape breaks it (escapeOf), or null. */
+export const escapeIn = (text, conditions) => (ESCAPES.test(String(text ?? "")) ? escapeOf(String(text), conditions) : null);
+
+/** Outcomes with their holds' DCs filled in where the words named none (the spell DC, the ability's DC). */
+export function escapeAt(outcomes, dc) {
+  return outcomes?.map(o => (o?.escape && !Number.isFinite(o.escape.dc) ? { ...o, escape: { ...o.escape, dc } } : o)) ?? outcomes;
+}
+
+/**
+ * What a failed save against something that also deals damage lays on the target, as a hit's riders: a failure's
+ * outcome on a failure or worse, else a critical failure's on that alone ([] for nothing).
+ */
+export function failureRiders(outcomes) {
+  const [critFail, fail] = outcomes ?? [];
+  if ( fail ) return [{ kind: "condition", ...fail, critOnly: false }];
+  return critFail ? [{ kind: "condition", ...critFail, critOnly: true }] : [];
+}
+
 /**
  * What each degree of the save does, or null if the spell imposes nothing the engine plays out.
  * @param {object} data
  * @param {string} data.description   Spell description HTML
  * @param {string} [data.duration]    Spell duration text ("1 minute", "until the end of the target's next turn")
- * @returns {object[]|null}  onSave: [critFail, fail, success, critSuccess], each null or {conditions, rounds, label, endsOnDamage}
+ * @returns {object[]|null}  onSave: [critFail, fail, success, critSuccess], each null or {conditions, rounds, label,
+ *                           endsOnDamage, escape}: escape, where the words say an Escape breaks its hold (escapeOf)
  */
 export function parseControl({ description, duration = "" }) {
   const texts = degreeTexts(description);
@@ -95,7 +131,12 @@ export function parseControl({ description, duration = "" }) {
     const rounds = durationRounds(text) ?? (conditions.frightened ? conditions.frightened : null) ?? (conditions.stunned ? 1 : null) ?? (conditions.controlled ? 100 : null) ?? fallback ?? 1;
     // "It can attempt a Will save at the end of each of its turns. On a success, the spell ends." (the DC is the caster's)
     const repeat = /save at the end of each of its turns/i.test(text);
-    return { conditions, rounds: Math.max(1, rounds), label: label(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text), ...(repeat ? { repeatSave: true } : {}) };
+    // "It can attempt to Escape to remove its immobilized condition": its hold, an Escape away (as a failure's, said so).
+    const escape = escapeIn(text, conditions) ?? (degree === 0 && /\bas (?:a )?failure\b/i.test(text) ? escapeIn(texts[1], conditions) : null);
+    return {
+      conditions, rounds: Math.max(1, rounds), label: label(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text),
+      ...(repeat ? { repeatSave: true } : {}), ...(escape ? { escape } : {})
+    };
   });
   return outcomes.some(Boolean) ? outcomes : null;
 }

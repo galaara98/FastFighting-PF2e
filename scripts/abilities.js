@@ -6,7 +6,7 @@
  * Pure, unit-tested.
  */
 import { parseTypedFormula } from "./core.js";
-import { parseControl, plain, conditionsIn, durationRounds } from "./control.js";
+import { parseControl, plain, conditionsIn, durationRounds, escapeAt, escapeIn, failureRiders } from "./control.js";
 
 const SAVES = { fortitude: "fortitude", fort: "fortitude", reflex: "reflex", ref: "reflex", will: "will" };
 
@@ -120,14 +120,17 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
       damage: strike.damage, melee: true, reach: 5, area: { targets: 2 } };
   }
   const text = plain(html);
-  let outcomes = parseControl({ description: html });
+  // (A hold it lays that an Escape breaks: against the DC its words name, else the ability's own.)
+  let outcomes = escapeAt(parseControl({ description: html }), save.dc);
   // No list by degree: "must succeed at a Will save or become frightened 1", "becomes Frightened 1 unless it
   // succeeds": a failure lays it on. (What it requires first, "the akhana has a creature grabbed", isn't an effect.)
   if ( !damage.length && !outcomes ) {
     const effect = text.replace(/^.*?\bRequirements?\b.*?\bEffect\b/i, "");
     const conditions = conditionsIn(effect);
     if ( !Object.keys(conditions).length ) return null;
-    const lasting = { conditions, rounds: durationRounds(effect) ?? conditions.frightened ?? 1, label: Object.entries(conditions).map(([k, v]) => `${k === "offGuard" ? "off-guard" : k}${v > 1 ? ` ${v}` : ""}`).join(", ") };
+    const escape = escapeIn(effect, conditions);
+    const lasting = { conditions, rounds: durationRounds(effect) ?? conditions.frightened ?? 1, label: Object.entries(conditions).map(([k, v]) => `${k === "offGuard" ? "off-guard" : k}${v > 1 ? ` ${v}` : ""}`).join(", "),
+      ...(escape ? { escape: { ...escape, dc: escape.dc ?? save.dc } } : {}) };
     outcomes = [lasting, lasting, null, null];
   }
   const area = templateIn(html);
@@ -145,10 +148,7 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
   if ( damage.length ) {
     action.damage = damage;
     // What a failure (or a critical failure) also lays on it: "it's knocked prone", "it's frightened 1".
-    const [critFail, fail] = outcomes ?? [];
-    const effects = [];
-    if ( fail ) effects.push({ kind: "condition", ...fail, critOnly: false });
-    else if ( critFail ) effects.push({ kind: "condition", ...critFail, critOnly: true });
+    const effects = failureRiders(outcomes);
     if ( effects.length ) action.effects = effects;
   } else action.onSave = outcomes;
   return action;

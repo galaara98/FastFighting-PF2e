@@ -209,6 +209,10 @@ export const pf2eRules = {
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
     // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself.)
     if ( degree >= 2 && hold.key === "grabbed" && hold.byId ) who.effects = (who.effects ?? []).filter(e => !grabbing(e, hold.byId));
+    // (Out of a spell's hold, out of what it laid with it, Impaling Spike's off-guard; the core takes the hold off.)
+    if ( degree >= 2 && hold.effectKey && hold.with?.length ) {
+      who.effects = (who.effects ?? []).map(e => (e.key === hold.effectKey ? { ...e, conditions: Object.fromEntries(Object.entries(e.conditions ?? {}).filter(([k]) => !hold.with.includes(k))) } : e));
+    }
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
 
