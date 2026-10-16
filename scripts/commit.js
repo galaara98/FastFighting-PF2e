@@ -77,6 +77,9 @@ async function setCondition(actor, slug, value, undo) {
  */
 const PF2E_SLUGS = { offGuard: "off-guard" };
 
+/** The engine's key for a PF2e condition slug ("off-guard": offGuard, "persistent-damage": persistentDamage). */
+export const engineKey = slug => (slug === "off-guard" ? "offGuard" : String(slug).replace(/-([a-z])/g, (m, c) => c.toUpperCase()));
+
 /** The PF2e condition slug for an engine key, or null for one the system doesn't have (the engine's alone). */
 export function conditionSlug(key) {
   const slug = PF2E_SLUGS[key] ?? key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);

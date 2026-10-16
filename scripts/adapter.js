@@ -8,7 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, resourceName } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
@@ -85,12 +85,13 @@ async function linkedEffect(uuid) {
   }
   return EFFECT_CACHE.get(uuid);
 }
-/** PF2e conditions the engine plays out, by slug -> engine key. */
-const ENGINE_CONDITIONS = {
-  "off-guard": "offGuard", grabbed: "offGuard", restrained: "offGuard", prone: "prone", clumsy: "clumsy", enfeebled: "enfeebled",
-  sickened: "sickened", frightened: "frightened", slowed: "slowed", stunned: "stunned", paralyzed: "paralyzed",
-  blinded: "blinded", deafened: "deafened"
-};
+/** PF2e conditions the engine keeps elsewhere (its own numbers and its persistent damage), not as conditions. */
+const NOT_CONDITIONS = new Set(["dying", "wounded", "doomed", "persistent-damage"]);
+/**
+ * What a PF2e condition also means to the engine (each condition is read as its own key too): grabbed and restrained
+ * hold it in place, off guard; unconscious, unable to act and off guard; paralyzed, off guard.
+ */
+const IMPLIES = Object.freeze({ grabbed: ["offGuard", "immobilized"], restrained: ["offGuard", "immobilized"], unconscious: ["incapacitated", "offGuard"], paralyzed: ["offGuard"] });
 
 /** What a character calls its feats, features and actions, by slug (a translated compendium's names). */
 function ownNames(actor) {
@@ -450,13 +451,14 @@ export class Pf2eAdapter extends SystemAdapter {
     return out;
   }
 
+  /** Its conditions as the engine's keys: each one's own (off-guard: offGuard), and what it also means (IMPLIES). */
   #conditions(actor) {
     const out = {};
+    const raise = (key, value) => { out[key] = Math.max(out[key] ?? 0, value); };
     for ( const c of actor.itemTypes?.condition ?? [] ) {
-      const key = ENGINE_CONDITIONS[c.slug];
-      if ( !key ) continue;
-      const value = typeof c.value === "number" ? c.value : 1;
-      out[key] = Math.max(out[key] ?? 0, value);
+      if ( !c.slug || NOT_CONDITIONS.has(c.slug) ) continue;
+      raise(engineKey(c.slug), typeof c.value === "number" ? c.value : 1);
+      for ( const key of IMPLIES[c.slug] ?? [] ) raise(key, 1);
     }
     return out;
   }
@@ -1383,9 +1385,26 @@ export class Pf2eAdapter extends SystemAdapter {
     return commitPf2eBound(tokenDoc, bound);
   }
 
-  /** PF2e's sheets carry its own conditions (and prone); the engine's others (incapacitated: Command) it keeps itself. */
+  /**
+   * PF2e's sheets carry every one of its own conditions (written as its condition, read back as the same key); the
+   * engine's others (incapacitated: losing a turn to Command) the core keeps.
+   */
   sheetCarries(key) {
     return key === "prone" || !!conditionSlug(key);
+  }
+
+  /** PF2e's own name for a condition (its word, in the table's language). */
+  conditionLabel(key) {
+    const slug = conditionSlug(key);
+    const name = slug ? CONFIG.PF2E?.conditionTypes?.[slug] : null;
+    return name ? game.i18n.localize(name) : null;
+  }
+
+  /** Every PF2e condition (as the engine's key; the counted ones marked), then the core's own. */
+  conditionChoices() {
+    const own = Object.keys(CONFIG.PF2E?.conditionTypes ?? {}).filter(slug => !NOT_CONDITIONS.has(slug))
+      .map(slug => ({ key: engineKey(slug), valued: !!game.pf2e?.ConditionManager?.getCondition(slug)?.system?.value?.isValued }));
+    return [...own, ...super.conditionChoices()];
   }
 
   /** A ranged attack or a manipulate action in a foe's reach: Reactive Strike's other triggers (read-turn.js). */

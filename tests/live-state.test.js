@@ -27,7 +27,7 @@ describe("a sheet mid-fight", () => {
       itemTypes: { condition: [{ slug: "frightened", value: 2 }, { slug: "grabbed" }, { slug: "persistent-damage", system: { persistent: { formula: "1d6", damageType: "fire" } } }] }
     });
     const s = await read(actor);
-    expect(s).toMatchObject({ hp: 12, temp: 3, maxHp: 30, dying: 0, wounded: 1, doomed: 0, status: "standing", conditions: { frightened: 2, offGuard: 1 } });
+    expect(s).toMatchObject({ hp: 12, temp: 3, maxHp: 30, dying: 0, wounded: 1, doomed: 0, status: "standing", conditions: { frightened: 2, grabbed: 1, offGuard: 1, immobilized: 1 } });
     expect(s.persistent).toHaveLength(1);
     expect(s.persistent[0]).toMatchObject({ persistent: true });
   });
