@@ -13,12 +13,13 @@ import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { t, actionName, traitName, featureName, conditionLabel, coin, englishName, englishDescription, wordList } from "./words.js";
+import { t, actionName, traitName, featureName, coin, englishName, englishDescription, wordList } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
+import { skillManeuvers } from "./maneuvers.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -1002,9 +1003,8 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
-   * Skill actions anyone (or the trained) can take in a fight: Demoralize (Intimidation against Will: frightened),
-   * Trip (Athletics against Reflex, an attack: prone, or prone yourself on a critical failure), Feint (Deception
-   * against Perception: off-guard to you), Bon Mot for those with the feat (Diplomacy against Will), and Aid.
+   * Skill actions anyone (or the trained) can take in a fight: the maneuvers (maneuvers.js: Demoralize, Trip, Grapple,
+   * Disarm, Shove, Reposition, Feint), Bon Mot for those with the feat (Diplomacy against Will), and Aid.
    */
   #skillActions(actor, traits, strikes = []) {
     if ( traits.includes("mindless") ) return [];
@@ -1017,35 +1017,12 @@ export class Pf2eAdapter extends SystemAdapter {
     const aid = !(actor.system.details?.languages?.value ?? []).length ? null : aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
       skills: ["diplomacy", "medicine", "intimidation", "deception"].filter(skill).map(slug => ({ mod: skill(slug).mod, rank: skill(slug).rank ?? 0, hands: slug === "medicine" ? 1 : 0 })) });
     if ( aid ) out.push(aid);
-    const intimidation = skill("intimidation");
-    if ( intimidation ) {
-      out.push({ id: `${actor.id}.demoralize`, name: actionName("Demoralize"), kind: "control", cost: 1, traits: ["auditory", "concentrate", "emotion", "fear", "mental"], ...near,
-        check: { mod: intimidation.mod ?? 0, against: "will" }, oncePerTarget: true,
-        onHit: [null, null, { conditions: { frightened: 1 }, rounds: 1, label: conditionLabel("frightened", 1) }, { conditions: { frightened: 2 }, rounds: 2, label: conditionLabel("frightened", 2) }] });
-    }
-    if ( trained("athletics") ) {
-      const prone = { conditions: { prone: 1 }, rounds: 1, label: conditionLabel("prone") };
-      // (Only a creature at most one size larger; Trip, Grapple and Disarm each need a free hand.)
-      out.push({ id: `${actor.id}.trip`, name: actionName("Trip"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
-        check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true }, onHit: [{ ...prone, self: true }, null, prone, prone] });
-      // Grapple (Athletics against Fortitude, an attack): grabbed until the end of its next turn, restrained on a
-      // critical success; a critical failure puts you on the ground.
-      const held = { conditions: { immobilized: 1, offGuard: 1 }, rounds: 1, label: conditionLabel("grabbed") };
-      out.push({ id: `${actor.id}.grapple`, name: actionName("Grapple"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
-        check: { mod: skill("athletics").mod ?? 0, against: "fortitude", attack: true }, onHit: [{ ...prone, self: true }, null, held, { ...held, label: conditionLabel("restrained") }] });
-      // Disarm (Athletics against Reflex, an attack; a foe with a weapon in hand, no more than one size larger): -2 to
-      // its attacks with it until its next turn; on a critical success it drops it (an action gone picking it up). A
-      // critical failure leaves you off-guard.
-      const loosened = { mods: { attack: -2 }, rounds: 1, label: t("Loosened") };
-      out.push({ id: `${actor.id}.disarm`, name: actionName("Disarm"), kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1, disarm: true,
-        check: { mod: skill("athletics").mod ?? 0, against: "reflex", attack: true },
-        onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, loosened, { mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }] });
-    }
-    if ( trained("deception") ) {
-      const exposed = { conditions: { offGuard: 1 }, onlyVs: true, rounds: 1, label: conditionLabel("off-guard") };
-      out.push({ id: `${actor.id}.feint`, name: actionName("Feint"), kind: "control", cost: 1, traits: ["mental"], melee: true, reach: 5,
-        check: { mod: skill("deception").mod ?? 0, against: "perception" }, onHit: [null, null, exposed, exposed] });
-    }
+    out.push(...skillManeuvers({
+      actorId: actor.id, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+      athletics: trained("athletics") ? skill("athletics").mod ?? 0 : null,
+      deception: trained("deception") ? skill("deception").mod ?? 0 : null,
+      intimidation: skill("intimidation") ? skill("intimidation").mod ?? 0 : null
+    }));
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
       const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered") });
       out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, maneuver: "distract", traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,

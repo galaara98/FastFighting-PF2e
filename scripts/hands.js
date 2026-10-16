@@ -9,7 +9,7 @@
  *  - Anything else: one if it has the manipulate trait (a spell cast with gestures, drinking a potion, Exploit
  *    Vulnerability), none if not (a spell of words alone, a breath, a shout, Demoralize). A spell from before the
  *    remaster says it with its components instead: somatic or material, a hand.
- * Trip, Disarm and Grapple say so in their requirements (a free hand): the adapter gives them one.
+ * Trip, Disarm, Grapple, Shove and Reposition say so in their requirements (a free hand): maneuvers.js gives them one.
  */
 
 /** Hands a weapon's grip takes (its usage, as the system's own WeaponPF2e#hands reads it; "1+" shoots with both). */

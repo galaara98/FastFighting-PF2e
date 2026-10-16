@@ -104,7 +104,7 @@ describe("every action the adapter builds says how many hands it needs", () => {
     expect(spec.actions.length).toBeGreaterThan(4);
     for ( const a of spec.actions ) expect([a.id, Number.isInteger(a.hands)]).toEqual([a.id, true]);
     const hands = Object.fromEntries(spec.actions.map(a => [a.id.split(".").slice(1).join("."), a.hands]));
-    expect(hands).toMatchObject({ "strike.ogre-hook.0": 2, "strike.jaws.1": 0, "spell.ignition": 1, "spell.roar": 0, trip: 1, grapple: 1, disarm: 1, demoralize: 0, aid: 2 });
+    expect(hands).toMatchObject({ "strike.ogre-hook.0": 2, "strike.jaws.1": 0, "spell.ignition": 1, "spell.roar": 0, trip: 1, grapple: 1, disarm: 1, shove: 1, reposition: 1, demoralize: 0, aid: 2 });
     // (As the core reads it: tied up, its jaws and its words still serve, its hook and its gestures don't.)
     const byId = Object.fromEntries(spec.actions.map(a => [a.id, a]));
     expect(["ogre.strike.ogre-hook.0", "ogre.strike.jaws.1", "ogre.spell.ignition", "ogre.spell.roar"].map(id => needsHands(pf2eRules, byId[id]))).toEqual([true, false, true, false]);

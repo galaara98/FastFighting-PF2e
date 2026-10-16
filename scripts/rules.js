@@ -27,6 +27,9 @@ const CONDITION_IMMUNITY = {
 /** Status penalty to checks and DCs (frightened and sickened don't stack: the worse applies). */
 const statusPenalty = u => Math.max(u.conds.frightened ?? 0, u.conds.sickened ?? 0);
 
+/** What a creature's grab laid on its bearer (its Grapple, the GM's grab): grabbed or restrained, from it (or anyone). */
+const grabbing = (e, id = null) => !!e.sourceId && (id === null || e.sourceId === id) && !!(e.conditions?.grabbed || e.conditions?.restrained);
+
 /**
  * Ferocity (spec.ferocity {label, uses, untilWounded, temp}), as it would fall: with its reaction to spend (and able to
  * react), it stays up at 1 Hit Point and its wounded value goes up by 1. A character's Orc Ferocity as often as it has
@@ -111,6 +114,9 @@ export const pf2eRules = {
    * a grab the fight knows of, against the grabber's Athletics DC (spec.escapeDC). A friend can't Escape for it.
    */
   escapeFrom(run, u, key) {
+    // (Grabbed or restrained by a creature's Grapple: the core's grab, which one Escape against the grabber breaks; let
+    // go of, nothing holds it.)
+    if ( (key === "grabbed" || key === "restrained") && (u.effects ?? []).some(e => grabbing(e) && e.conditions[key]) ) return null;
     return sheetHold(u, key);
   },
   /**
@@ -139,8 +145,17 @@ export const pf2eRules = {
     const mod = work.mod - statusPenalty(who);
     const { natural, total, degree } = this.roll(run.rng, mod, dc);
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
+    // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself.)
+    if ( degree >= 2 && hold.key === "grabbed" && hold.byId ) who.effects = (who.effects ?? []).filter(e => !grabbing(e, hold.byId));
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
+
+  /** A fall: bludgeoning damage of half the distance in feet; landing from it, prone. */
+  fallDamage(feet) {
+    const half = Math.floor((Number(feet) || 0) / 2);
+    return feet > 5 && half > 0 ? [{ dice: [], flat: half, type: "bludgeoning", persistent: false, category: null }] : [];
+  },
+  fallProne: true,
 
   /** A wooden door (Hardness 5, 20 HP), a simple lock (DC 20 to Force Open or Pick a Lock). */
   door: { ac: 10, hp: 20, hardness: 5, forceDC: 20, pickDC: 20 },
@@ -237,8 +252,9 @@ export const pf2eRules = {
 
   /**
    * Conditions as numbers, so a frightened or tripped foe is weighed like any other penalty: frightened and sickened
-   * to everything, clumsy to AC and Reflex, enfeebled to melee, off-guard -2 AC, prone (off-guard, -2 to attack, an
-   * action to stand), slowed and stunned in actions.
+   * to everything, clumsy to AC and Reflex, enfeebled to melee, off-guard -2 AC (and grabbed, which is off-guard; held
+   * in place too, as the engine weighs it), prone (off-guard, -2 to attack, an action to stand), slowed and stunned in
+   * actions.
    */
   conditionMods(key, value = 1) {
     const v = Number(value) || 1;
@@ -247,7 +263,8 @@ export const pf2eRules = {
       case "sickened": return { attack: -v, ac: -v, saves: -v, checks: -v };
       case "clumsy": return { ac: -v, saves: -Math.ceil(v / 3) };
       case "enfeebled": return { attack: -v, damage: -v };
-      case "offGuard": return { ac: -2 };
+      case "offGuard":
+      case "grabbed": return { ac: -2 };
       case "prone": return { ac: -2, attack: -2, actions: -1 };
       case "slowed": return { actions: -v };
       case "stunned": return { actions: -Math.min(3, v) };

@@ -65,6 +65,8 @@
       "Grapple": "Grapple",
       "Feint": "Feint",
       "Disarm": "Disarm",
+      "Shove": "Shove",
+      "Reposition": "Reposition",
       "ReactiveStrike": "Reactive Strike"
     },
     "Feature": {
@@ -87,6 +89,8 @@
     },
     "Loosened": "loosened grip (-2 to attacks with it)",
     "Dropped": "dropped its weapon",
+    "Pushed": "pushed back",
+    "Repositioned": "moved",
     "Why": {
       "NoLanguage": "No language",
       "Immune": "Immune to {what}",
