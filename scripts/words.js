@@ -30,8 +30,8 @@ export function wordList(key) {
 /** The system's word for a key, if it has one (else `otherwise`). */
 const sys = (key, otherwise) => (hasWords(key) ? localize(key) : otherwise);
 
-/** A PF2e action's name ("Demoralize"), as the system calls it (this module's word without it). */
-export const actionName = key => sys(`PF2E.Actions.${key}.Title`, t(`Action.${key}`));
+/** A PF2e action's name ("Demoralize"), as the system calls it (its title, or its short title: this module's word without them). */
+export const actionName = key => sys(`PF2E.Actions.${key}.Title`, sys(`PF2E.Actions.${key}.ShortTitle`, t(`Action.${key}`)));
 
 /** A PF2e trait's name ("fire", "finisher"), as the system calls it. */
 export function traitName(slug) {

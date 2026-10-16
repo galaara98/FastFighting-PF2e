@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf } from "./core.js";
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
@@ -92,6 +92,21 @@ function drain(run, u) {
   if ( now > seen ) u.hp = Math.max(Math.min(1, u.hp ?? 0), (u.hp ?? 0) - step * (now - seen));
   u.hp = Math.min(u.hp ?? 0, u.maxHp);
   u.drainSeen = now;
+}
+
+/** Is it taking cover still (Take Cover: until it moves from its space, uses an attack action, or falls unconscious)? */
+function takingCover(u) {
+  if ( !(Number(u?.conds?.inCover) > 0) || Number(u.conds.unconscious) > 0 ) return false;
+  return !(u.coverAt && u.pos && (u.coverAt.x !== u.pos.x || u.coverAt.y !== u.pos.y));
+}
+
+/** The cover it has (the walls': "none", "some", "most"), taking cover: standard made greater; prone, greater against a ranged attack. */
+const coverTaken = (u, cover, ranged = false) => (takingCover(u) && (cover === "some" || (ranged && u.prone)) ? "most" : cover);
+
+/** The cover it has from each foe on its feet ("none" ... "total", by the walls: the core's coverOf). */
+function foeCovers(run, u) {
+  const enemies = run.prep?.sides?.[u.side]?.enemies;
+  return run.units.filter(o => o !== u && o.status === STATUS.STANDING && o.active !== false && enemies?.has?.(o.side)).map(o => coverOf(run, u, o));
 }
 
 /**
@@ -312,7 +327,33 @@ export const pf2eRules = {
   usable(run, u, action, t) {
     if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderId(t) && !full(run, u);
     if ( action?.kind === "strike" && !action.light && holderId(u) ) return false;
+    // Take Cover: with standard cover from a foe to make greater, or prone (greater against ranged attacks).
+    if ( action?.takeCover ) return !!u.prone || foeCovers(run, u).includes("some");
+    // Hide: concealed, or with cover from every foe that can see it (and one at least).
+    if ( action?.hide ) {
+      if ( Number(u.conds?.concealed) > 0 ) return true;
+      const seen = foeCovers(run, u).filter(c => c !== "total");
+      return seen.length > 0 && !seen.includes("none");
+    }
     return true;
+  },
+
+  /** Taking cover (Take Cover's outcome: rules.js takingCover): where, so moving away ends it. */
+  onOutcome(run, by, u, outcome) {
+    if ( outcome?.conditions?.inCover && u?.pos ) u.coverAt = { x: u.pos.x, y: u.pos.y };
+  },
+
+  /**
+   * What a roll ends, any but a save: being hidden (it's observed now; against the one it Strikes, still unseen for
+   * that attack: unseenStrike); and an attack, taking cover.
+   */
+  afterRoll(run, u, roll, ctx = {}) {
+    if ( ctx.kind === "save" || !u?.conds ) return;
+    if ( Number(u.conds.hidden) > 0 ) {
+      if ( ctx.kind === "attack" && ctx.target ) u.unseenStrike = ctx.target.id;
+      dropCondition(u, "hidden");
+    }
+    if ( Number(u.conds.inCover) > 0 && (ctx.kind === "attack" || (ctx.action?.traits ?? []).includes("attack")) ) dropCondition(u, "inCover");
   },
 
   /** Whom it can go for: from inside a gullet, only whoever holds it; one held inside another, nobody (its holder neither). */
@@ -483,6 +524,10 @@ export const pf2eRules = {
       case "concealed": return { ac: 2 };
       case "encumbered": return { ac: -1, speed: -10 };
       case "quickened": return { actions: 1 };
+      // (Hidden: a DC 11 flat check for each attack at it, and its own next one at an off-guard foe; taking cover:
+      // greater cover for standard, 2 more.)
+      case "hidden": return { ac: 4, attack: 1 };
+      case "inCover": return { ac: 2 };
       default: return null;
     }
   },
@@ -522,17 +567,22 @@ export const pf2eRules = {
     exposed(ctx) {
       // (exposedTo: off-guard to this attacker only, after a Feint. Each fact read only if the ones before don't settle
       // it: the situation works them out as they're read.)
-      // (And whoever swallowed or engulfed the attacker: off-guard to it from inside.)
+      // (And whoever swallowed or engulfed the attacker: off-guard to it from inside; and anyone it's hidden from, still
+      // so for the one attack that gives it away.)
       const t = ctx.target;
-      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (ctx.attacker && holderId(ctx.attacker) === t.id));
+      const a = ctx.attacker;
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0 || a.unseenStrike === t.id)));
     },
     defense(ctx) {
       // (Off guard on its sheet already: its AC has the -2.)
       const t = ctx.target;
-      return (sheetOffGuard(t) ? 2 : 0) - (this.exposed(ctx) ? 2 : 0) - statusPenalty(t, "dex") + coverBonus(ctx.cover);
+      // (Taking cover: standard made greater; prone, greater against a ranged attack.)
+      return (sheetOffGuard(t) ? 2 : 0) - (this.exposed(ctx) ? 2 : 0) - statusPenalty(t, "dex") + coverBonus(coverTaken(t, ctx.cover, !ctx.action?.melee));
     },
     attack(ctx) {
       const { attacker, action } = ctx;
+      // (A new attack: the last one that gave it away is over.)
+      if ( attacker.unseenStrike ) attacker.unseenStrike = null;
       let bonus = 0;
       // (Prone on its sheet already: its Strikes have the -2.)
       if ( attacker.prone ) bonus -= 2;
@@ -547,7 +597,7 @@ export const pf2eRules = {
     },
     save({ unit, type, cover }) {
       let bonus = 0 - statusPenalty(unit, SAVE_ON[type]);
-      if ( type === "reflex" ) bonus += coverBonus(cover);
+      if ( type === "reflex" ) bonus += coverBonus(coverTaken(unit, cover));
       return { bonus, advantage: 0 };
     },
     /** A skill check (the core doesn't say which): frightened, sickened and fascinated, the worst. */

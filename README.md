@@ -81,7 +81,7 @@ Every perk a playstyle (or a tactics answer) can switch on does something here. 
 
 | Perk (playstyles) | In PF2e |
 | --- | --- |
-| Hard to spot (Chicken, Fragile, Wallflower) | Foes' attention slides off it, and it **Avoids Notice** on the way in: Stealth for initiative, when that's better. (Hide and Take Cover want cover the simulation can't see, so they aren't played.) |
+| Hard to spot (Chicken, Fragile, Wallflower) | Foes' attention slides off it, and it **Avoids Notice** on the way in: Stealth for initiative, when that's better. Behind the scene's walls it leans on **Hide** (with cover from every foe that sees it, or concealed: Stealth against their best Perception DC; hidden, each attack at it needs a DC 11 flat check, and its own next Strike finds the foe off guard, then it's seen) and **Take Cover** (standard cover made greater, +4; prone, greater against ranged attacks; until it moves or attacks). |
 | Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Trip**, **Grapple**, **Disarm** (Athletics against Reflex: -2 to the foe's attacks with its weapon until its next turn; a critical success knocks it away, an action lost picking it up; only a weapon in hand), **Demoralize**, **Feint**, and spells that lay a condition, over a plain Strike. |
 | Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Aid**; healing and buff spells. |
 | In a hurry (Impatient, Speed-Runner) | It doesn't Raise a Shield or Step clear of a foe (it takes the Reactive Strike). |

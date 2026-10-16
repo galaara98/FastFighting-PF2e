@@ -13,7 +13,7 @@ import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { t, actionName, traitName, featureName, coin, englishName, englishDescription, wordList } from "./words.js";
+import { t, actionName, traitName, featureName, coin, englishName, englishDescription, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -1097,6 +1097,7 @@ export class Pf2eAdapter extends SystemAdapter {
       deception: trained("deception") ? skill("deception").mod ?? 0 : null,
       intimidation: skill("intimidation") ? skill("intimidation").mod ?? 0 : null
     }));
+    out.push(...coverActions({ actorId: actor.id, hazard: actor.type === "hazard", stealth: skill("stealth") }));
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
       const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered") });
       out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, maneuver: "distract", traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
@@ -1472,8 +1473,9 @@ export class Pf2eAdapter extends SystemAdapter {
     return key === "prone" || !!conditionSlug(key);
   }
 
-  /** PF2e's own name for a condition (its word, in the table's language). */
+  /** PF2e's own name for a condition (its word, in the table's language); taking cover (inCover), its action's. */
   conditionLabel(key) {
+    if ( key === "inCover" ) return actionName("TakeCover");
     const slug = conditionSlug(key);
     const name = slug ? CONFIG.PF2E?.conditionTypes?.[slug] : null;
     return name ? game.i18n.localize(name) : null;
@@ -1512,6 +1514,29 @@ export class Pf2eAdapter extends SystemAdapter {
 
 function levelOf(actor) {
   return actor.level ?? 0;
+}
+
+/**
+ * Hide and Take Cover, for any creature but a hazard (rules.usable says where it has the cover or concealment they
+ * need): Hide is Stealth against the foes' best Perception DC, hidden until it does anything (an attack's target still
+ * off guard to that one); Take Cover makes standard cover greater (prone, greater against ranged attacks) until it
+ * moves or attacks. Each one action, until the end of its next turn. Not played: cover's bonus to the Stealth check.
+ * @param {object} d
+ * @param {string} d.actorId
+ * @param {boolean} [d.hazard]
+ * @param {object} [d.stealth]  its Stealth ({mod, label}), for Hide
+ */
+export function coverActions({ actorId, hazard = false, stealth = null }) {
+  if ( hazard ) return [];
+  const out = [];
+  if ( Number.isFinite(stealth?.mod) ) {
+    const hidden = { conditions: { hidden: 1 }, rounds: 1, label: conditionName("hidden") };
+    out.push({ id: `${actorId}.hide`, name: actionName("Hide"), kind: "buff", targets: "self", cost: 1, traits: ["secret"], hands: 0, maneuver: "hide", hide: true,
+      setup: true, leans: ["lowProfile"], check: { mod: stealth.mod, against: "perception", label: stealth.label ?? "" }, onDegree: [null, null, hidden, hidden] });
+  }
+  out.push({ id: `${actorId}.take-cover`, name: actionName("TakeCover"), kind: "buff", targets: "self", cost: 1, traits: [], hands: 0, maneuver: "takeCover", takeCover: true,
+    setup: true, leans: ["lowProfile"], outcome: { conditions: { inCover: 1 }, rounds: 1, label: actionName("TakeCover") } });
+  return out;
 }
 
 /** The damage types an injury poison gets in by. */

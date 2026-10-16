@@ -67,7 +67,9 @@
       "Disarm": "Disarm",
       "Shove": "Shove",
       "Reposition": "Reposition",
-      "ReactiveStrike": "Reactive Strike"
+      "ReactiveStrike": "Reactive Strike",
+      "Hide": "Hide",
+      "TakeCover": "Take Cover"
     },
     "Feature": {
       "devise-a-stratagem": "Devise a Stratagem",
