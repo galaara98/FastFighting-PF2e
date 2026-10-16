@@ -1,5 +1,5 @@
 /**
- * PF2e "Make it So": write one simulated outcome onto a token's actor, returning an undo record.
+ * PF2e: write a live battle's turn onto a token's actor (commitPf2eChanges), returning an undo record.
  *
  * Undo record shape (consumed by foundry/make-it-so.js):
  *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
@@ -22,7 +22,7 @@ function partFormula(p) {
  * out of the fight (it takes no side now), or a neutral that turned on the party. Null when nothing changed.
  * @returns {"friendly"|"hostile"|"neutral"|null}
  */
-export function sideChange(final) {
+function sideChange(final) {
   if ( final.swayed === "switched" ) return final.side === "friendly" ? "friendly" : "hostile";
   if ( final.side !== "neutralParty" || final.status === STATUS.DEAD ) return null;
   if ( final.against?.includes("friendly") ) return "hostile";
@@ -30,7 +30,7 @@ export function sideChange(final) {
 }
 const DISPOSITIONS = { friendly: "FRIENDLY", hostile: "HOSTILE", neutral: "NEUTRAL" };
 
-/** Human-readable list of what will change, for the confirmation dialog. */
+/** What a fight changes on a creature, for the summary of the fight (the planner's). */
 export function describePf2eOutcome(spec, final) {
   // (Hit points, its fate and a change of side: the core's words.)
   const lines = commonOutcome(spec, final);
@@ -69,137 +69,13 @@ async function setCondition(actor, slug, value, undo) {
 }
 
 /**
- * @param {TokenDocument} tokenDoc
- * @param {object} spec
- * @param {object} final
- * @param {object} options  {lootMode: "corpse"|"pile"|"none", corpseMode: "keep"|"remove", fledMode: "hide"|"leave", sourceNames}
+ * The engine's condition keys that aren't PF2e's own slugs. (Its "incapacitated" has none: losing the turn to Command
+ * isn't Unconscious, which has a key of its own.)
  */
-export async function commitPf2eOutcome(tokenDoc, spec, final, options = {}) {
-  const actor = tokenDoc.actor;
-  const undo = {
-    tokenUuid: tokenDoc.uuid, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [],
-    deletedItems: [], tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
-  };
-  const sys = actor.system;
-  // PF2e adds linked conditions on its own (dying → unconscious → prone), so undo tracks every new item.
-  const itemsBefore = new Set(actor.items.map(i => i.id));
-  const update = {};
-  const hp = sys.attributes.hp;
-  if ( hp.value !== final.hp ) {
-    update["system.attributes.hp.value"] = final.hp;
-    undo.actorUpdate["system.attributes.hp.value"] = hp.value;
-  }
-  if ( (hp.temp ?? 0) !== final.temp ) {
-    update["system.attributes.hp.temp"] = final.temp;
-    undo.actorUpdate["system.attributes.hp.temp"] = hp.temp ?? 0;
-  }
-  // Stamina Points (the Stamina variant), when the fight read them.
-  if ( spec.hp.stamina && hp.sp && final.stamina !== undefined && hp.sp.value !== final.stamina ) {
-    update["system.attributes.hp.sp.value"] = final.stamina;
-    undo.actorUpdate["system.attributes.hp.sp.value"] = hp.sp.value;
-  }
-  // Focus points and spontaneous slots
-  for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
-    const left = final.resources?.[key] ?? start;
-    if ( left === start ) continue;
-    if ( key === "focus" ) {
-      update["system.resources.focus.value"] = left;
-      undo.actorUpdate["system.resources.focus.value"] = sys.resources?.focus?.value ?? start;
-    } else if ( key === "fate" ) {
-      update["system.resources.heroPoints.value"] = left;
-      undo.actorUpdate["system.resources.heroPoints.value"] = sys.resources?.heroPoints?.value ?? start;
-    }
-  }
-  if ( Object.keys(update).length ) await actor.update(update);
-
-  await commitSpellsAndItems(actor, spec, final, undo);
-
-  // Conditions
-  if ( final.status === STATUS.DOWN ) {
-    if ( final.dying > 0 ) await setCondition(actor, "dying", final.dying, undo);
-    else await setCondition(actor, "unconscious", null, undo);
-  }
-  if ( final.wounded > (sys.attributes?.wounded?.value ?? 0) ) await setCondition(actor, "wounded", final.wounded, undo);
-  if ( final.prone && final.status === STATUS.STANDING ) await setCondition(actor, "prone", null, undo);
-  for ( const [k, v] of Object.entries(final.conditions ?? {}) ) {
-    const slug = LINGERING[k];
-    if ( slug && final.status !== STATUS.DEAD ) await setCondition(actor, slug, typeof v === "number" ? v : 1, undo);
-  }
-
-  // Persistent damage and afflictions (only matter for the living)
-  if ( final.status !== STATUS.DEAD ) {
-    const toCreate = [];
-    for ( const p of final.persistent ?? [] ) {
-      const cond = game.pf2e.ConditionManager.getCondition("persistent-damage").toObject();
-      cond.system.persistent = { formula: partFormula(p.part), damageType: p.type, dc: 15, criticalHit: false };
-      toCreate.push(cond);
-    }
-    for ( const a of final.afflictions ?? [] ) {
-      toCreate.push({
-        type: "effect",
-        name: t("Affliction.Name", { name: a.name, stage: a.stage }),
-        img: "icons/svg/poison.svg",
-        system: {
-          description: { value: t("Affliction.Description", { when: a.onset > 0 ? t("Affliction.Onset", { n: a.onset, stage: a.stage }) : t("Affliction.Stage", { stage: a.stage }), save: a.save, dc: a.dc }) },
-          badge: { type: "counter", value: a.stage },
-          duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
-          tokenIcon: { show: true }
-        },
-        flags: { [MODULE_ID]: { affliction: a } }
-      });
-    }
-    if ( toCreate.length ) {
-      const created = await actor.createEmbeddedDocuments("Item", toCreate);
-      undo.createdItems.push(...created.map(i => i.id));
-    }
-  }
-
-  // Death, loot, fleeing
-  if ( final.status === STATUS.DEAD ) {
-    await actor.toggleStatusEffect("dead", { active: true, overlay: true });
-    undo.statuses.push({ id: "dead", active: false, overlay: true });
-    const combatant = game.combat?.getCombatantsByToken?.(tokenDoc)?.[0];
-    if ( combatant && !combatant.defeated ) {
-      await combatant.update({ defeated: true });
-      undo.combatant = { uuid: combatant.uuid, defeated: false };
-    }
-    if ( spec.kind !== "pc" ) await handleLoot(tokenDoc, actor, options, undo);
-  } else if ( final.status === STATUS.FLED && options.fledMode !== "leave" && spec.kind !== "pc" ) {
-    undo.tokenUpdate = { hidden: tokenDoc.hidden };
-    await tokenDoc.update({ hidden: true });
-  } else if ( final.status === STATUS.SURRENDERED ) {
-    const [effect] = await actor.createEmbeddedDocuments("Item", [{
-      type: "effect",
-      name: game.i18n.localize("FFPF2E.Surrendered"),
-      img: "icons/svg/cancel.svg",
-      system: {
-        description: { value: `<p>${game.i18n.localize("FFPF2E.SurrenderedHint")}</p>` },
-        duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
-        tokenIcon: { show: true }
-      }
-    }]);
-    if ( effect ) undo.createdItems.push(effect.id);
-  }
-  const changed = sideChange(final);
-  if ( changed ) {
-    undo.actorUpdate["system.details.alliance"] = actor.system.details?.alliance ?? null;
-    undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
-    await actor.update({ "system.details.alliance": { friendly: "party", hostile: "opposition", neutral: null }[changed] });
-    await tokenDoc.update({ disposition: CONST.TOKEN_DISPOSITIONS[DISPOSITIONS[changed]] });
-  }
-  await lingeringEffects(actor, final, options);
-  const live = tokenDoc.actor ?? actor;
-  for ( const item of live.items ) {
-    if ( !itemsBefore.has(item.id) && !undo.createdItems.includes(item.id) ) undo.createdItems.push(item.id);
-  }
-  return undo;
-}
-
-/** The engine's condition keys that aren't PF2e's own slugs. */
-const PF2E_SLUGS = { offGuard: "off-guard", incapacitated: "unconscious" };
+const PF2E_SLUGS = { offGuard: "off-guard" };
 
 /** The PF2e condition slug for an engine key, or null for one the system doesn't have (the engine's alone). */
-function conditionSlug(key) {
+export function conditionSlug(key) {
   const slug = PF2E_SLUGS[key] ?? key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
   try {
     return game.pf2e?.ConditionManager?.getCondition(slug) ? slug : null;
@@ -216,7 +92,7 @@ async function removeCondition(actor, slug, undo) {
   }
 }
 
-/** An affliction's effect item, as Make it So lays it. */
+/** An affliction's effect item, as a fight lays it. */
 function afflictionItem(a) {
   return {
     type: "effect",
@@ -237,7 +113,7 @@ function afflictionItem(a) {
  * them twice changes nothing more. Hit points, Hero Points and Focus as they now stand; the slots and items used this
  * turn (`spec` is read afresh each turn, so what it says is what was there at the turn's start); conditions set and
  * taken off; new persistent damage and afflictions; a death (and its loot), running, surrendering, a change of side.
- * @returns {Promise<object>} an undo record (as commitPf2eOutcome's)
+ * @returns {Promise<object>} an undo record (make-it-so.js revertRecord takes it back)
  */
 export async function commitPf2eChanges(tokenDoc, spec, changes, final, options = {}) {
   const actor = tokenDoc.actor;
@@ -315,6 +191,10 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
       await item.delete();
     }
   }
+  if ( !dead ) {
+    for ( const e of changes.effects?.added ?? [] ) await laySpellEffect(actor, e, options, undo);
+  }
+  for ( const e of changes.effects?.ended ?? [] ) await liftSpellEffect(actor, e, undo);
 
   if ( changes.died ) {
     await actor.toggleStatusEffect("dead", { active: true, overlay: true });
@@ -356,23 +236,35 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
   return undo;
 }
 
-/** Buffs and debuffs still running when the fight ends stay on: their Spell Effect, for the rounds left. */
-async function lingeringEffects(actor, final, options) {
-  for ( const e of final.effects ?? [] ) {
-    const source = options?.effectSource?.(e.key);
-    for ( const uuid of source?.action?.effectRef?.uuids ?? [] ) {
-      let effect = null;
-      try {
-        effect = await fromUuid(uuid);
-      } catch ( err ) { /* gone */ }
-      if ( !effect ) continue;
-      const data = effect.toObject();
-      delete data._id;
-      data.system = { ...data.system, duration: { value: Math.max(1, e.rounds), unit: "rounds", expiry: "turn-start", sustained: false } };
-      if ( source.action.rank ) data.system.level = { ...(data.system.level ?? {}), value: source.action.rank };
-      data.flags = { ...(data.flags ?? {}), [MODULE_ID]: { lingering: true } };
-      await actor.createEmbeddedDocuments("Item", [data]); // (Undo finds it among the items that weren't there before)
-    }
+/**
+ * A buff or debuff laid this turn (Bless, Bane, Rage): its PF2e effect, from the action that laid it (options.effectSource),
+ * for the rounds it has; marked with which it is, so it comes off when the engine's ends (liftSpellEffect). Only an
+ * effect Item is copied (the link is item data a player can write).
+ */
+async function laySpellEffect(actor, e, options, undo) {
+  const source = options?.effectSource?.(e.key);
+  for ( const uuid of source?.action?.effectRef?.uuids ?? [] ) {
+    let effect = null;
+    try {
+      effect = await fromUuid(uuid);
+    } catch ( err ) { /* gone */ }
+    if ( effect?.documentName !== "Item" || effect.type !== "effect" ) continue;
+    const data = effect.toObject();
+    delete data._id;
+    data.system = { ...data.system, duration: { value: Math.max(1, Number.isFinite(e.rounds) ? e.rounds : 10), unit: "rounds", expiry: "turn-start", sustained: false } };
+    if ( source.action.rank ) data.system.level = { ...(data.system.level ?? {}), value: source.action.rank };
+    data.flags = { ...(data.flags ?? {}), [MODULE_ID]: { laid: { key: e.key, sourceId: e.sourceId ?? null } } };
+    const [created] = await actor.createEmbeddedDocuments("Item", [data]);
+    if ( created ) undo.createdItems.push(created.id);
+  }
+}
+
+/** A buff or debuff the engine ended (its time up, its caster's concentration broken): the effect it laid comes off. */
+async function liftSpellEffect(actor, e, undo) {
+  const ours = i => { const laid = i.getFlag(MODULE_ID, "laid"); return laid?.key === e.key && (laid.sourceId ?? null) === (e.sourceId ?? null); };
+  for ( const item of actor.itemTypes.effect.filter(ours) ) {
+    undo.deletedItems.push(item.toObject());
+    await item.delete();
   }
 }
 

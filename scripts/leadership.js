@@ -10,7 +10,7 @@ const LEADER_ABILITY = /(commander|captain|warlord|rally|inspir|command|leader|b
 
 /**
  * @param {object[]} entries  [{id, level, skills: {diplomacy, intimidation, warfareLore}, isCommander, tactics: number,
- *   abilities: [{key, name}]}] (key: the ability's slug; an older abilityNames: string[] still works)
+ *   abilities: [{key, name}]}] (key: the ability's slug)
  * @returns {{id, score, reason, bonus: {brave, tacticalFloor, attack, ac}}[]} best first
  */
 export function rankLeaders(entries) {
@@ -25,7 +25,7 @@ export function rankLeaders(entries) {
       score += 4 + Math.min(4, e.tactics ?? 0);
       reasons.push(t("Lead.Commander", { n: e.tactics ?? 0 }));
     }
-    const leaderAbilities = (e.abilities ?? (e.abilityNames ?? []).map(n => ({ key: n, name: n })))
+    const leaderAbilities = (e.abilities ?? [])
       .filter(a => LEADER_ABILITY.test(a.key ?? "") || LEADER_ABILITY.test(a.name ?? ""));
     if ( leaderAbilities.length ) {
       score += 3;
@@ -37,7 +37,7 @@ export function rankLeaders(entries) {
 }
 
 /** Map a leadership score to side-wide effects. */
-export function leaderBonus(score, isCommander = false) {
+function leaderBonus(score, isCommander = false) {
   if ( score >= 6 ) return { brave: 20, tacticalFloor: 60, attack: isCommander ? 1 : 0, ac: isCommander ? 1 : 0 };
   if ( score >= 3 ) return { brave: 15, tacticalFloor: 50, attack: isCommander ? 1 : 0, ac: 0 };
   if ( score >= 0 ) return { brave: 10, tacticalFloor: 40, attack: 0, ac: 0 };

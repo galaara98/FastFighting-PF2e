@@ -2,13 +2,13 @@
  * Pathfinder 2e adapter: reads PF2e actors into CombatantSpecs and commits outcomes back.
  * Data paths verified against pf2e 8.6.0 on Foundry v14.
  */
-import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords } from "./core.js";
+import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eOutcome, commitPf2eChanges, describePf2eOutcome, commitPf2eConcession } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, conditionSlug } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
@@ -23,10 +23,9 @@ const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
-/** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
-/** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 /** A creature's rarity, as the core counts it (spec.rarity). */
-export const RARITY = Object.freeze({ common: 0, uncommon: 1, rare: 2, unique: 3 });
+const RARITY = Object.freeze({ common: 0, uncommon: 1, rare: 2, unique: 3 });
+/** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
 const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
 
@@ -38,6 +37,7 @@ const ALWAYS_ON = ["implements-empowerment"];
 /** Knowledge skills for Recall Knowledge (and any Lore). */
 const RECALL_SKILLS = new Set(["arcana", "crafting", "medicine", "nature", "occultism", "religion", "society"]);
 
+/** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
 const EFFECT_CACHE = new Map();
 const CREATURE_CACHE = new Map();
 
@@ -72,8 +72,17 @@ async function creatureFor(level, trait) {
   })().catch(() => null));
   return CREATURE_CACHE.get(key);
 }
+/**
+ * The PF2e effect an item links to (its self-effect, a spell's effect), or null. Only an Item of type "effect": the link
+ * is the item's own data, which a player can write, and what it finds may be copied onto a sheet by the GM's client.
+ */
 async function linkedEffect(uuid) {
-  if ( !EFFECT_CACHE.has(uuid) ) EFFECT_CACHE.set(uuid, fromUuid(uuid).catch(() => null));
+  if ( !EFFECT_CACHE.has(uuid) ) {
+    EFFECT_CACHE.set(uuid, (async () => {
+      const doc = typeof uuid === "string" ? await fromUuid(uuid) : null;
+      return doc?.documentName === "Item" && doc.type === "effect" ? doc : null;
+    })().catch(() => null));
+  }
   return EFFECT_CACHE.get(uuid);
 }
 /** PF2e conditions the engine plays out, by slug -> engine key. */
@@ -191,7 +200,7 @@ const PLAIN_DAMAGE = new Set(["bludgeoning", "piercing", "slashing", "untyped", 
  * firearm's shot is gunfire; an air, water, earth or wood attack is that element when its harm is a plain blow (a
  * lightning bolt with the air trait is still lightning). Undefined: its damage says.
  */
-export function storyLook(traits = [], group = null, damage = []) {
+function storyLook(traits = [], group = null, damage = []) {
   if ( group === "firearm" ) return "ballistic";
   if ( !damage.length || !damage.every(p => PLAIN_DAMAGE.has(p.type)) ) return undefined;
   return traits.map(t => ELEMENT_LOOKS[t]).find(Boolean);
@@ -218,7 +227,7 @@ export class Pf2eAdapter extends SystemAdapter {
     return pf2eRules;
   }
 
-  /** Make it So leaves a fallen creature's gear as loot: a lootable corpse, or a pile (that may take the body's place). */
+  /** The real fight leaves a fallen creature's gear as loot: a lootable corpse, or a pile (that may take the body's place). */
   get supportsLoot() {
     return true;
   }
@@ -498,7 +507,7 @@ export class Pf2eAdapter extends SystemAdapter {
           const params = { getFormula: true, options: [...ALWAYS_ON, ...options] };
           return (critical ? await s.critical?.(params) : await s.damage?.(params)) ?? null;
         } catch ( err ) {
-          console.warn(`fast-fighting | could not read damage for ${actor.name} ${s.label}`, err);
+          console.warn(`fast-fighting-pf2e | could not read damage for ${actor.name} ${s.label}`, err);
           return null;
         }
       };
@@ -564,7 +573,7 @@ export class Pf2eAdapter extends SystemAdapter {
       }
     }
     // One of each: the Strike it does most with.
-    const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0) + (a.bonus ?? 0);
+    const mean = a => (a.damage ?? []).reduce((s, p) => s + meanPart(p), 0) + (a.bonus ?? 0);
     const picked = [];
     for ( const setup of setups ) {
       const best = variants.filter(v => v.setup === setup).map(v => v.strike).sort((a, b) => mean(b) - mean(a))[0];
@@ -596,7 +605,7 @@ export class Pf2eAdapter extends SystemAdapter {
         out.push({ ...base, id: `${actor.id}.blast.${config.element}.ranged2`, name: t("TwoActions", { name }), cost: 2, melee: false, range: { increment: feet, max: feet, noPenalty: true }, damage: await read(false, 2) });
       }
     } catch ( err ) {
-      console.warn(`fast-fighting | could not read ${actor.name}'s Elemental Blast`, err);
+      console.warn(`fast-fighting-pf2e | could not read ${actor.name}'s Elemental Blast`, err);
     }
     return out.filter(a => a.damage.length);
   }
@@ -734,7 +743,7 @@ export class Pf2eAdapter extends SystemAdapter {
             melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
           };
           if ( defense?.save ) {
-            action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: false };
+            action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor), basic: false };
             // (Dominate: a save at the end of each of its turns, against the caster's DC.)
             action.onSave = control.map(o => (o?.repeatSave ? { ...o, repeatSave: { type: action.save.type, dc: action.save.dc } } : o));
           } else {
@@ -768,7 +777,7 @@ export class Pf2eAdapter extends SystemAdapter {
           action.maps = [0, -5, -10];
         } else if ( defense?.save ) {
           action.kind = "save";
-          action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + level(actor), basic: !!defense.save.basic };
+          action.save = { type: defense.save.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor), basic: !!defense.save.basic };
           // "If the target critically fails the save, it is also stunned 1."
           const rider = parseCritRider(englishDescription(spell));
           if ( rider ) action.effects = [rider];
@@ -782,11 +791,6 @@ export class Pf2eAdapter extends SystemAdapter {
     return out;
   }
 
-  /**
-   * A spell that works through its Spell Effect: a buff for friends (Bless, Heroism, Courageous Anthem, Protection,
-   * Haste), a debuff on foes who fail a save (Bane, Malediction), or conditions laid on enemies with no save at all
-   * (Dirge of Doom). Null when it does nothing the engine plays out.
-   */
   /**
    * A summon spell as the engine's: a creature of the trait it calls, at the highest level its rank allows, read like
    * any creature, as a minion (two actions a turn) that its summoner must Sustain each turn or lose.
@@ -810,6 +814,11 @@ export class Pf2eAdapter extends SystemAdapter {
     return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true };
   }
 
+  /**
+   * A spell that works through its Spell Effect: a buff for friends (Bless, Heroism, Courageous Anthem, Protection,
+   * Haste), a debuff on foes who fail a save (Bane, Malediction), or conditions laid on enemies with no save at all
+   * (Dirge of Doom). Null when it does nothing the engine plays out.
+   */
   async #spellSupport(spell, stat) {
     const sys = spell.system;
     const html = englishDescription(spell);
@@ -896,11 +905,6 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
-   * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
-   * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
-   * against one attack). By slug, on characters and monsters alike. Null when it has none.
-   */
-  /**
    * Its own abilities that ask for a save and hurt or hinder (Breath Weapon, Trample, a Drain): read from their text
    * (abilities.js), with a cooldown ("can't use it again for 1d4 rounds") or a frequency (once per day) as uses.
    */
@@ -953,6 +957,11 @@ export class Pf2eAdapter extends SystemAdapter {
     return out;
   }
 
+  /**
+   * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
+   * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
+   * against one attack). By slug, on characters and monsters alike. Null when it has none.
+   */
   #reactions(actor) {
     const out = [];
     const shield = actor.system.attributes?.shield;
@@ -1283,10 +1292,6 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /* -------------------------------------------- */
 
-  async commitOutcome(tokenDoc, spec, final, options) {
-    return commitPf2eOutcome(tokenDoc, spec, final, options);
-  }
-
   get supportsLive() {
     return true;
   }
@@ -1305,6 +1310,59 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
+   * A token's sheet mid-fight (see the core's readLiveState): only what a turn changes, read straight off the actor,
+   * not a whole CombatantSpec (its spells' damage, its effects' rules) for every creature every turn. Its resources are
+   * the ones the engine counts (context.unit), each read as toCombatantSpec reads it; one used up reads 0.
+   */
+  async readLiveState(tokenDoc, context = {}) {
+    const actor = tokenDoc.actor;
+    if ( !context.unit?.resources ) return super.readLiveState(tokenDoc, context);
+    if ( !this.canHandle(actor) ) return null;
+    const sys = actor.system;
+    const hp = sys.attributes.hp ?? {};
+    // (As toCombatantSpec has it: a hazard with no Hit Points is always set.)
+    const unbroken = actor.type === "hazard" && !(hp.max > 0);
+    const value = unbroken ? 1 : hp.value ?? 0;
+    const dead = actor.statuses?.has?.("dead") || [...actor.effects].some(e => !e.disabled && e.statuses?.has?.("dead"))
+      || (value <= 0 && actor.type !== "character");
+    const resources = {};
+    for ( const key of Object.keys(context.unit.resources) ) {
+      const n = this.#resourceLeft(actor, key);
+      if ( n !== undefined ) resources[key] = n;
+    }
+    return {
+      hp: value, temp: unbroken ? 0 : hp.temp ?? 0, stamina: staminaOf(actor, hp).stamina?.value, maxHp: unbroken ? 1 : hp.max ?? 1,
+      dying: sys.attributes?.dying?.value ?? 0, wounded: sys.attributes?.wounded?.value ?? 0, doomed: sys.attributes?.doomed?.value ?? 0,
+      status: dead ? "dead" : value > 0 ? "standing" : "down",
+      conditions: this.#conditions(actor), persistent: this.#persistent(actor), resources
+    };
+  }
+
+  /** What's left of one of its resources (a key toCombatantSpec gave it), or undefined for one it doesn't know. */
+  #resourceLeft(actor, key) {
+    const sys = actor.system;
+    if ( key === "fate" ) return actor.type === "character" ? Number(sys.resources?.heroPoints?.value) || 0 : 0;
+    if ( key === "focus" ) return sys.resources?.focus?.value ?? 0;
+    const [kind, id, more] = key.split(":");
+    const item = actor.items.get(id);
+    if ( kind === "item" ) {
+      if ( !item ) return 0;
+      // (A healing potion counts each of its uses, as #consumables does; a bomb, its quantity.)
+      const healing = item.type === "consumable" && item.system.damage?.kind === "healing";
+      return Math.max(0, (Number(item.system.quantity ?? 1) || 0) * (healing ? Math.max(1, item.system.uses?.max ?? 1) : 1));
+    }
+    if ( kind === "prep" ) {
+      let count = 0;
+      for ( const [slotKey, slot] of Object.entries(item?.system?.slots ?? {}) ) {
+        if ( slotKey !== "slot0" ) count += (slot.prepared ?? []).filter(p => p.id === more && !p.expended).length;
+      }
+      return count;
+    }
+    if ( kind === "slots" ) return item?.system?.slots?.[`slot${more}`]?.value ?? 0;
+    return undefined;
+  }
+
+  /**
    * Its reactions, for its player to say always / ask / never: its own (Shield Block, Nimble Dodge ...) and Reactive Strike
    * where it has it (by that name, as PF2e has it).
    */
@@ -1317,6 +1375,11 @@ export class Pf2eAdapter extends SystemAdapter {
   /** A player's turn in a live battle, read from the cards PF2e made for it (read-turn.js). */
   readTurn(messages, context) {
     return readPf2eTurn(messages, context);
+  }
+
+  /** PF2e's sheets carry its own conditions (and prone); the engine's others (incapacitated: Command) it keeps itself. */
+  sheetCarries(key) {
+    return key === "prone" || !!conditionSlug(key);
   }
 
   /** A ranged attack or a manipulate action in a foe's reach: Reactive Strike's other triggers (read-turn.js). */
@@ -1345,7 +1408,7 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 }
 
-function level(actor) {
+function levelOf(actor) {
   return actor.level ?? 0;
 }
 

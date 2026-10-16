@@ -141,7 +141,7 @@ export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_ST
 export function healsOthers(actions = []) {
   const out = [];
   for ( const a of actions ?? [] ) {
-    if ( a?.kind !== "heal" || a.selfOnly || a.firstAid || a.consumable || /^item:/.test(a.resource ?? "") ) continue;
+    if ( a?.kind !== "heal" || a.selfOnly || a.firstAid || /^item:/.test(a.resource ?? "") ) continue;
     if ( a.name && !out.includes(a.name) ) out.push(a.name);
   }
   return out;

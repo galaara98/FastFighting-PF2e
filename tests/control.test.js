@@ -30,6 +30,8 @@ describe("PF2e crowd control", () => {
     const o = parseControl({ description: SLEEP, duration: "" });
     expect(o[2]).toBeNull();
     expect(o[1].conditions.incapacitated).toBe(1);
+    // (Unconscious, as PF2e's sheet says it: not Command's loss of a turn, which no PF2e condition says.)
+    expect(o[1].conditions.unconscious).toBe(1);
     expect(o[1].endsOnDamage).toBe(true);
     expect(o[1].rounds).toBe(10);
   });
@@ -38,6 +40,7 @@ describe("PF2e crowd control", () => {
     const o = parseControl({ description: COMMAND, duration: "until the end of the target's next turn" });
     expect(o[1].conditions).toEqual({ slowed: 1 });
     expect(o[0].conditions).toEqual({ incapacitated: 1 });
+    expect(o[0].conditions.unconscious).toBeUndefined();
     expect(o[0].rounds).toBe(1);
   });
 

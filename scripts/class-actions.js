@@ -5,6 +5,7 @@
  * Pure, unit-tested.
  */
 import { featureName } from "./words.js";
+import { doubled } from "./core.js";
 
 const meanDamage = parts => (parts ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
 const score = s => (s.bonus ?? 0) + meanDamage(s.damage);
@@ -17,7 +18,6 @@ function weaponDice(strike, n) {
   if ( !faces ) return null;
   return { dice: [{ n, faces }], flat: 0, type: first.type, persistent: false, category: null };
 }
-const doubled = part => ({ ...part, dice: part.dice.map(d => ({ ...d, n: d.n * 2 })), flat: part.flat * 2 });
 
 /**
  * What `more` adds to `base` (damage parts as parsed): the extra dice, by size, and flat damage of each type. How a
@@ -84,7 +84,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   if ( swing ) {
     const extra = weaponDice(swing, level >= 18 ? 3 : level >= 10 ? 2 : 1);
     if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? named("vicious-swing") : named("power-attack")} (${swing.name})`, cost: 2, attacks: 2,
-      damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, doubled(extra)] : null, classAction: "vicious-swing" });
+      damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, ...doubled([extra])] : null, classAction: "vicious-swing" });
   }
   // Double Slice: a Strike with each of two melee weapons, both at the current penalty.
   if ( has("double-slice") ) {

@@ -25,6 +25,12 @@ function naturalOf(roll) {
   return d20?.total ?? d20?.results?.find?.(r => r.active)?.result ?? null;
 }
 
+/** Whether an attack roll's card is a melee one (its options or domains say). */
+function meleeOf(c) {
+  const has = (list, v) => Array.isArray(list) && list.includes(v);
+  return has(c.options, "item:melee") || has(c.domains, "melee-attack-roll") || has(c.domains, "melee-strike-attack-roll");
+}
+
 /** The action a check was made for, by its slug (from its roll options: "action:demoralize"). */
 function actionOf(context) {
   for ( const o of context?.options ?? [] ) {
@@ -36,7 +42,7 @@ function actionOf(context) {
 
 /**
  * @param {ChatMessage[]} messages  the cards made during the turn, oldest first
- * @param {object} context          {actorId, tokenId, ids: {tokenId: battle id}}
+ * @param {object} context          {tokenId, ids: {tokenId: battle id}}
  * @returns {object[]} engine log events (attack, control, talk, heal), each with `sure`
  */
 export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
@@ -53,7 +59,7 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
     const degree = c.outcome in DEGREE ? DEGREE[c.outcome] : null;
     if ( c.type === "attack-roll" ) {
       if ( !target || degree === null ) continue;
-      const melee = (c.options ?? []).includes("item:melee") || (c.domains ?? []).includes("melee-attack-roll") || (c.domains ?? []).includes("melee-strike-attack-roll");
+      const melee = meleeOf(c);
       events.push({
         type: "attack", targetId: target, action: m.flags?.pf2e?.strike?.name ?? itemName(m) ?? c.title ?? "", degree, natural: naturalOf(roll), total: roll?.total ?? null,
         dc: c.dc?.value ?? null, margin: Number.isFinite(c.dc?.value) && Number.isFinite(roll?.total) ? roll.total - c.dc.value : 0,
@@ -104,10 +110,10 @@ export function pf2eOpening(message, tokenId) {
   const mine = (c?.token && tokenIdOf(c.token) === tokenId) || message.speaker?.token === tokenId;
   if ( !mine ) return false;
   if ( c?.type === "attack-roll" ) {
-    const melee = (c.options ?? []).includes("item:melee") || (c.domains ?? []).includes("melee-attack-roll") || (c.domains ?? []).includes("melee-strike-attack-roll");
-    return !melee;
+    return !meleeOf(c);
   }
-  const options = [...(f.origin?.rollOptions ?? []), ...(c?.options ?? [])];
+  const list = v => (Array.isArray(v) ? v : []);
+  const options = [...list(f.origin?.rollOptions), ...list(c?.options)];
   return options.some(o => /(^|:)trait:manipulate$/.test(String(o)));
 }
 

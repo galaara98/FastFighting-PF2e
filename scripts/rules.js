@@ -230,22 +230,25 @@ export const pf2eRules = {
    * melee attacks; prone -2 to attack; -2 to melee underwater without a swim speed; -2 per range increment.
    */
   modifiers: {
-    exposed({ target, grabbed, flanked, exposedTo }) {
-      // (exposedTo: off-guard to this attacker only, after a Feint.)
-      return !!(target.prone || target.conds.offGuard || target.conds.paralyzed || grabbed || flanked || exposedTo);
+    exposed(ctx) {
+      // (exposedTo: off-guard to this attacker only, after a Feint. Each fact read only if the ones before don't settle
+      // it: the situation works them out as they're read.)
+      const t = ctx.target;
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo);
     },
     defense(ctx) {
       const t = ctx.target;
       return -(this.exposed(ctx) ? 2 : 0) - (t.conds.clumsy ?? 0) - statusPenalty(t);
     },
-    attack({ attacker, action, distance, positioning }) {
+    attack(ctx) {
+      const { attacker, action } = ctx;
       let bonus = 0;
       if ( attacker.prone ) bonus -= 2;
       bonus -= statusPenalty(attacker);
       if ( action?.melee ) bonus -= attacker.conds.enfeebled ?? 0;
       if ( action?.melee && attacker.spec.environment?.aquatic && !(attacker.spec.speeds?.swim > 0) ) bonus -= 2;
-      if ( action?.range && !action.range.noPenalty && positioning ) {
-        bonus -= 2 * Math.max(0, Math.ceil(distance / action.range.increment) - 1);
+      if ( action?.range && !action.range.noPenalty && ctx.positioning ) {
+        bonus -= 2 * Math.max(0, Math.ceil(ctx.distance / action.range.increment) - 1);
       }
       return { bonus, advantage: 0 };
     },

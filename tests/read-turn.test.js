@@ -33,6 +33,11 @@ describe("a card that lowers the guard in a foe's reach (Reactive Strike)", () =
     expect(pf2eOpening(card({ options: ["item:melee"] }), "tokA")).toBe(false);
   });
 
+  test("a card whose options aren't lists (made by hand) reads as nothing, without throwing", () => {
+    expect(pf2eOpening({ speaker: { token: "tokA" }, flags: { pf2e: { origin: { rollOptions: "trait:manipulate" }, context: { options: 7 } } } }, "tokA")).toBe(false);
+    expect(pf2eOpening({ speaker: { token: "tokA" }, flags: { pf2e: { context: { type: "attack-roll", options: "item:melee", domains: null } } } }, "tokA")).toBe(true);
+  });
+
   test("anything with the manipulate trait does, by its roll options; someone else's card doesn't", () => {
     const spell = { speaker: { token: "tokA" }, flags: { pf2e: { origin: { type: "spell", rollOptions: ["origin:item:spell", "origin:item:trait:concentrate", "origin:item:trait:manipulate"] } } } };
     expect(pf2eOpening(spell, "tokA")).toBe(true);

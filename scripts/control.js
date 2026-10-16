@@ -23,7 +23,7 @@ const CONDITIONS = {
   grabbed: () => ({ immobilized: 1, offGuard: 1 }),
   paralyzed: () => ({ paralyzed: 1 }),
   fleeing: () => ({ fleeing: 1 }),
-  unconscious: () => ({ incapacitated: 1, offGuard: 1 }),
+  unconscious: () => ({ unconscious: 1, incapacitated: 1, offGuard: 1 }),
   // Dominate: it fights for its controller until the spell ends.
   controlled: () => ({ controlled: 1 })
 };
@@ -70,7 +70,9 @@ export function conditionsIn(text) {
   return out;
 }
 
-const label = conds => Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null))).join(", ");
+// (Unconscious says it all: not "unconscious, helpless, off-guard".)
+const label = conds => (conds.unconscious ? conditionLabel("unconscious")
+  : Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null))).join(", "));
 
 /**
  * What each degree of the save does, or null if the spell imposes nothing the engine plays out.
@@ -108,5 +110,5 @@ export function parseCritRider(description) {
   if ( !m ) return null;
   const conditions = conditionsIn(m[1]);
   if ( !Object.keys(conditions).length ) return null;
-  return { kind: "condition", conditions, rounds: durationRounds(m[1]) ?? (conditions.stunned ? 1 : 1), label: label(conditions), critOnly: true };
+  return { kind: "condition", conditions, rounds: durationRounds(m[1]) ?? 1, label: label(conditions), critOnly: true };
 }

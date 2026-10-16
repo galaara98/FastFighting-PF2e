@@ -128,7 +128,7 @@ const partsOf = (lean, why, scale = 1) => Object.entries(lean ?? {}).map(([trait
  * A player character's parts: everything on its sheet that moves it from the usual hero.
  * @param {object} d   see derivePf2eTraits
  */
-export function pcParts(d) {
+function pcParts(d) {
   const names = d.names ?? {};
   const ability = k => names.abilities?.[k] ?? k;
   const level = Number(d.level) || 0;

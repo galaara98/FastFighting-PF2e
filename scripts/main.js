@@ -1,7 +1,7 @@
 /**
  * FastFighting PF2e: teaches FastFighting Core how Pathfinder Second Edition works.
  * Registers the PF2e adapter (actor data, rules, personality defaults, leadership, afflictions,
- * Make it So) through the core's public API.
+ * live battles) through the core's public API.
  */
 import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
@@ -17,7 +17,7 @@ const KNOWN_TRANSLATIONS = {
   es: { id: "pf2e-es", title: "Translation: Spanish [PF2E] [UNOFFICIAL]", url: "https://github.com/allnnde/pf2e-esp-translation" }
 };
 
-export const MODULE_ID = "fast-fighting-pf2e";
+const MODULE_ID = "fast-fighting-pf2e";
 
 Hooks.once("init", () => {
   // How much a Lore-Collector's sizing a foe up pays off (lore.js).
