@@ -7,8 +7,8 @@
  */
 import { describe, expect, test } from "vitest";
 import { beginRun, beginRound, prepareBattle, strikeOutOfTurn, endOfTurn, turnUpkeep, takeTurn } from "../../fast-fighting/scripts/engine/simulator.js";
-import { holdsOf, tryHold, release } from "../../fast-fighting/scripts/engine/behavior/holds.js";
-import { parseFormula } from "../scripts/core.js";
+import { holdsOf, tryHold, release, freeable, untieCost } from "../../fast-fighting/scripts/engine/behavior/holds.js";
+import { parseFormula, cutOff } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { gulletAction, lightStrike, chanceAtLeast, holderId, cuttingStrike, full } from "../scripts/gullet.js";
 import { gulletsOf } from "../scripts/adapter.js";
@@ -108,18 +108,19 @@ describe("swallowed", () => {
     expect(hero.hp).toBeLessThan(300);
     expect(pf2eRules.modifiers.actionsLost(hero)).toBe(1);
     const other = { id: "orc", conds: {}, effects: [] };
-    expect([pf2eRules.canTarget(run, hero, w), pf2eRules.canTarget(run, hero, other), pf2eRules.canTarget(run, w, hero), pf2eRules.canTarget(run, other, hero)]).toEqual([true, false, false, false]);
+    // (From inside, PF2e's: only its swallower. Nothing outside reaches in: the core's.)
+    expect([pf2eRules.canTarget(run, hero, w), pf2eRules.canTarget(run, hero, other)]).toEqual([true, false]);
+    expect([cutOff(run, w, hero), cutOff(run, other, hero), cutOff(run, hero, w)]).toEqual([true, true, false]);
     expect(pf2eRules.modifiers.exposed({ target: w, attacker: hero, conds: {} })).toBe(true);
     // (From inside, only light weapons: the dagger, not the maul.)
     expect(pf2eRules.usable(run, hero, hero.spec.actions[0], w)).toBe(true);
     expect(pf2eRules.usable(run, hero, hero.spec.actions[1], w)).toBe(false);
   });
 
-  test("the jaws let go of it at its turn's start; the damage again at the end of each of its turns", () => {
+  test("the jaws let go of it as it's swallowed (the core's); the damage again at the end of each of its turns", () => {
     const { run, hero } = swallowed();
-    expect(hero.grabbedBy).toBe("worm");
-    turnUpkeep(run, hero);
     expect(hero.grabbedBy).toBeNull();
+    expect(hero.conds.grabbed ?? 0).toBe(0);
     expect(holdsOf(run, hero)).toEqual([expect.objectContaining({ key: "swallowed", byId: "worm", dc: 24, others: null })]);
     expect(pf2eRules.conditionHarm("swallowed", 1, hero, run.byId.get("worm"))).toMatchObject([{ dice: [{ n: 2, faces: 8 }], flat: 5, type: "bludgeoning" }]);
     expect(pf2eRules.conditionHarm("swallowed", 1, hero, { spec: {} })).toBeUndefined();
@@ -160,6 +161,55 @@ describe("swallowed", () => {
     expect(tryHold(run, hero, hold)).toMatchObject({ success: false, degree: 2 });
     // (Nothing to cut with: an Escape.)
     expect(pf2eRules.cutFree(run, { spec: { actions: [maul()] }, conds: {} }, hold)).toBeNull();
+  });
+
+  test("cutting at it hurts the swallower, out or not (harm, dealt by the core)", () => {
+    const { run, hero, w } = swallowed({ escapeWork: { mod: 0 } });
+    hero.spec.actions[0] = { ...dagger(), damage: [parseFormula("2d12+4", "slashing")] };
+    const [hold] = holdsOf(run, hero);
+    run.rng.d20 = () => 10;
+    run.rng.die = n => n;
+    const got = pf2eRules.cutFree(run, hero, hold);
+    expect(got).toMatchObject({ success: true, harm: { byType: { slashing: 28 } } });
+    // (In the engine, its turn: out, and the worm the worse for it.)
+    const again = swallowed({ escapeWork: { mod: 0 } });
+    again.hero.spec.actions[0] = { ...dagger(), damage: [parseFormula("2d12+4", "slashing")] };
+    again.run.rng.d20 = () => 10;
+    again.run.rng.die = n => n;
+    const hp = again.w.hp;
+    takeTurn(again.run, again.hero);
+    expect(again.hero.conds.swallowed ?? 0).toBe(0);
+    expect(again.w.hp).toBeLessThan(hp);
+  });
+
+  test("any blow from inside of the Rupture value or more cuts it out (afterHarm, told who struck and with what)", () => {
+    const { run, hero, w } = swallowed();
+    expect(pf2eRules.afterHarm(run, w, 12, run.rng, { by: hero, byType: { piercing: 12 }, action: dagger() })).toBeNull();
+    expect(hero.conds.swallowed).toBe(1);
+    expect(pf2eRules.afterHarm(run, w, 20, run.rng, { by: hero, byType: { slashing: 20 }, action: dagger(), lingering: true })).toBeNull();
+    const said = pf2eRules.afterHarm(run, w, 25, run.rng, { by: hero, byType: { slashing: 25 }, action: dagger() });
+    expect(said?.text).toBeTruthy();
+    expect(hero.conds.swallowed ?? 0).toBe(0);
+  });
+
+  test("its swallower killed, the corpse has to be cut open: three actions of a friend beside it with a blade; no more damage from it", () => {
+    const run = fight([creature("hero", "friendly", 0), worm({ diesAtZero: true }), creature("friend", "friendly", 10)]);
+    const [hero, w, friend] = ["hero", "worm", "friend"].map(id => run.byId.get(id));
+    hero.grabbedBy = "worm";
+    run.rng.d20 = () => 15;
+    strikeOutOfTurn(run, w, w.spec.actions[0], hero);
+    expect(hero.conds.swallowed).toBe(1);
+    w.hp = 1;
+    strikeOutOfTurn(run, friend, friend.spec.actions[1], w);
+    expect(w.status).toBe("dead");
+    expect(hero.conds.swallowed).toBe(1);
+    const hold = freeable(run, hero);
+    expect(hold).toMatchObject({ key: "swallowed", others: "untie" });
+    expect(untieCost(pf2eRules, friend, hero, hold)).toEqual({ actions: 3 });
+    expect(untieCost(pf2eRules, { spec: { actions: [maul()] } }, hero, hold)).toEqual({ actions: Infinity });
+    expect(pf2eRules.conditionHarm("swallowed", 1, hero, w)).toEqual([]);
+    // (An ooze just lets go.)
+    expect(pf2eRules.letGo(run, hero, "engulfed", w)).toBeUndefined();
   });
 
   test("once it holds one of the largest size it lists, no more", () => {

@@ -72,6 +72,37 @@ const sheetOffGuard = u => {
   return ["offGuard", "prone", "grabbed", "restrained", "paralyzed", "unconscious"].some(k => Number(c[k]) > 0 || c[k] === true);
 };
 
+/**
+ * What a check is based on, by what it's for (the core's purpose, and a maneuver's name): Thievery and Stealth Dexterity's,
+ * the Athletics maneuvers Strength's, words, Medicine, Recall Knowledge and Perception the mind's; its status penalties
+ * as PF2e has them (statusPenalty: clumsy, enfeebled, stupefied, on top of frightened, sickened and fascinated).
+ */
+const CHECK_ON = Object.freeze({ theft: "dex", talk: "mind", goad: "mind", firstAid: "mind", sizeUp: "mind", notice: "mind", heal: "mind" });
+const MANEUVER_ON = Object.freeze({ trip: "str", grapple: "str", disarm: "str", shove: "str", reposition: "str", demoralize: "mind", feint: "mind", distract: "mind", hide: "dex" });
+const checkOn = (purpose, action) => CHECK_ON[purpose] ?? MANEUVER_ON[action?.maneuver] ?? null;
+
+/** A potion or an elixir, drunk (a consumable's heal, PF2e's: the adapter's itemId on a heal of its own): what one sickened can't. */
+const ingested = action => action?.kind === "heal" && !!action.itemId && !!action.selfOnly;
+
+/**
+ * A blow from inside its gullet (afterHarm, told who struck it and with what): piercing or slashing damage of its
+ * Rupture value or more, as rolled, from one blow, and the one who struck it is out. Not harm that lingers. Returns what's
+ * said ({text}), or null.
+ */
+function ruptured(holder, ctx) {
+  const by = ctx?.by;
+  if ( !by || ctx.lingering || holderId(by) !== holder.id ) return null;
+  const key = Number(by.conds?.swallowed) > 0 ? "swallowed" : "engulfed";
+  const rupture = holder.spec?.gullet?.[key]?.rupture;
+  const cut = (Number(ctx.byType?.piercing) || 0) + (Number(ctx.byType?.slashing) || 0);
+  if ( !Number.isFinite(rupture) || cut < rupture ) return null;
+  dropCondition(by, key);
+  return { text: t("Gullet.Ruptured", { name: by.spec?.name ?? "", strike: ctx.action?.name ?? "", damage: cut, rupture }) };
+}
+
+/** Has it a piercing or slashing blow (a weapon or an unarmed attack: cutting a corpse open)? */
+const cutsOpen = u => (u.spec?.actions ?? []).some(a => a.kind === "strike" && a.melee && (a.damage ?? []).some(p => p.type === "piercing" || p.type === "slashing"));
+
 /** Its Acrobatics for a tumble (spec.acrobatics), less the status penalty on it (a Dexterity skill). */
 const tumbleMod = u => (Number(u.spec?.acrobatics?.mod) || 0) - statusPenalty(u, "dex", "skill");
 /** Its Reflex DC: 10 + its Reflex, less the status penalty on it. */
@@ -150,6 +181,9 @@ function holdsOn(c) {
   c.ferocityNote = f.label || "";
   return true;
 }
+
+/** How badly one fleeing wants to keep away from what it flees (the core's desire levels: obsessed). */
+const FLEEING_AVOID = 90;
 
 /** Damage types from before the remaster (older content still has them), as the story tells them. */
 const STORY_TYPES = Object.freeze({ positive: "vitality", negative: "void", good: "radiant", evil: "unholy", lawful: "force", chaotic: "spirit", precision: "untyped" });
@@ -285,19 +319,17 @@ export const pf2eRules = {
     const mod = work.mod - statusPenalty(who);
     const { natural, total, degree } = this.roll(run.rng, mod, dc);
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
-    // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself.)
+    // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself, and of a spell's
+    // hold with what it laid with it, Impaling Spike's off-guard.)
     if ( degree >= 2 && hold.key === "grabbed" && hold.byId ) who.effects = (who.effects ?? []).filter(e => !grabbing(e, hold.byId));
-    // (Out of a spell's hold, out of what it laid with it, Impaling Spike's off-guard; the core takes the hold off.)
-    if ( degree >= 2 && hold.effectKey && hold.with?.length ) {
-      who.effects = (who.effects ?? []).map(e => (e.key === hold.effectKey ? { ...e, conditions: Object.fromEntries(Object.entries(e.conditions ?? {}).filter(([k]) => !hold.with.includes(k))) } : e));
-    }
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
 
   /**
    * Cutting itself free from inside a gullet (gullet.js): its best Strike from in there (cuttingStrike) at whoever holds
    * it, off-guard to it, whose piercing or slashing damage comes to the holder's Rupture value or more (doubled on a
-   * critical hit). Null when it can't, or an Escape (`escape`: its chance) is likelier. The blow's damage isn't dealt.
+   * critical hit). Null when it can't, or an Escape (`escape`: its chance) is likelier. The blow's damage is dealt to
+   * the one holding it (harm, the core's), out or not.
    */
   cutFree(run, who, hold, escape = 0) {
     const by = run.byId?.get(hold.byId);
@@ -310,14 +342,32 @@ export const pf2eRules = {
     const chance = odds[2] * chanceAtLeast(cut.parts, rupture) + odds[3] * chanceAtLeast(cut.parts, rupture, 2);
     if ( chance <= escape ) return null;
     const { natural, total, degree } = this.roll(run.rng, mod, ac);
-    const dealt = degree >= 2 ? cut.parts.reduce((s, p) => s + Math.max(0, samplePart(p, run.rng)), 0) * (degree === 3 ? 2 : 1) : 0;
-    return { success: dealt >= rupture, degree, natural, mod, total, dc: ac, said: { text: t("Gullet.Cut", { strike: cut.strike.name, damage: dealt, rupture }) } };
+    const byType = {};
+    if ( degree >= 2 ) for ( const p of cut.parts ) byType[p.type] = (byType[p.type] ?? 0) + Math.max(0, samplePart(p, run.rng)) * (degree === 3 ? 2 : 1);
+    const dealt = Object.values(byType).reduce((s, n) => s + n, 0);
+    return { success: dealt >= rupture, degree, natural, mod, total, dc: ac, said: { text: t("Gullet.Cut", { strike: cut.strike.name, damage: dealt, rupture }) }, ...(dealt > 0 ? { harm: { byType } } : {}) };
   },
 
-  /** Inside a gullet: the damage its holder's Swallow Whole or Engulf lists, at the end of each of its turns (else the core's). */
+  /**
+   * Inside a gullet: the damage its holder's Swallow Whole or Engulf lists, at the end of each of its turns (else the
+   * core's); none in a dead one's.
+   */
   conditionHarm(key, value, u, by) {
     const inside = by?.spec?.gullet?.[key];
+    if ( inside && by.status === STATUS.DEAD ) return [];
     return inside ? inside.damage : undefined;
+  },
+
+  /**
+   * Its holder fallen: Engulf lets go; Swallow Whole's corpse has to be cut open first, by friends beside it (three
+   * actions, with a piercing or slashing blow: untieCost), or it gets itself out as it would have.
+   */
+  letGo(run, u, key, holder) {
+    if ( key !== "swallowed" || holder.status !== STATUS.DEAD ) return undefined;
+    const e = (u.effects ?? []).find(x => x.sourceId === holder.id && Number(x.conditions?.swallowed) > 0 && x.escape);
+    if ( !e ) return undefined;
+    e.escape = { ...e.escape, others: "untie", corpse: true };
+    return false;
   },
 
   /**
@@ -326,6 +376,8 @@ export const pf2eRules = {
    */
   usable(run, u, action, t) {
     if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderId(t) && !full(run, u);
+    // (Sickened: it can't willingly drink a potion or an elixir.)
+    if ( ingested(action) && Number(u.conds?.sickened) > 0 ) return false;
     if ( action?.kind === "strike" && !action.light && holderId(u) ) return false;
     // Take Cover: with standard cover from a foe to make greater, or prone (greater against ranged attacks).
     if ( action?.takeCover ) return !!u.prone || foeCovers(run, u).includes("some");
@@ -344,23 +396,39 @@ export const pf2eRules = {
   },
 
   /**
-   * What a roll ends, any but a save: being hidden (it's observed now; against the one it Strikes, still unseen for
-   * that attack: unseenStrike); and an attack, taking cover.
+   * What a roll ends, any but a save: being hidden (it's observed now; an attack gives it away once it's done, still
+   * unseen for its damage: afterAttack); and an attack, taking cover.
    */
   afterRoll(run, u, roll, ctx = {}) {
     if ( ctx.kind === "save" || !u?.conds ) return;
-    if ( Number(u.conds.hidden) > 0 ) {
-      if ( ctx.kind === "attack" && ctx.target ) u.unseenStrike = ctx.target.id;
-      dropCondition(u, "hidden");
-    }
+    if ( Number(u.conds.hidden) > 0 && ctx.kind !== "attack" ) dropCondition(u, "hidden");
     if ( Number(u.conds.inCover) > 0 && (ctx.kind === "attack" || (ctx.action?.traits ?? []).includes("attack")) ) dropCondition(u, "inCover");
   },
 
-  /** Whom it can go for: from inside a gullet, only whoever holds it; one held inside another, nobody (its holder neither). */
+  /** An attack done, its damage and all: one hidden is seen now. */
+  afterAttack(run, u) {
+    if ( Number(u?.conds?.hidden) > 0 ) dropCondition(u, "hidden");
+  },
+
+  /**
+   * Whom it can go for from inside a gullet: only whoever holds it, not another inside with it (PF2e's; the core keeps
+   * everything outside from reaching in, and out).
+   */
   canTarget(run, a, t) {
     const holder = holderId(a);
-    if ( holder ) return t.id === holder;
-    return !holderId(t);
+    return !holder || t.id === holder;
+  },
+
+  /**
+   * Stupefied: a spell is lost unless a DC 5 + its value flat check is made as it's cast. {natural, dc, said}, or null
+   * when it goes on.
+   */
+  disrupted(run, u, action) {
+    const v = Number(u?.conds?.stupefied) || 0;
+    if ( !(v > 0) || !action?.spellId ) return null;
+    const natural = run.rng.d20();
+    const dc = 5 + v;
+    return natural >= dc ? null : { natural, dc, said: { text: t("SpellLost", { natural, dc }) } };
   },
 
   /**
@@ -368,6 +436,15 @@ export const pf2eRules = {
    * attack would hit: failed, the blow doesn't affect the target.
    */
   adjustRoll(run, u, roll, ctx = {}) {
+    // (A targeted spell's save, against one its caster has to make out: the caster's flat check; failed, the spell
+    // passes it by, as a critical success.)
+    if ( ctx.kind === "save" && ctx.from && ctx.action?.spellId && roll?.degree < 3 ) {
+      const dc = flatCheckDC(ctx.from, u, ctx.action);
+      if ( !dc ) return roll;
+      const natural = run.rng.d20();
+      if ( natural >= dc ) return roll;
+      return { ...roll, degree: 3, said: { text: t("FlatCheckSpell", { caster: ctx.from.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc } } };
+    }
     if ( ctx.kind !== "attack" || !(roll?.degree >= 2) ) return roll;
     const dc = flatCheckDC(u, ctx.target, ctx.action);
     if ( !dc ) return roll;
@@ -376,18 +453,9 @@ export const pf2eRules = {
     return { ...roll, degree: 1, said: { text: t("FlatCheck", { target: ctx.target.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc } } };
   },
 
-  /**
-   * The start of its turn: drained since (drain), the Hit Points it loses; inside a gullet, its holder's jaws no longer
-   * grab it (what holds it is the gullet now).
-   */
+  /** The start of its turn: drained since (drain), the Hit Points it loses. */
   startTurn(run, u) {
     drain(run, u);
-    const holder = holderId(u);
-    if ( holder && u.grabbedBy === holder ) {
-      u.grabbedBy = null;
-      u.grabKey = null;
-      for ( const key of ["grabbed", "restrained"] ) dropCondition(u, key);
-    }
     return null;
   },
 
@@ -532,6 +600,19 @@ export const pf2eRules = {
     }
   },
 
+  /** PF2e's fear has steps of its own (frightened 2): the core goes by them, building none of its own. */
+  fearValued: true,
+  /**
+   * What PF2e's fears make a creature want while they last (the core's conditionWishes): frightened, nothing (a status
+   * penalty, and no rule on where it goes); fleeing, every action it has spent getting away from the source as quickly as
+   * it can, as strong a wish to keep away from it as there is. Anything else, the core's.
+   */
+  conditionWishes(run, u, { key, by }) {
+    if ( key === "frightened" ) return [];
+    if ( key === "fleeing" ) return by ? [{ kind: "avoid", targetId: by.id, level: FLEEING_AVOID }] : [];
+    return null;
+  },
+
   /** Share of a creature's fighting a condition takes away each round. */
   conditionWeight(key, value) {
     switch ( key ) {
@@ -568,10 +649,10 @@ export const pf2eRules = {
       // (exposedTo: off-guard to this attacker only, after a Feint. Each fact read only if the ones before don't settle
       // it: the situation works them out as they're read.)
       // (And whoever swallowed or engulfed the attacker: off-guard to it from inside; and anyone it's hidden from, still
-      // so for the one attack that gives it away.)
+      // so through the attack that gives it away: afterAttack.)
       const t = ctx.target;
       const a = ctx.attacker;
-      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0 || a.unseenStrike === t.id)));
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0)));
     },
     defense(ctx) {
       // (Off guard on its sheet already: its AC has the -2.)
@@ -581,8 +662,6 @@ export const pf2eRules = {
     },
     attack(ctx) {
       const { attacker, action } = ctx;
-      // (A new attack: the last one that gave it away is over.)
-      if ( attacker.unseenStrike ) attacker.unseenStrike = null;
       let bonus = 0;
       // (Prone on its sheet already: its Strikes have the -2.)
       if ( attacker.prone ) bonus -= 2;
@@ -595,14 +674,20 @@ export const pf2eRules = {
       }
       return { bonus, advantage: 0 };
     },
-    save({ unit, type, cover }) {
+    save({ unit, type, cover, from, action }) {
       let bonus = 0 - statusPenalty(unit, SAVE_ON[type]);
       if ( type === "reflex" ) bonus += coverBonus(coverTaken(unit, cover));
+      // (A stupefied caster's spell DC is that much lower: as much easier to save against.)
+      if ( from && action?.spellId ) bonus += Math.max(0, statusPenalty(from, "mind"));
       return { bonus, advantage: 0 };
     },
-    /** A skill check (the core doesn't say which): frightened, sickened and fascinated, the worst. */
-    check({ unit } = {}) {
-      return { bonus: unit ? 0 - statusPenalty(unit, "skill") : 0, advantage: 0 };
+    /**
+     * A skill check: frightened, sickened and fascinated, the worst; and what it's based on, by what it's for (checkOn:
+     * clumsy on Thievery, enfeebled on Athletics, stupefied on words, Medicine and Recall Knowledge).
+     */
+    check({ unit, purpose, action } = {}) {
+      const on = checkOn(purpose, action);
+      return { bonus: unit ? 0 - statusPenalty(unit, "skill", ...(on ? [on] : [])) : 0, advantage: 0 };
     },
     /** Steal in combat: -5 to the Thievery check. */
     steal() {
@@ -664,12 +749,14 @@ export const pf2eRules = {
   },
 
   /**
-   * Ferocity that kept it up, said once the blow is done (the core's line for staying up at 1 hit point); and drained
-   * by it (a draining blow, a poison's stage), the Hit Points that costs (drain).
+   * Ferocity that kept it up, said once the blow is done (the core's line for staying up at 1 hit point); drained by
+   * it (a draining blow, a poison's stage), the Hit Points that costs (drain); and a blow from inside its gullet that
+   * ruptures it (ruptured), the one who struck it out.
    */
-  afterHarm(run, u) {
+  afterHarm(run, u, amount, rng, ctx = {}) {
     if ( u.status === STATUS.STANDING ) drain(run, u);
-    if ( !u.ferocityNote ) return null;
+    const cut = ruptured(u, ctx);
+    if ( !u.ferocityNote ) return cut;
     const label = u.ferocityNote;
     u.ferocityNote = null;
     return { text: label, data: { type: "holdOn", label } };
@@ -757,6 +844,8 @@ export const pf2eRules = {
   /** Freeing a friend: untying it is an Interact action; Administer First Aid on its bleed two, for one trained in Medicine. */
   untieCost(u, t, hold) {
     if ( hold?.key === BLEED ) return u.spec?.firstAid ? { actions: 2 } : { actions: Infinity };
+    // (Out of a Swallow Whole's corpse: three actions cutting it open, with a piercing or slashing blow.)
+    if ( hold?.key === "swallowed" ) return cutsOpen(u) ? { actions: 3 } : { actions: Infinity };
     return { actions: 1 };
   },
 

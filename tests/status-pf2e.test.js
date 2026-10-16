@@ -44,6 +44,29 @@ describe("status penalties: the worst counts, on what the roll is based on", () 
     expect(m.check({ unit: unit({ frightened: 3 }) }).bonus).toBe(-3);
     expect(m.check({ unit: unit({ stupefied: 2 }) }).bonus).toBeCloseTo(0);
   });
+
+  test("skill checks, by what they're for (the core's purpose, a maneuver): clumsy on Thievery, enfeebled on Athletics, stupefied on words and Medicine", () => {
+    const u = unit({ clumsy: 2, enfeebled: 3, stupefied: 1 });
+    expect(m.check({ unit: u, purpose: "theft" }).bonus).toBe(-2);
+    expect(m.check({ unit: u, purpose: "control", action: { maneuver: "trip" } }).bonus).toBe(-3);
+    expect(m.check({ unit: u, purpose: "talk" }).bonus).toBe(-1);
+    expect(m.check({ unit: u, purpose: "firstAid" }).bonus).toBe(-1);
+    expect(m.check({ unit: u, purpose: "aid", action: { maneuver: "hide" } }).bonus).toBe(-2);
+    expect(m.check({ unit: u }).bonus).toBeCloseTo(0);
+  });
+
+  test("stupefied: its spell DCs as much lower (a save against them as much easier), and a spell lost unless a DC 5 + its value flat check is made", () => {
+    const caster = unit({ stupefied: 2 });
+    expect(m.save({ unit: unit(), type: "will", from: caster, action: SPELL }).bonus).toBe(2);
+    expect(m.save({ unit: unit(), type: "will", from: caster, action: MELEE }).bonus).toBeCloseTo(0);
+    expect(m.save({ unit: unit(), type: "will", from: unit({ stupefied: 2 }, { stupefied: 2 }), action: SPELL }).bonus).toBeCloseTo(0);
+    const lost = pf2eRules.disrupted({ rng: { d20: () => 6 } }, caster, SPELL);
+    expect(lost).toMatchObject({ natural: 6, dc: 7 });
+    expect(lost.said.text).toBeTruthy();
+    expect(pf2eRules.disrupted({ rng: { d20: () => 7 } }, caster, SPELL)).toBeNull();
+    expect(pf2eRules.disrupted({ rng: { d20: () => 1 } }, unit(), SPELL)).toBeNull();
+    expect(pf2eRules.disrupted({ rng: { d20: () => 1 } }, caster, MELEE)).toBeNull();
+  });
 });
 
 describe("not counted twice: what its sheet's numbers have already", () => {
@@ -91,6 +114,18 @@ describe("the flat check an attack needs", () => {
     const miss = { natural: 3, total: 10, degree: 1 };
     expect(pf2eRules.adjustRoll({ rng }, attacker(), miss, { kind: "attack", target: target({ hidden: 1 }), action: MELEE })).toBe(miss);
     expect(pf2eRules.adjustRoll({ rng }, attacker(), roll, { kind: "save" })).toBe(roll);
+  });
+
+  test("a targeted spell's save: the caster's flat check against one hidden from it (or concealed, or with it dazzled); failed, the spell passes it by", () => {
+    const saved = { natural: 8, total: 12, degree: 1 };
+    const by = { conds: {}, spec: { name: "witch" } };
+    const passed = pf2eRules.adjustRoll(table(9), target({ hidden: 1 }), saved, { kind: "save", from: by, action: SPELL });
+    expect(passed).toMatchObject({ degree: 3, said: { data: { flat: 9, flatDC: 11 } } });
+    expect(passed.said.text).toBeTruthy();
+    expect(pf2eRules.adjustRoll(table(11), target({ hidden: 1 }), saved, { kind: "save", from: by, action: SPELL })).toBe(saved);
+    const rng = { d20: () => { throw new Error("no flat check"); } };
+    expect(pf2eRules.adjustRoll({ rng }, target({ hidden: 1 }), saved, { kind: "save", from: by, action: { ...SPELL, area: { targets: 3 } } })).toBe(saved);
+    expect(pf2eRules.adjustRoll({ rng }, target({}), saved, { kind: "save", from: by, action: SPELL })).toBe(saved);
   });
 });
 

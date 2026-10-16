@@ -7,15 +7,17 @@
  *    listed size or smaller. Swallowed, the creature is grabbed and slowed 1; it takes the listed damage at once and at
  *    the end of each of its turns; it can attack only the one that swallowed it (off-guard to it), with unarmed attacks
  *    or light weapons. It gets out by Escaping (the swallower's Athletics DC), or by cutting itself free: piercing or
- *    slashing damage of the Rupture value or more from one attack. Once it has swallowed a creature of the largest size
- *    it lists, it can't swallow another.
+ *    slashing damage of the Rupture value or more from one attack (any blow from inside, or a try at it in place of an
+ *    Escape; the blow's damage dealt either way). Once it has swallowed a creature of the largest size it lists, it
+ *    can't swallow another. Its swallower killed, the corpse has to be cut open: three actions by a friend beside it
+ *    with a piercing or slashing blow, or it gets itself out as before (no more damage from a dead gullet).
  *  - Engulf (two actions): it Strides up to double its Speed, and each creature of its size or smaller in its path
  *    attempts a Reflex save against the listed DC; one that fails is engulfed: as swallowed, Escaping against the listed
  *    Escape DC.
- * The rules (rules.js) play the rest: conditionHarm, usable, canTarget, startTurn, exposed, actionsLost and breakFree.
- * Not played: holding its breath (and suffocating), its blow at the swallower when it cuts itself free (the damage
- * isn't dealt), a successful save's push aside, the engulfer's own move, and a swallowed creature freed only by cutting
- * the corpse open (the core lets go of it when the swallower falls).
+ * The core keeps it where its holder is, and out of reach of everything outside. The rules (rules.js) play the rest:
+ * conditionHarm, usable, canTarget, exposed, actionsLost, breakFree, afterHarm (Rupture), letGo and untieCost (the
+ * corpse). Not played: holding its breath (and suffocating), a successful save's push aside, the engulfer's own move,
+ * and the combined three actions of several friends at a corpse (one friend's three).
  * Pure, unit-tested.
  */
 import { meanPart, localize } from "./core.js";

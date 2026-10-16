@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { beginRun, beginRound, takeTurn, prepareBattle } from "../../fast-fighting/scripts/engine/simulator.js";
 import { holdsOf, tryHold, release, escapeCost, untieCost, bondsDC } from "../../fast-fighting/scripts/engine/behavior/holds.js";
+import { applyOutcome } from "../../fast-fighting/scripts/engine/behavior/effects.js";
 import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { escapeOf, escapeWork, levelDC, sheetHold } from "../scripts/holds.js";
@@ -119,6 +120,20 @@ describe("an Escape", () => {
     expect(hero.conds).toEqual({ restrained: 1, offGuard: 1, immobilized: 1, frightened: 1 });
     release(run, hero, holdsOf(run, hero)[0]);
     expect(hero.conds).toEqual({ frightened: 1 });
+  });
+
+  test("out of a spell's hold, out of what it laid with it (Impaling Spike's off-guard): the core's, by the hold's own `with`", () => {
+    const run = fight([creature("hero", "friendly", 0, { escapeWork: { mod: 30 } }), creature("orc", "hostile", 40)]);
+    const hero = run.byId.get("hero");
+    applyOutcome(hero, { conditions: { immobilized: 1, offGuard: 1 }, rounds: 10, label: "Impaling Spike", escape: { key: "immobilized", dc: 22, with: ["offGuard"] } }, "orc", { id: "orc.spike" });
+    const [hold] = holdsOf(run, hero);
+    expect(hold).toMatchObject({ key: "immobilized", dc: 22, with: ["offGuard"] });
+    run.rng.d20 = () => 10;
+    expect(tryHold(run, hero, hold)).toMatchObject({ success: true });
+    release(run, hero, hold);
+    expect(hero.conds.immobilized ?? 0).toBe(0);
+    expect(hero.conds.offGuard ?? 0).toBe(0);
+    expect(holdsOf(run, hero)).toEqual([]);
   });
 });
 

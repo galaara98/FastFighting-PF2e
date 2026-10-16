@@ -12,6 +12,7 @@ import { applyOutcome } from "../../fast-fighting/scripts/engine/behavior/effect
 import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { lower, sickDC, bleedDC, ASSISTED } from "../scripts/remedies.js";
+import { levelOf } from "../../fast-fighting/scripts/engine/behavior/desire.js";
 
 const minded = { tactical: { base: 60, fudge: 0 }, brave: { base: 50, fudge: 0 }, selfish: { base: 50, fudge: 0 }, loyal: { base: 80, fudge: 0 } };
 const blade = () => ({ id: "blade", name: "Longsword", kind: "strike", cost: 1, bonus: 9, maps: [0, -5, -10], melee: true, reach: 5, hands: 1, damage: [parseFormula("1d8+4", "slashing")] });
@@ -144,6 +145,19 @@ describe("retching while sickened", () => {
     expect(hero.effects.some(e => e.conditions?.sickened)).toBe(false);
   });
 
+  test("sickened, it can't drink a potion or an elixir (usable, which the core asks of heals); a healing spell, yes", () => {
+    const potion = { id: "hero.item.p", kind: "heal", cost: 1, heal: [parseFormula("1d8", "healing")], selfOnly: true, itemId: "p", resource: "item:p", pool: 1, hands: 1 };
+    const spell = { id: "hero.spell.heal", kind: "heal", cost: 1, heal: [parseFormula("1d8", "healing")], selfOnly: true, spellId: "heal" };
+    const run = fight([creature("hero", "friendly", 0, { hp: { value: 5, max: 40 }, actions: [blade(), potion] }), creature("orc", "hostile", 40)]);
+    const [hero, orc] = ["hero", "orc"].map(id => run.byId.get(id));
+    expect(pf2eRules.usable(run, hero, potion, hero)).toBe(true);
+    sicken(run, hero, orc, 1);
+    expect(pf2eRules.usable(run, hero, potion, hero)).toBe(false);
+    expect(pf2eRules.usable(run, hero, spell, hero)).toBe(true);
+    takeTurn(run, hero);
+    expect(run.log.some(e => e.type === "heal" && e.actorId === "hero")).toBe(false);
+  });
+
   test("the DC: its source's best save, else the GM Core's for its level; an affliction's own", () => {
     const run = fight([creature("hero", "friendly", 0, { level: 1 }), creature("orc", "hostile", 40, { level: 5, actions: [blade(), { id: "x", kind: "save", save: { type: "will", dc: 23 } }] })]);
     const [hero, orc] = ["hero", "orc"].map(id => run.byId.get(id));
@@ -166,5 +180,24 @@ describe("retching while sickened", () => {
     expect(u.conds).toEqual({ slowed: 1 });
     const w = { conds: { sickened: 2 }, effects: [], afflictions: [{ spec: { stages: [{ conditions: { sickened: 1 } }] }, stage: 1 }] };
     expect(lower(w, "sickened", 2)).toBe(1);
+  });
+});
+
+describe("fear, as PF2e has it (the core's conditionWishes)", () => {
+  const scare = (u, by, conditions) => applyOutcome(u, { conditions, rounds: 5, label: "" }, by.id, { id: `${by.id}.scare` });
+
+  test("frightened is a status penalty and no more: no keeping away; fleeing, every action spent getting away from its source", () => {
+    const by = { id: "orc" };
+    expect(pf2eRules.conditionWishes(null, {}, { key: "frightened", value: 2, by })).toEqual([]);
+    expect(pf2eRules.conditionWishes(null, {}, { key: "fleeing", value: 1, by })).toEqual([{ kind: "avoid", targetId: "orc", level: 90 }]);
+    expect(pf2eRules.conditionWishes(null, {}, { key: "slowed", value: 1, by })).toBeNull();
+    expect(pf2eRules.fearValued).toBe(true);
+    for ( const [conditions, avoids] of [[{ frightened: 2 }, false], [{ fleeing: 1 }, true]] ) {
+      const run = fight([creature("hero", "friendly", 0), creature("orc", "hostile", 5)]);
+      const [hero, orc] = ["hero", "orc"].map(id => run.byId.get(id));
+      scare(hero, orc, conditions);
+      takeTurn(run, hero);
+      expect(levelOf(hero, "avoid", orc.id) > 0).toBe(avoids);
+    }
   });
 });

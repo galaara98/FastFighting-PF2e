@@ -100,9 +100,12 @@
       "Untrained": "{rank} in {skills}"
     },
     "Gullet": {
-      "Cut": "cuts at it from inside with {strike}: {damage} damage against Rupture {rupture}"
+      "Cut": "cuts at it from inside with {strike}: {damage} damage against Rupture {rupture}",
+      "Ruptured": "is cut open from inside by {name}'s {strike}: {damage} damage against Rupture {rupture}"
     },
     "FlatCheck": "can't make {target} out: flat check {natural} against DC {dc}, and the blow goes astray",
+    "FlatCheckSpell": "{caster} can't make it out: flat check {natural} against DC {dc}, and the spell passes it by",
+    "SpellLost": "loses the spell to a muddled mind: flat check {natural} against DC {dc}",
     "Poisoned": "{strike} with {poison}",
     "Remedy": {
       "Retch": "Retch",

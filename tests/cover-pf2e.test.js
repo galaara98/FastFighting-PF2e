@@ -95,13 +95,15 @@ describe("Hide", () => {
     applyOutcome(hero, hide.onDegree[2], hero.id, hide);
     const hit = { natural: 15, total: 24, degree: 2 };
     expect(pf2eRules.adjustRoll({ rng: { d20: () => 10 } }, orc, hit, { kind: "attack", target: hero, action: blade() }).degree).toBe(1);
-    // (Its Strike at the orc: off guard to it, through the damage, then seen.)
+    // (Its Strike at the orc: off guard to it, through the damage, then seen: the core's afterAttack.)
     const strike = { target: orc, attacker: hero, action: blade(), grabbed: false, flanked: false, exposedTo: false };
     pf2eRules.modifiers.attack({ ...strike, distance: 5, positioning: true });
     expect(pf2eRules.modifiers.exposed(strike)).toBe(true);
     pf2eRules.afterRoll(run, hero, hit, { kind: "attack", target: orc, action: blade() });
-    expect(hero.conds.hidden).toBeUndefined();
+    expect(hero.conds.hidden).toBe(1);
     expect(pf2eRules.modifiers.exposed(strike)).toBe(true);
+    pf2eRules.afterAttack(run, hero, orc, { action: blade(), degree: 2, dealt: 5 });
+    expect(hero.conds.hidden).toBeUndefined();
     // (Its next attack: the orc sees it now.)
     pf2eRules.modifiers.attack({ ...strike, distance: 5, positioning: true });
     expect(pf2eRules.modifiers.exposed(strike)).toBe(false);
