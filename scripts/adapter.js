@@ -868,6 +868,9 @@ export class Pf2eAdapter extends SystemAdapter {
     const mods = {};
     let tempHp = 0;
     let oneRoll = false;
+    // (Healing over time its Spell Effect lends: Life Boost's fast healing, Regenerate's regeneration.)
+    let fastHealing = 0;
+    let regen = null;
     const uuids = [];
     // (A bonus the spell's own roll option switches on, as its target uses it: Guidance's "guidance".)
     const own = new Set([spell.slug ?? slugOf(spell)].filter(Boolean));
@@ -878,6 +881,8 @@ export class Pf2eAdapter extends SystemAdapter {
       Object.assign(mods, read.mods);
       tempHp = Math.max(tempHp, read.tempHp);
       oneRoll ||= read.oneRoll;
+      fastHealing = Math.max(fastHealing, read.fastHealing ?? 0);
+      if ( read.regen && (!regen || read.regen.amount > regen.amount) ) regen = read.regen;
     }
     // Haste: quickened, an extra action each turn (for Strikes and Strides).
     if ( /\bquickened\b/i.test(text) ) mods.actions = Math.max(mods.actions ?? 0, 1);
@@ -887,8 +892,13 @@ export class Pf2eAdapter extends SystemAdapter {
     const feet = parseFeet(sys.range?.value) ?? area?.value ?? 30;
     const reachFoes = { melee: false, range: { increment: feet, max: feet, noPenalty: true } };
     const many = areaTargets(area, sys.target?.value);
-    if ( Object.keys(mods).length || tempHp ) {
-      const outcome = { mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, rounds, label: describeMods(mods, { tempHp }) };
+    if ( Object.keys(mods).length || tempHp || fastHealing || regen ) {
+      // (Healing over time alone: named as its spell.)
+      const named = Object.keys(mods).length || tempHp;
+      const outcome = {
+        mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, fastHealing: fastHealing || undefined, regen: regen ?? undefined, rounds,
+        label: named ? describeMods(mods, { tempHp }) : spell.name
+      };
       // (Its Spell Effect, to leave on a creature still under it when the fight ends.)
       const effectRef = uuids.length ? { uuids: [...new Set(uuids)] } : undefined;
       if ( save ) {
@@ -898,7 +908,7 @@ export class Pf2eAdapter extends SystemAdapter {
       // Good for one roll (Guidance: "one attack roll, Perception check, saving throw, or skill check"; Sure Strike:
       // "the next time you make an attack roll").
       if ( oneRoll || ONE_ROLL.test(text) ) outcome.uses = 1;
-      if ( helps(mods) || (!outcome.mods && tempHp) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }), effectRef };
+      if ( helps(mods) || (!outcome.mods && (tempHp || fastHealing || regen)) ) return { kind: "buff", outcome, ...spellReach({ area, target: sys.target?.value, range: sys.range?.value }), effectRef };
       return { kind: "control", auto: true, ...reachFoes, outcome, effectRef };
     }
     // Conditions on enemies, no save (Dirge of Doom: "Enemies within the area are Frightened 1").
@@ -935,11 +945,17 @@ export class Pf2eAdapter extends SystemAdapter {
       const mods = { ...own.mods };
       for ( const [k, v] of Object.entries(whileOn.mods) ) mods[k] = (mods[k] ?? 0) + v;
       const tempHp = Math.max(own.tempHp, whileOn.tempHp);
-      if ( !Object.keys(mods).length && !tempHp ) continue;
+      // (And healing over time its effect lends: fast healing, regeneration.)
+      const { fastHealing, regen } = own;
+      if ( !Object.keys(mods).length && !tempHp && !fastHealing && !regen ) continue;
+      const named = Object.keys(mods).length || tempHp;
       out.push({
         id: `${actor.id}.self.${item.id}`, name: item.name, kind: "buff", targets: "self", itemId: item.id,
         cost: type === "free" ? 0 : (item.system.actions?.value ?? 1), economy: type === "free" ? "free" : undefined, traits: [...(item.system.traits?.value ?? [])],
-        outcome: { mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, rounds: effectRounds(effect.system?.duration) ?? 10, label: describeMods(mods, { tempHp }) },
+        outcome: {
+          mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, fastHealing, regen, rounds: effectRounds(effect.system?.duration) ?? 10,
+          label: named ? describeMods(mods, { tempHp }) : item.name
+        },
         effectRef: { uuids: [uuid] }
       });
     }

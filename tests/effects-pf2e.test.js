@@ -52,6 +52,18 @@ describe("reading PF2e spell effects", () => {
     expect(helps({ attack: -1 })).toBe(false);
   });
 
+  test("healing over time: Regenerate's regeneration (and what stops it), Life Boost's fast healing; the best of each", () => {
+    // (As the Player Core's Spell Effects carry them.)
+    const regenerate = [{ deactivatedBy: ["acid", "fire"], key: "FastHealing", type: "regeneration", value: "ternary(gte(@item.level,9),20,15)" }];
+    const lifeBoost = [{ key: "FastHealing", value: "@item.level * 2" }];
+    expect(modsFromRules(regenerate, { rank: 7 })).toEqual({ mods: {}, tempHp: 0, oneRoll: false, regen: { amount: 15, stoppedBy: ["acid", "fire"] } });
+    expect(modsFromRules(regenerate, { rank: 9 }).regen.amount).toBe(20);
+    expect(modsFromRules(lifeBoost, { rank: 3 })).toEqual({ mods: {}, tempHp: 0, oneRoll: false, fastHealing: 6 });
+    expect(modsFromRules([...lifeBoost, { key: "FastHealing", value: 4 }], { rank: 1 }).fastHealing).toBe(4);
+    // (Only some of the time, by its predicate: left out; nothing to heal, nothing.)
+    expect(modsFromRules([{ key: "FastHealing", predicate: ["x"], value: 3 }, { key: "FastHealing", value: 0 }])).toEqual({ mods: {}, tempHp: 0, oneRoll: false });
+  });
+
   test("durations and who it reaches", () => {
     expect(spellRounds("1 minute")).toBe(10);
     expect(spellRounds("10 minutes")).toBe(100);

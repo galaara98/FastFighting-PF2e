@@ -110,8 +110,9 @@ export function predicateHolds(predicate, options) {
 }
 
 /**
- * Rule elements as engine bonuses and penalties (and temporary hit points). `oneRoll`: a bonus that's spent by the
- * roll it helps (removeAfterRoll: Guidance).
+ * Rule elements as engine bonuses and penalties (and temporary hit points, and healing over time: FastHealing, as fast
+ * healing or, of the regeneration type, regeneration with the damage types that deactivate it: Regenerate, Life
+ * Boost). `oneRoll`: a bonus that's spent by the roll it helps (removeAfterRoll: Guidance).
  * @param {object[]} rules
  * @param {object} [o]
  * @param {number} [o.rank]       the spell's rank (or the item's level)
@@ -124,6 +125,8 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
   const mods = {};
   let tempHp = 0;
   let oneRoll = false;
+  let fastHealing = 0;
+  let regen = null;
   const flags = {};
   for ( const r of rules ?? [] ) {
     if ( !r ) continue;
@@ -151,9 +154,16 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
       mods.adv = 1; // Sure Strike: roll the attack twice, keep the better
     } else if ( r.key === "TempHP" ) {
       tempHp = Math.max(tempHp, ruleValue(r.value, { rank, actor, flags }) ?? 0);
+    } else if ( r.key === "FastHealing" ) {
+      // (Healing over time: the best of each, as they don't add up.)
+      const value = ruleValue(r.value, { rank, actor, flags }) ?? 0;
+      if ( !(value > 0) ) continue;
+      if ( r.type === "regeneration" ) {
+        if ( !regen || value > regen.amount ) regen = { amount: value, stoppedBy: [...(r.deactivatedBy ?? [])] };
+      } else fastHealing = Math.max(fastHealing, value);
     }
   }
-  return { mods, tempHp, oneRoll };
+  return { mods, tempHp, oneRoll, ...(fastHealing ? { fastHealing } : {}), ...(regen ? { regen } : {}) };
 }
 
 /** Rounds an effect item lasts ({value, unit}), or null when it doesn't say (unlimited, or until the encounter ends). */
