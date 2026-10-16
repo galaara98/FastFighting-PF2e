@@ -41,7 +41,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - poisons and diseases parsed stage by stage from their text
   - immunities, weaknesses and resistances
   - speeds by movement type
-  - getting past others on the map: through a friend's space or a fallen creature's freely; past a foe on its feet with Tumble Through (Acrobatics against its Reflex DC; a failure ends the move short of it) for those trained in Acrobatics with at least even odds, around it otherwise
+  - getting past others on the map: through a friend's space or a fallen creature's freely; past a foe on its feet with Tumble Through (Acrobatics against its Reflex DC; a failure ends the move short of it) for those trained in Acrobatics with at least even odds, around it otherwise. A Tiny creature (which can share a larger creature's space) and a swarm (which can share anyone's) go through others' spaces freely and may end a move in one
   - languages, Diplomacy, Intimidation, Deception, Will and Perception DCs (for talking)
   - Thievery (for theft, against Perception DC), Medicine (for first aid after the fight), coins and gear (for what a creature could be talked into giving up or have stolen, or offer to end a standoff), each item's type, precious material and rarity (for what a character can ask for: PF2e's item types, precious materials and rarities, in its own words)
   - conditions, persistent damage and dying already on a creature (a fight resumed mid-way)

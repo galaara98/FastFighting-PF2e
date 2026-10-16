@@ -38,6 +38,12 @@ const tumbleMod = u => (Number(u.spec?.acrobatics?.mod) || 0) - statusPenalty(u)
 /** Its Reflex DC: 10 + its Reflex, less the same. */
 const reflexDC = o => 10 + (Number(o.spec?.defenses?.reflex) || 0) - statusPenalty(o) - (o.conds.clumsy ?? 0);
 
+/**
+ * Can it share another's space? A Tiny creature can (the Player Core: Tiny creatures can occupy the same space as larger
+ * creatures, and four of them a square), and a swarm can (its trait: it can occupy the same space as other creatures).
+ */
+const sharesRoom = u => Number(u.spec?.size) === 0 || (u.spec?.creatureTraits ?? []).includes("swarm");
+
 /** What a creature's grab laid on its bearer (its Grapple, the GM's grab): grabbed or restrained, from it (or anyone). */
 const grabbing = (e, id = null) => !!e.sourceId && (id === null || e.sourceId === id) && !!(e.conditions?.grabbed || e.conditions?.restrained);
 
@@ -104,12 +110,21 @@ export const pf2eRules = {
   },
 
   /**
+   * Room on the map (the core's behavior/space.js): a Tiny creature or a swarm may end its move in another's space
+   * (sharesRoom); nobody else may.
+   */
+  endIn(run, u) {
+    return sharesRoom(u);
+  },
+
+  /**
    * Getting past another creature on the way (the core's behavior/space.js): through a willing one's space (a friend's,
    * on its side) and one that's down, freely; a foe on its feet, Tumble Through for one trained in Acrobatics with even
-   * odds or better (a 10 on the die will do), round it otherwise. Anyone else (a bystander), the core's way.
+   * odds or better (a 10 on the die will do), round it otherwise. Anyone else (a bystander), the core's way. A Tiny
+   * creature or a swarm, which can share the space, goes through it freely.
    */
   passThrough(run, u, o) {
-    if ( o.status !== STATUS.STANDING || o.side === u.side ) return "free";
+    if ( o.status !== STATUS.STANDING || o.side === u.side || sharesRoom(u) ) return "free";
     if ( !run.prep?.sides?.[u.side]?.enemies?.has?.(o.side) ) return null;
     return u.spec?.acrobatics && tumbleMod(u) + 10 >= reflexDC(o) ? "tumble" : "around";
   },

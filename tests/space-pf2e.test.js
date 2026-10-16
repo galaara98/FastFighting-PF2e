@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { beginRun, beginRound, prepareBattle, takeTurn } from "../../fast-fighting/scripts/engine/simulator.js";
 import { moveToward, edgeDistance } from "../../fast-fighting/scripts/engine/battle-state.js";
+import { inTheWay, freeSpotNear } from "../../fast-fighting/scripts/engine/behavior/space.js";
 import { parseFormula, STATUS } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { acrobaticsOf } from "../scripts/adapter.js";
@@ -63,6 +64,28 @@ describe("how it gets past", () => {
     expect(pf2eRules.passThrough(run, hero, orc)).toBe("free");
     miller.side = "neutralParty";
     expect(pf2eRules.passThrough(run, hero, miller)).toBeNull();
+  });
+});
+
+describe("sharing a space", () => {
+  test("a Tiny creature or a swarm may end its move in another's space, and goes through it freely; nobody else", () => {
+    const run = fight([unit("pixie", "friendly", 0, { size: 0 }), unit("rats", "friendly", 30, { size: 2, creatureTraits: ["swarm"] }), unit("hero", "friendly", 60), unit("orc", "hostile", 15)]);
+    const [pixie, rats, hero, orc] = get(run, "pixie", "rats", "hero", "orc");
+    expect([pixie, rats, hero].map(u => pf2eRules.endIn(run, u, orc))).toEqual([true, true, false]);
+    expect(inTheWay(run, pixie, { x: 15, y: 0 })).toBeNull();
+    expect(inTheWay(run, rats, { x: 15, y: 0 })).toBeNull();
+    expect(inTheWay(run, hero, { x: 15, y: 0 })).toBe(orc);
+    // (Past the orc on its feet: the pixie and the swarm freely, the hero round it.)
+    expect([pixie, rats, hero].map(u => pf2eRules.passThrough(run, u, orc))).toEqual(["free", "free", "around"]);
+  });
+
+  test("a Tiny creature walks right up into the orc's space; a Medium one stops beside it", () => {
+    const run = fight([unit("pixie", "friendly", 0, { size: 0 }), unit("orc", "hostile", 15)]);
+    const [pixie, orc] = get(run, "pixie", "orc");
+    expect(freeSpotNear(run, pixie, orc.pos)).toEqual({ x: 15, y: 0 });
+    const other = fight([unit("hero", "friendly", 0), unit("orc", "hostile", 15)]);
+    const [hero, orc2] = get(other, "hero", "orc");
+    expect(freeSpotNear(other, hero, orc2.pos)).not.toEqual({ x: 15, y: 0 });
   });
 });
 
