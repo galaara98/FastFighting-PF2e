@@ -42,17 +42,20 @@ export function describePf2eOutcome(spec, final) {
   for ( const e of final.effects ?? [] ) lines.push(stillLine(e));
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceLabel(spec, key) }));
+    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceName(key, { one: true }) ?? spec.actions.find(a => a.resource === key)?.name ?? key }));
   }
   return lines;
 }
 
-function resourceLabel(spec, key) {
-  const action = spec.actions.find(a => a.resource === key);
+/**
+ * A resource pool's name in PF2e's words, or null where the action that spends it names it. `one`: one of it, as
+ * counted ("2× Hero Point"); without, the pool ("Hero Points").
+ */
+export function resourceName(key, { one = false } = {}) {
+  if ( key === "fate" ) return t(one ? "HeroPoint" : "HeroPoints");
   if ( key === "focus" ) return t("FocusPoint");
-  if ( key === "fate" ) return t("HeroPoint");
   if ( key.startsWith("slots:") ) return t("SlotRank", { rank: key.split(":")[2] });
-  return action?.name ?? key;
+  return null;
 }
 
 async function setCondition(actor, slug, value, undo) {

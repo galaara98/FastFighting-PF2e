@@ -8,12 +8,12 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, conditionSlug } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, conditionSlug, resourceName } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { t, actionName, traitName, featureName, conditionLabel, coin, englishName, englishDescription } from "./words.js";
+import { t, actionName, traitName, featureName, conditionLabel, coin, englishName, englishDescription, wordList } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -700,11 +700,12 @@ export class Pf2eAdapter extends SystemAdapter {
           resource = `slots:${entry.id}:${rank}`;
           pool = entry.system.slots?.[`slot${rank}`]?.value ?? 0;
         } else if ( mode === "innate" ) {
-          // (PF2e says "at will" and "constant" only in the spell's name: "Translocate (At will)". At will is as
-          // often as it likes; a constant one is always on, not cast.)
-          // (In a Spanish world: "(constante)", "(a voluntad)".)
-          if ( /\((constant|constante)\)/i.test(englishName(spell)) || /\((constant|constante)\)/i.test(spell.name) ) continue;
-          uses = /\((at[- ]will|a voluntad)\)/i.test(`${englishName(spell)} ${spell.name}`) ? undefined : spell.system.location?.uses?.value ?? 1;
+          // (PF2e says "at will" and "constant" only in brackets in the spell's name: "Translocate (At Will)", in the
+          // compendium's language. At will is as often as it likes; a constant one is always on, not cast. The words
+          // are FFPF2E.Innate's, in the reader's language and in English.)
+          const tags = new Set([...`${englishName(spell)} ${spell.name}`.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim().toLowerCase().replace(/\s+/g, " ")));
+          if ( wordList("Innate.Constant").some(w => tags.has(w)) ) continue;
+          uses = wordList("Innate.AtWill").some(w => tags.has(w)) ? undefined : spell.system.location?.uses?.value ?? 1;
         }
         const id = `${actor.id}.spell.${spell.id}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
@@ -1393,10 +1394,7 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   resourceLabel(key) {
-    if ( key === "fate" ) return game.i18n.localize("FFPF2E.HeroPoints");
-    if ( key === "focus" ) return game.i18n.localize("FFPF2E.FocusPoint");
-    if ( key.startsWith("slots:") ) return game.i18n.format("FFPF2E.SlotRank", { rank: key.split(":")[2] });
-    return null;
+    return resourceName(key);
   }
 
   describeOutcome(spec, final) {

@@ -9,6 +9,24 @@ import { localize, hasWords } from "./core.js";
 /** This module's words. */
 export const t = (key, data = null) => localize(`FFPF2E.${key}`, data);
 
+/** Foundry's English for a key (its fallback), when the reader's language is another; null when there's none. */
+const english = key => {
+  const text = globalThis.foundry?.utils?.getProperty?.(globalThis.game?.i18n?._fallback ?? {}, key);
+  return typeof text === "string" ? text : null;
+};
+const listed = text => String(text ?? "").split(",").map(w => w.trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean);
+const lists = new Map();
+
+/**
+ * A word list of this module's (FFPF2E.<key>, comma-separated), in the reader's language and in English: what a name
+ * may say in either (a compendium is often in English whatever the table reads). Lower case.
+ */
+export function wordList(key) {
+  const id = `FFPF2E.${key}`;
+  if ( !lists.has(id) ) lists.set(id, [...new Set([...(hasWords(id) ? listed(localize(id)) : []), ...listed(english(id))])]);
+  return lists.get(id);
+}
+
 /** The system's word for a key, if it has one (else `otherwise`). */
 const sys = (key, otherwise) => (hasWords(key) ? localize(key) : otherwise);
 

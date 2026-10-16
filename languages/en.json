@@ -18,6 +18,10 @@
       }
     },
     "HeroPoint": "Hero Point",
+    "Innate": {
+      "AtWill": "at will, at-will",
+      "Constant": "constant"
+    },
     "TwoActions": "{name}, two actions",
     "Exploited": "exploited (+{n})",
     "Flustered": "flustered",

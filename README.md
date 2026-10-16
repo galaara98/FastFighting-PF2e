@@ -32,7 +32,7 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
   - champion's reactions: Retributive Strike, Glimpse of Redemption and Liberating Step (a friend within 15 feet takes 2 + level less from a blow; a Retributive Strike also strikes the attacker in reach)
   - Grapple for anyone trained in Athletics (grabbed, restrained on a critical success)
   - summon spells: a creature of the trait the spell calls, at the highest level its rank allows, from the installed bestiaries (the Monster Core first), as a minion with two actions that its summoner must Sustain each turn or lose
-  - Spell Effects already on a creature count through PF2e's own totals; ones still running when the fight ends are left on by Do it For Real Now, for the rounds left
+  - Spell Effects already on a creature count through PF2e's own totals; one laid in a live battle goes on as its Spell Effect, for the rounds it has
   - senses, sorted into the core's with their ranges: darkvision, greater darkvision, infrared vision and truesight see in the dark; scent is smell; tremorsense, lifesense, echolocation and every other sense of a creature's own are felt; no vision, no sight (low-light vision and see invisibility don't count); blinded and deafened
   - Hero Points: spent to keep someone from dying (a reroll), or all of them for one's own Heroic Recovery; Do it For Real Now takes them away
   - prepared and spontaneous slots, focus points
@@ -58,12 +58,13 @@ FastFighting Core runs the simulations, the Battle Planner, player surveys, stor
 - **Personality defaults:** Tactical, Brave, Selfish and Loyal come from the creature's data: mindless, animal, undead, construct, minion, Intelligence, Wisdom, Will save; its kind's loyalty (a devil's hierarchy, a demon's chaos, a hobgoblin's discipline); holy or unholy; and what its abilities' rules do.
 - **A player character's personality** starts as the usual hero's (bold, loyal, unselfish, a good head) and everything on its sheet moves it a little: Intelligence and Wisdom (and its Perception, and experience) for Tactical; its Will against the usual hero's at its level, and its Constitution, for Brave; its class, ancestry and background (a champion selfless, a criminal or a charlatan less so, a scholar a planner, a gladiator bold); holy or unholy; its feats and features by what their rules do (a better save against fear, like a fighter's Bravery, makes a bolder one; one against being controlled, like Haughty Obstinacy, one harder to order around; a bonus to Aid, like Cooperative Nature, a more loyal one; a few without rules, like Aura of Courage, by slug); skills that say something (Warfare Lore, Thievery, Medicine ...); and whether it's in a party. Each trait's tooltip in the planner lists where it started and every part that moved it. Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities. A rarer creature (its rarity trait: uncommon, rare, unique) has a slight edge for leader, boss or lieutenant of its group.
 - **Recognised by slug:** abilities, feats and spells it has to know (Sneak Attack, Pack Attack, Reactive Strike, Battle Medicine, Bon Mot, knockdown and grab) are found by their slug, the same in every language, so a translated game works too.
-- **Do it For Real Now for PF2e:** writes:
+- **Do it For Real Now for PF2e:** each turn of a live battle writes:
   - HP and temp HP, and Stamina Points in a world playing the Stamina variant;
   - dying, wounded, unconscious, prone and lingering conditions;
   - persistent damage conditions, and affliction effects (noting any onset still to come);
   - death, and lootable corpses or loot piles (gear moves off the corpse);
   - expended slots and focus, and used consumables;
+  - buffs and debuffs (Bless, Bane, Rage): their own Spell Effect, for the rounds they have, off when they end;
   - surrender and side changes (alliance and disposition: won over, their new side; talked out of the fight, Neutral; a neutral that turned on the party, Hostile);
   - coins (with change made) and items handed over by someone talked into it or robbed.
 
