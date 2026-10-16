@@ -326,6 +326,25 @@ const emptyRecord = (tokenDoc, actor) => ({
   tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
 });
 
+/**
+ * A live battle: a creature tied up (a prisoner, the core's engine/behavior/fallen.js), or no longer: PF2e's own
+ * Restrained, as a condition item. An undo record, or null when nothing changed.
+ */
+export async function commitPf2eBound(tokenDoc, bound) {
+  const actor = tokenDoc?.actor;
+  if ( !actor ) return null;
+  const undo = emptyRecord(tokenDoc, actor);
+  const held = actor.itemTypes.condition.filter(c => c.slug === "restrained" && !c.isLocked);
+  if ( bound && !held.length ) {
+    const made = await actor.increaseCondition("restrained");
+    if ( made ) undo.createdItems.push(made.id);
+  } else if ( !bound && held.length ) {
+    undo.deletedItems.push(...held.map(c => c.toObject()));
+    await actor.deleteEmbeddedDocuments("Item", held.map(c => c.id));
+  }
+  return undo.createdItems.length || undo.deletedItems.length ? undo : null;
+}
+
 /** Coin items as they are now, to work out what a coin transfer changed. */
 const coinSnapshot = actor => new Map(actor.itemTypes.treasure.filter(i => i.isCurrency).map(i => [i.id, i.toObject()]));
 

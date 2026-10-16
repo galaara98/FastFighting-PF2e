@@ -8,7 +8,7 @@ import { parseAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, conditionSlug, resourceName } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, resourceName } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, plain } from "./control.js";
 import { abilityAction } from "./abilities.js";
@@ -1376,6 +1376,11 @@ export class Pf2eAdapter extends SystemAdapter {
   /** A player's turn in a live battle, read from the cards PF2e made for it (read-turn.js). */
   readTurn(messages, context) {
     return readPf2eTurn(messages, context);
+  }
+
+  /** Tied up in a live battle: Restrained, PF2e's own condition (commit.js). */
+  async commitBound(tokenDoc, bound) {
+    return commitPf2eBound(tokenDoc, bound);
   }
 
   /** PF2e's sheets carry its own conditions (and prone); the engine's others (incapacitated: Command) it keeps itself. */
