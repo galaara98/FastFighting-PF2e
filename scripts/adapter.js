@@ -821,7 +821,9 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( !spec ) return null;
     spec.creatureTraits = [...new Set([...(spec.creatureTraits ?? []), "minion", "summoned"])];
     spec.sourceUuid = src.uuid; // (a live battle places it from here)
-    return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true };
+    // (How far off it appears: the spell's range, 30 feet for most; the core's, where it gives none.)
+    const feet = parseFeet(spell.system.range?.value);
+    return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true, ...(feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {}) };
   }
 
   /**
