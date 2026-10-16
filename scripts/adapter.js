@@ -1389,7 +1389,8 @@ export class Pf2eAdapter extends SystemAdapter {
   conditionChoices() {
     const own = Object.keys(CONFIG.PF2E?.conditionTypes ?? {}).filter(slug => !NOT_CONDITIONS.has(slug))
       .map(slug => ({ key: engineKey(slug), valued: !!game.pf2e?.ConditionManager?.getCondition(slug)?.system?.value?.isValued }));
-    return [...own, ...super.conditionChoices()];
+    // (One the core has too, dazzled or fascinated: PF2e's.)
+    return [...own, ...super.conditionChoices().filter(c => !own.some(o => o.key === c.key))];
   }
 
   /** A ranged attack or a manipulate action in a foe's reach: Reactive Strike's other triggers (read-turn.js). */

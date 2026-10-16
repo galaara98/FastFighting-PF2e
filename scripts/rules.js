@@ -254,7 +254,7 @@ export const pf2eRules = {
    * Conditions as numbers, so a frightened or tripped foe is weighed like any other penalty: frightened and sickened
    * to everything, clumsy to AC and Reflex, enfeebled to melee, off-guard -2 AC (and grabbed, which is off-guard; held
    * in place too, as the engine weighs it), prone (off-guard, -2 to attack, an action to stand), slowed and stunned in
-   * actions.
+   * actions, fascinated -2 to its checks (PF2e's: it can still act; not the core's, which takes its turn).
    */
   conditionMods(key, value = 1) {
     const v = Number(value) || 1;
@@ -266,6 +266,7 @@ export const pf2eRules = {
       case "offGuard":
       case "grabbed": return { ac: -2 };
       case "prone": return { ac: -2, attack: -2, actions: -1 };
+      case "fascinated": return { checks: -2 };
       case "slowed": return { actions: -v };
       case "stunned": return { actions: -Math.min(3, v) };
       default: return null;
@@ -299,7 +300,8 @@ export const pf2eRules = {
   /**
    * What the situation is worth. The engine reports the facts; these are PF2e's numbers:
    * off-guard -2 AC; frightened and sickened (the worse) to checks and DCs; clumsy to AC and Reflex; enfeebled to
-   * melee attacks; prone -2 to attack; -2 to melee underwater without a swim speed; -2 per range increment.
+   * melee attacks; prone -2 to attack; -2 to melee underwater without a swim speed; -2 per range increment; fascinated
+   * -2 to its skill checks.
    */
   modifiers: {
     exposed(ctx) {
@@ -329,8 +331,8 @@ export const pf2eRules = {
       if ( type === "reflex" ) bonus -= unit.conds.clumsy ?? 0;
       return { bonus, advantage: 0 };
     },
-    check() {
-      return { bonus: 0, advantage: 0 };
+    check({ unit } = {}) {
+      return { bonus: unit?.conds?.fascinated ? -2 : 0, advantage: 0 };
     },
     /** Steal in combat: -5 to the Thievery check. */
     steal() {
