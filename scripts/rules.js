@@ -146,10 +146,15 @@ function foeCovers(run, u) {
  * against an area.
  */
 function flatCheckDC(attacker, target, action) {
-  if ( action?.area || !target ) return 0;
-  if ( Number(target.conds?.hidden) > 0 ) return 11;
-  if ( Number(target.conds?.concealed) > 0 ) return 5;
-  return Number(attacker?.conds?.dazzled) > 0 && !attacker.spec?.otherPrecise ? 5 : 0;
+  return flatCheck(attacker, target, action).dc;
+}
+
+/** The flat check, and why (the story tells it: "hidden", "concealed", "dazzled"): {dc, why}. */
+function flatCheck(attacker, target, action) {
+  if ( action?.area || !target ) return { dc: 0, why: null };
+  if ( Number(target.conds?.hidden) > 0 ) return { dc: 11, why: "hidden" };
+  if ( Number(target.conds?.concealed) > 0 ) return { dc: 5, why: "concealed" };
+  return Number(attacker?.conds?.dazzled) > 0 && !attacker.spec?.otherPrecise ? { dc: 5, why: "dazzled" } : { dc: 0, why: null };
 }
 
 /**
@@ -439,18 +444,18 @@ export const pf2eRules = {
     // (A targeted spell's save, against one its caster has to make out: the caster's flat check; failed, the spell
     // passes it by, as a critical success.)
     if ( ctx.kind === "save" && ctx.from && ctx.action?.spellId && roll?.degree < 3 ) {
-      const dc = flatCheckDC(ctx.from, u, ctx.action);
+      const { dc } = flatCheck(ctx.from, u, ctx.action);
       if ( !dc ) return roll;
       const natural = run.rng.d20();
       if ( natural >= dc ) return roll;
-      return { ...roll, degree: 3, said: { text: t("FlatCheckSpell", { caster: ctx.from.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc } } };
+      return { ...roll, degree: 3, said: { text: t("FlatCheckSpell", { caster: ctx.from.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc, luck: "spell" } } };
     }
     if ( ctx.kind !== "attack" || !(roll?.degree >= 2) ) return roll;
-    const dc = flatCheckDC(u, ctx.target, ctx.action);
+    const { dc, why } = flatCheck(u, ctx.target, ctx.action);
     if ( !dc ) return roll;
     const natural = run.rng.d20();
     if ( natural >= dc ) return roll;
-    return { ...roll, degree: 1, said: { text: t("FlatCheck", { target: ctx.target.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc } } };
+    return { ...roll, degree: 1, said: { text: t("FlatCheck", { target: ctx.target.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc, luck: why } } };
   },
 
   /** The start of its turn: drained since (drain), the Hit Points it loses. */
