@@ -290,3 +290,63 @@ describe("a check, rolled as the skill", () => {
     expect(await adapter.rollCheck(orc, { purpose: "talk", skill: "diplomacy", dc: 15 })).toBeNull();
   });
 });
+
+describe("the helper's own rules' checks", () => {
+  /** PF2e's Check and CheckModifier (game.pf2e), keeping what the roll was asked. */
+  function pf2eCheck({ degree = 2 } = {}) {
+    const rolls = [];
+    game.pf2e.CheckModifier = class {
+      constructor(slug, { modifiers }) {
+        Object.assign(this, { slug, modifiers });
+      }
+    };
+    game.pf2e.Check = { roll: async (check, context) => {
+      rolls.push({ check, context });
+      return degree === null ? null : checkRoll(degree, 14, 14);
+    } };
+    return rolls;
+  }
+
+  test("a flat check: PF2e's flat check (the d20 alone, no dialog) against the engine's DC, titled with what it's for", async () => {
+    const rolls = pf2eCheck();
+    const goblin = creature("gob1");
+    const out = await adapter.rollCheck(goblin, { purpose: "flat", dc: 11, action: { id: null, name: "hidden" }, target: creature("pc1") });
+    expect(out).toEqual({ degree: 2, natural: 14, total: 14 });
+    expect(rolls).toHaveLength(1);
+    const { check, context } = rolls[0];
+    expect(check.modifiers).toEqual([]);
+    expect(context).toEqual({ actor: goblin.actor, token: goblin, type: "flat-check", title: check.slug, dc: { value: 11 }, options: ["flat-check"], skipDialog: true });
+    expect(context.title).toContain("hidden");
+    // (Nothing else rolled: no skill, no action.)
+    expect(Object.values(asked)).toEqual([]);
+    expect(goblin.actor.perception.asked).toEqual([]);
+  });
+
+  test("secret: for the GMs only; no label: PF2e's own words; none where PF2e has no flat check or rolled nothing", async () => {
+    const rolls = pf2eCheck();
+    const goblin = creature("gob1");
+    await adapter.rollCheck(goblin, { purpose: "flat", dc: 15, action: { id: null, name: "" }, secret: true });
+    expect(rolls[0].context).toMatchObject({ messageMode: "gm", title: game.i18n.localize("PF2E.FlatCheck") });
+    pf2eCheck({ degree: null });
+    expect(await adapter.rollCheck(goblin, { purpose: "flat", dc: 15, action: { id: null, name: "x" } })).toBeNull();
+    delete game.pf2e.Check;
+    expect(await adapter.rollCheck(goblin, { purpose: "flat", dc: 15, action: { id: null, name: "x" } })).toBeNull();
+  });
+
+  test("Tumble Through: PF2e's action at the foe's Reflex DC, the foe with it where it's drawn here", async () => {
+    game.pf2e.actions.set("tumble-through", { use: async params => {
+      (asked["tumble-through"] ??= []).push(params);
+      return [{ actor: params.actors[0], roll: checkRoll(3, 30, 18) }];
+    } });
+    const goblin = creature("gob1");
+    const hero = creature("pc1");
+    const out = await adapter.rollCheck(goblin, { purpose: "tumble", against: "reflex", dc: 17, action: { id: null, name: "" }, target: hero });
+    expect(out).toEqual({ degree: 3, natural: 18, total: 30 });
+    expect(asked["tumble-through"]).toEqual([{
+      actors: [goblin.actor], event: { shiftKey: true, ctrlKey: false, metaKey: false }, difficultyClass: { value: 17, slug: "reflex" }, target: hero.object
+    }]);
+    await adapter.rollCheck(goblin, { purpose: "tumble", against: "reflex", dc: 17, action: { id: null }, target: creature("pc2", { drawn: false }) });
+    expect(asked["tumble-through"][1].difficultyClass).toEqual({ value: 17 });
+    expect(asked["tumble-through"][1]).not.toHaveProperty("target");
+  });
+});

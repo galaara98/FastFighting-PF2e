@@ -16,12 +16,16 @@
  *  - The multiple attack penalty, on a check with the attack trait (a maneuver, Swallow Whole): for the core's
  *    `attackNumber`, the attacks before it as the engine counted them for its own penalty (none: null). An Escape takes
  *    none, as the engine's doesn't (PF2e's has the attack trait).
+ *  - The helper's own rules' checks (rules.js, through the core's systemRolled): a flat check ("flat": PF2e's flat
+ *    check, the d20 alone, titled with what it's for), and Tumble Through ("tumble": PF2e's action, at the foe's
+ *    Reflex DC).
  * Null where it can't tell what to roll (a spell check: PF2e has none; an Aid only a Strike would make: PF2e's Aid
  * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
 import { naturalOf } from "./read-turn.js";
 import { click, strikesOf } from "./strike-roll.js";
 import { AID_SKILLS } from "./edges.js";
+import { t } from "./words.js";
 
 /** PF2e's saves, by the keys the engine may name them with. */
 const SAVES = Object.freeze({ __proto__: null, fortitude: "fortitude", fort: "fortitude", reflex: "reflex", ref: "reflex", will: "will" });
@@ -33,7 +37,7 @@ const ACTIONS = new Set(["trip", "grapple", "shove", "disarm", "reposition", "de
  * What a check is for, where PF2e has an action for it: [its slug, its variant]. First aid on a bleed, Administer First
  * Aid's other variant: its action id ends in it (rules.js stopBleeding).
  */
-const PURPOSES = Object.freeze({ __proto__: null, escape: ["escape"], theft: ["steal"], firstAid: ["administer-first-aid", "stabilize"] });
+const PURPOSES = Object.freeze({ __proto__: null, escape: ["escape"], theft: ["steal"], firstAid: ["administer-first-aid", "stabilize"], tumble: ["tumble-through"] });
 
 /** The skill a feat or an ability rolls, by its slug: Bon Mot, Battle Medicine, Swallow Whole (gullet.js). */
 const ITEM_SKILLS = Object.freeze({ __proto__: null, "bon-mot": "diplomacy", "battle-medicine": "medicine", "swallow-whole": "athletics" });
@@ -166,6 +170,21 @@ async function rollStatistic(token, { statistic, item = null }, { dc, at, attack
 }
 
 /**
+ * A flat check as PF2e rolls one (game.pf2e.Check, a flat check: the d20 alone, no dialog) against the engine's DC, the
+ * card titled with what it's for (the rules' label, the core's action name).
+ */
+async function rollFlat(token, { value, label, secret }) {
+  const Check = game.pf2e?.Check;
+  const CheckModifier = game.pf2e?.CheckModifier;
+  if ( typeof Check?.roll !== "function" || typeof CheckModifier !== "function" ) return null;
+  const title = label ? t("FlatCheckFor", { what: label }) : game.i18n.localize("PF2E.FlatCheck");
+  const roll = await Check.roll(new CheckModifier(title, { modifiers: [] }), {
+    actor: token.actor, token, type: "flat-check", title, dc: { value }, options: ["flat-check"], skipDialog: true, ...mode(secret)
+  });
+  return rolled(roll);
+}
+
+/**
  * A check rolled with PF2e's own roller: PF2e's action, or the skill, against the engine's DC.
  * @param {TokenDocument} token   the one rolling it
  * @param {object} options        {purpose; skill: the spec's, if it names one; against: the target's defense;
@@ -177,6 +196,7 @@ export async function rollPf2eCheck(token, { purpose = null, skill = null, again
   const actor = token?.actor;
   const value = dcOf(dc);
   if ( !actor || value === null ) return null;
+  if ( purpose === "flat" ) return rollFlat(token, { value, label: typeof action?.name === "string" ? action.name : "", secret });
   const how = checkFor(actor, { purpose, skill, action });
   const attacks = Number.isInteger(attackNumber) && attackNumber >= 0 ? attackNumber : null;
   // (A penalty PF2e can't take without an action or an item to take it by: the engine rolls it, with its own.)

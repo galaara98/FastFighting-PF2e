@@ -116,17 +116,26 @@ describe("Administer First Aid on a friend's bleed", () => {
     expect(pf2eRules.breakFree(run, hero, hold)).toBeNull();
   });
 
-  test("in a live battle, the system's own Administer First Aid (stop bleeding: its id says) where it makes checks; the flat check after it, the engine's", () => {
+  test("in a live battle, the system's own Administer First Aid (stop bleeding: its id says) where it makes checks; the bleeder's flat check after it, its own too", () => {
     const run = fight([creature("hero", "friendly", 0), creature("medic", "friendly", 5, { firstAid: { mod: 2 } }), creature("orc", "hostile", 40)]);
     const [hero, medic] = ["hero", "medic"].map(id => run.byId.get(id));
     hero.persistent = [bleed()];
     const hold = freeable(run, hero);
     const asked = [];
-    run.live = { playing: true, roll: (r, request) => { asked.push(request); return { degree: 2, natural: 15, total: 17 }; } };
+    // (The system's Administer First Aid a success, taken as it is; its flat check, a 9 against DC 10, not: still bleeding.)
+    const answers = [{ degree: 2, natural: 15, total: 17 }, { degree: 1, natural: 9, total: 9 }];
+    run.live = { playing: true, roll: (r, request) => { asked.push(request); return answers.shift(); } };
     run.rng.d20 = () => 12;
-    expect(tryHold(run, medic, hold, { freeing: true, held: hero })).toMatchObject({ success: true, degree: 2, natural: 15, total: 17, dc: 18 });
+    expect(tryHold(run, medic, hold, { freeing: true, held: hero })).toMatchObject({ success: false, degree: 2, natural: 15, total: 17, dc: 18 });
+    expect(hero.persistent).toHaveLength(1);
+    expect(asked).toEqual([
+      { kind: "check", unitId: "medic", targetId: "hero", purpose: "firstAid", skill: null, against: null, dc: 18, action: { id: "medic.stop-bleeding", name: "bleeding" } },
+      { kind: "check", unitId: "hero", targetId: null, purpose: "flat", skill: null, against: null, dc: 10, action: { id: null, name: expect.any(String) } }
+    ]);
+    // (The system's flat check made: the bleed ends.)
+    answers.push({ degree: 2, natural: 15, total: 17 }, { degree: 2, natural: 10, total: 10 });
+    expect(tryHold(run, medic, hold, { freeing: true, held: hero }).success).toBe(true);
     expect(hero.persistent).toEqual([]);
-    expect(asked).toEqual([{ kind: "check", unitId: "medic", targetId: "hero", purpose: "firstAid", skill: null, against: null, dc: 18, action: { id: "medic.stop-bleeding", name: "bleeding" } }]);
   });
 });
 

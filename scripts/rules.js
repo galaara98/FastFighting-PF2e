@@ -2,7 +2,7 @@
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
 import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies, systemRolled, rollCheck } from "./core.js";
-import { t } from "./words.js";
+import { t, conditionLabel, traitName } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
 import { ASSISTED, APPROPRIATE_DC, SICK_ANNOYANCE, sickDC, bleedDC, lower } from "./remedies.js";
@@ -153,6 +153,24 @@ function flatCheck(attacker, target, action) {
 }
 
 /**
+ * A flat check (a d20 against the DC, nothing added), u's: in a live battle the system's own where it makes checks (the
+ * core's systemRolled, purpose "flat": PF2e's flat check, its card in the chat, titled with `label()`, what it's for);
+ * else the engine's d20, as ever (`rng`, the run's unless given). {natural, success}.
+ */
+function flatRoll(run, u, dc, label, { target = null, rng = run?.rng } = {}) {
+  const rolled = run?.live?.playing && u ? systemRolled(run, u, "check", { dc, target, purpose: "flat", label: label() }) : null;
+  if ( !rolled ) {
+    const natural = rng.d20();
+    return { natural, success: natural >= dc };
+  }
+  const { natural, total, degree } = rollCheck(pf2eRules, rng, 0, dc, { kind: "check", roller: u, rolled });
+  return { natural: natural ?? total, success: degree >= 2 };
+}
+
+/** What a persistent damage's flat check is for, by its damage type: "persistent fire". */
+const persistentLabel = type => () => t("Persistent", { type: traitName(type) });
+
+/**
  * Can it share another's space? A Tiny creature can (the Player Core: Tiny creatures can occupy the same space as larger
  * creatures, and four of them a square), and a swarm can (its trait: it can occupy the same space as other creatures).
  */
@@ -263,12 +281,14 @@ export const pf2eRules = {
   /**
    * Tumble Through: Acrobatics against the foe's Reflex DC. Through its space on a success; on a failure the move ends
    * short of it (the core's). Not played: its space as difficult terrain on the way through (the core charges a tumble
-   * nothing more), one foe a Tumble Through, and the reactions a failure draws as if it had left where it started.
+   * nothing more), one foe a Tumble Through, and the reactions a failure draws as if it had left where it started. In a
+   * live battle, the system's own roll where it makes checks (systemRolled, purpose "tumble": PF2e's Tumble Through).
    */
   tumbleThrough(run, u, o) {
     const mod = tumbleMod(u);
     const dc = reflexDC(o);
-    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    const rolled = systemRolled(run, u, "check", { dc, target: o, purpose: "tumble", against: "reflex" });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: u, rolled });
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
 
@@ -443,30 +463,33 @@ export const pf2eRules = {
   disrupted(run, u, action) {
     const v = Number(u?.conds?.stupefied) || 0;
     if ( !(v > 0) || !action?.spellId ) return null;
-    const natural = run.rng.d20();
     const dc = 5 + v;
-    return natural >= dc ? null : { natural, dc, said: { text: t("SpellLost", { natural, dc }) } };
+    const { natural, success } = flatRoll(run, u, dc, () => conditionLabel("stupefied", v));
+    return success ? null : { natural, dc, said: { text: t("SpellLost", { natural, dc }) } };
   },
 
   /**
    * An attack's flat check (flatCheck: against one hidden from it, or concealed, or with it dazzled), rolled once the
-   * attack would hit: failed, the blow doesn't affect the target.
+   * attack would hit: failed, the blow doesn't affect the target. The same after a roll the system made itself in a
+   * live battle (`ctx.rolled`: PF2e rolls no flat check of its own), a flat check of the system's too (flatRoll); and
+   * nothing else, so nothing PF2e's own card did is done twice (a hit's damage card it rolled already isn't applied:
+   * the blow missed, and the card is FastFighting's, its Apply buttons gone: cards.js).
    */
   adjustRoll(run, u, roll, ctx = {}) {
     // (A targeted spell's save, against one its caster has to make out: the caster's flat check; failed, the spell
     // passes it by, as a critical success.)
     if ( ctx.kind === "save" && ctx.from && ctx.action?.spellId && roll?.degree < 3 ) {
-      const { dc } = flatCheck(ctx.from, u, ctx.action);
+      const { dc, why } = flatCheck(ctx.from, u, ctx.action);
       if ( !dc ) return roll;
-      const natural = run.rng.d20();
-      if ( natural >= dc ) return roll;
+      const { natural, success } = flatRoll(run, ctx.from, dc, () => conditionLabel(why), { target: u });
+      if ( success ) return roll;
       return { ...roll, degree: 3, said: { text: t("FlatCheckSpell", { caster: ctx.from.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc, luck: "spell" } } };
     }
     if ( ctx.kind !== "attack" || !(roll?.degree >= 2) ) return roll;
     const { dc, why } = flatCheck(u, ctx.target, ctx.action);
     if ( !dc ) return roll;
-    const natural = run.rng.d20();
-    if ( natural >= dc ) return roll;
+    const { natural, success } = flatRoll(run, u, dc, () => conditionLabel(why), { target: ctx.target });
+    if ( success ) return roll;
     return { ...roll, degree: 1, said: { text: t("FlatCheck", { target: ctx.target.spec?.name ?? "", natural, dc }), data: { flat: natural, flatDC: dc, luck: why } } };
   },
 
@@ -833,9 +856,12 @@ export const pf2eRules = {
     }
   },
 
-  /** End of turn persistent damage: take it, then a DC 15 flat check to remove each instance. */
-  persistentFlatCheck(rng) {
-    return rng.d20() >= 15;
+  /**
+   * End of turn persistent damage: take it, then a DC 15 flat check to remove each instance (its `type`), the unit's:
+   * in a live battle the system's own (flatRoll).
+   */
+  persistentFlatCheck(rng, { run = null, unit = null, type = null } = {}) {
+    return flatRoll(run, unit, 15, persistentLabel(type), { rng }).success;
   },
 
   /** Assisted recovery against persistent damage (remedies.js): two actions, where something would reasonably help. */
@@ -848,8 +874,8 @@ export const pf2eRules = {
     const help = ASSISTED[type];
     if ( !help ) return { success: false };
     if ( help.prone ) u.prone = true;
-    const natural = run.rng.d20();
-    return { success: natural >= help.dc, said: { text: t("Remedy.Flat", { natural, dc: help.dc }) } };
+    const { natural, success } = flatRoll(run, u, help.dc, persistentLabel(type));
+    return { success, said: { text: t("Remedy.Flat", { natural, dc: help.dc }) } };
   },
 
   /** A bleed a friend can stop with Administer First Aid (remedies.js): Medicine against its DC; only a friend tries it. */
@@ -875,14 +901,14 @@ export const pf2eRules = {
     const base = Number(who.spec?.firstAid?.mod);
     if ( !Number.isFinite(base) || !held ) return { success: false };
     const mod = base - statusPenalty(who, "mind", "skill");
-    // (A live battle's, the system's own roll: its Administer First Aid, the variant its id ends in. The flat check
-    // after it, the engine's.)
+    // (A live battle's, the system's own roll: its Administer First Aid, the variant its id ends in; and the bleeder's
+    // flat check after it, its own too: flatRoll.)
     const rolled = systemRolled(run, who, "check", { dc: hold.dc, target: held, purpose: "firstAid", action: { id: `${who.id}.stop-bleeding` }, label: hold.key });
     const { natural, total, degree } = rollCheck(this, run.rng, mod, hold.dc, { kind: "check", roller: who, rolled });
-    const flat = degree >= 2 ? run.rng.d20() : null;
-    const success = flat !== null && flat >= APPROPRIATE_DC;
+    const flat = degree >= 2 ? flatRoll(run, held, APPROPRIATE_DC, persistentLabel("bleed")) : null;
+    const success = !!flat?.success;
     if ( success ) held.persistent = (held.persistent ?? []).filter(e => e.part?.type !== "bleed");
-    return { success, degree, natural, mod, total, dc: hold.dc, ...(flat !== null ? { said: { text: t("Remedy.Flat", { natural: flat, dc: APPROPRIATE_DC }) } } : {}) };
+    return { success, degree, natural, mod, total, dc: hold.dc, ...(flat ? { said: { text: t("Remedy.Flat", { natural: flat.natural, dc: APPROPRIATE_DC }) } } : {}) };
   },
 
   /** Retching while sickened (remedies.js): one action, a Fortitude save against what sickened it. */
