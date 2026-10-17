@@ -201,3 +201,19 @@ describe("a PF2e setting that applies players' damage itself", () => {
     expect(adapter.appliesPlayerDamage()).toBeNull();
   });
 });
+
+describe("whether nameplates decide an NPC's name", () => {
+  test("as pf2e's Tokens Determine NPC Name Visibility says; unreadable, no", () => {
+    const was = globalThis.game.settings;
+    try {
+      for ( const on of [true, false] ) {
+        globalThis.game.settings = { ...was, get: (ns, key) => (ns === "pf2e" && key === "metagame_tokenSetsNameVisibility" ? on : was?.get?.(ns, key)) };
+        expect(adapter.namesFollowNameplates()).toBe(on);
+      }
+      globalThis.game.settings = { get: () => { throw new Error("not registered"); } };
+      expect(adapter.namesFollowNameplates()).toBe(false);
+    } finally {
+      globalThis.game.settings = was;
+    }
+  });
+});

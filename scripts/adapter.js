@@ -1493,6 +1493,18 @@ export class Pf2eAdapter extends SystemAdapter {
     return null;
   }
 
+  /**
+   * Do token nameplates decide whether players learn an NPC's name? pf2e's own Tokens Determine NPC Name Visibility:
+   * on, its cards hide an NPC's name its token doesn't show, and a live battle's story does the same.
+   */
+  namesFollowNameplates() {
+    try {
+      return !!game.settings.get("pf2e", "metagame_tokenSetsNameVisibility");
+    } catch ( err ) {
+      return false;
+    }
+  }
+
   /** Tied up in a live battle: Restrained, PF2e's own condition (commit.js). */
   async commitBound(tokenDoc, bound) {
     return commitPf2eBound(tokenDoc, bound);
