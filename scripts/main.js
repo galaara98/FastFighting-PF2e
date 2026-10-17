@@ -12,7 +12,7 @@ import { hideApply, hideApplyMenu } from "./cards.js";
  * helper. Older than the oldest, it doesn't run (it uses what came since); any other it doesn't know, it runs, and the
  * GM is told it hasn't been tried with that core yet. Add a major once this helper has been tried with it.
  */
-const KNOWN_API = Object.freeze([18, 19]);
+const KNOWN_API = Object.freeze([19]);
 
 /** The core's API major, when it's one this helper doesn't know: the GM is told when the world is ready. */
 let untested = null;
