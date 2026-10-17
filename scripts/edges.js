@@ -12,6 +12,9 @@ import { t } from "./words.js";
 /** DC to Aid (the remaster's). */
 export const AID_DC = 15;
 
+/** The skills Aid is weighed with, besides its Strikes: words and Medicine (by slug). */
+export const AID_SKILLS = Object.freeze(["diplomacy", "medicine", "intimidation", "deception"]);
+
 /**
  * An Aid action, or null when there's nothing to aid with. The free hands it takes (`hands`) are its best way's: a
  * Strike's grip, a healer's hand, none for words.

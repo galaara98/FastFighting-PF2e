@@ -13,12 +13,13 @@ import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
+import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
-import { aidAction } from "./edges.js";
+import { aidAction, AID_SKILLS } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
@@ -1103,7 +1104,7 @@ export class Pf2eAdapter extends SystemAdapter {
     // Aid: for a friend's next roll at whoever it's set on (edges.js); for one that can tell a friend what it means to
     // do (a language: not a wolf). (Helping with Medicine takes a hand, as tending does; with words, none.)
     const aid = !(actor.system.details?.languages?.value ?? []).length ? null : aidAction({ id: `${actor.id}.aid`, name: game.i18n.localize("FFPF2E.Aid"), strikes,
-      skills: ["diplomacy", "medicine", "intimidation", "deception"].filter(skill).map(slug => ({ mod: skill(slug).mod, rank: skill(slug).rank ?? 0, hands: slug === "medicine" ? 1 : 0 })) });
+      skills: AID_SKILLS.filter(skill).map(slug => ({ mod: skill(slug).mod, rank: skill(slug).rank ?? 0, hands: slug === "medicine" ? 1 : 0 })) });
     if ( aid ) out.push(aid);
     out.push(...skillManeuvers({
       actorId: actor.id, maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
@@ -1518,6 +1519,19 @@ export class Pf2eAdapter extends SystemAdapter {
    */
   async rollStrike(token, options) {
     return rollPf2eStrike(token, options);
+  }
+
+  /** API 19. A save rolled with PF2e's own roller, its card in the chat (check-roll.js): the actor's save against the DC. */
+  async rollSave(token, options) {
+    return rollPf2eSave(token, options);
+  }
+
+  /**
+   * API 19. A check rolled with PF2e's own roller, its card in the chat (check-roll.js): PF2e's own action where it has
+   * one (Trip, Demoralize, Escape ...), else the skill; {gm: true} for an Aid only a Strike would make.
+   */
+  async rollCheck(token, options) {
+    return rollPf2eCheck(token, options);
   }
 
   /** API 19. Does a critical Reactive Strike disrupt what this card did: a manipulate action (read-turn.js)? */

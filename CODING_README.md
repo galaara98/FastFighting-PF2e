@@ -23,6 +23,11 @@ This module is also the reference for writing a FastFighting helper for another 
 - **Live battles:** `supportsLive`, `commitChanges` (`commit.js`, returning an undo record), `commitBound`, `commitConcession`, `describeOutcome`, `liveOwnership`, `readLiveState`, `readTurn` and `liveOpening` (`read-turn.js`, from PF2e's chat cards), `reactionsOf`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `rerollResource` (Hero Points), `resourceLabel`.
 - **Players' damage (API 19):** `damageCard` (`read-turn.js` `pf2eDamageCard`), `applyDamageCard` (`commit.js` `applyPf2eDamageCard`: PF2e's `applyDamageFromMessage` for one token, through its `actor.applyDamage`) and `appliesPlayerDamage` (null: no PF2e setting does it).
 - **Strikes (API 19):** `rollStrike` (`strike-roll.js` `rollPf2eStrike`: the engine's strike id back to the sheet's Strike, the variant for `attackNumber` (MAP, no further than the third) and its `damage` or `critical` with that `mapIncreases`, with PF2e's `target` param, so no dialog and the user's targets untouched; `secret` holds Ctrl, PF2e's GM roll), for every Strike in a turn FastFighting plays and for reactions. Its damage card is applied through `applyDamageCard`; Shield Block's reaction spec says `applies: "shieldBlock"`, so a live battle applies a blow it blocked with PF2e's own Shield Block (`shieldBlockRequest`, which needs the shield raised, as the engine does). `disruptsAction` (`read-turn.js` `pf2eDisrupts`: a manipulate trait or roll option, not a save's).
+- **Saves and checks (API 19):** `rollSave` and `rollCheck` (`check-roll.js`), against the engine's DC as `{value}`, no dialog, PF2e's GM roll when `secret`; the details are in its header.
+  - A save: `actor.saves[key]` (of several keys, the best), `from`'s actor as `origin`, and the item the action's id names (`itemIn`; with no `from`, from the actor the id begins with). Not an item with the incapacitation trait: the engine's `rules.controlShift` shifts that degree.
+  - A check: PF2e's own action (`game.pf2e.actions`) where it has one (`ACTIONS` by the id's last part, `PURPOSES` by purpose; Aid with the best of `AID_SKILLS`); else the statistic (`ITEM_SKILLS` for a feat or ability, Medicine to heal, the skill the spec names by slug or label, talk by its kind of pitch). With `against` and the target's token drawn, the target goes along and the DC carries `slug: against`. `{gm: true}` only for an Aid whose best way is a Strike (PF2e's Aid rolls a skill; the check that aids is the GM's call); null for `cast` and anything it can't place.
+  - Multiple attack penalty on a check with the attack trait: the core sends no count for a check, so `strike-roll.js` keeps one per token and combat turn (`noteAttack`, `attacksSoFar`: each Strike, at least the core's `attackNumber` + 1, and each attack check; 0 again once the last one's card is gone, as a rewound turn's are). A Strike the engine rolled itself isn't counted.
+  - Not through these: rolls the helper's rules settle themselves with the engine's dice (`breakFree`'s Escape, `stopBleeding`, `retch`).
 - **Surprise (API 19):** `rules.surprise` (`rules.js`, the planner's Follow System): hidden tokens (Avoiding Notice) roll Stealth for initiative (`stealthSides`), and one whose Stealth (d20 + Stealth) beats every foe's Perception DC starts `hidden`, its first Strike finding its target off-guard; no surprise round, no one surprised.
 - **Other:** `rules` (`pf2eRules`), `supportsLoot`.
 
@@ -73,7 +78,8 @@ Spell Effect items are fetched once a session (`EFFECT_CACHE`); a summon spell's
 | `leadership.js` | `rankLeaders`. |
 | `commit.js` | Writing a live battle's turn (`commitPf2eChanges` and the undo record's shape), surrender, concessions, tied-up creatures. |
 | `read-turn.js` | A player's turn read from PF2e's chat cards (`flags.pf2e.context`). |
-| `strike-roll.js` | A Strike rolled with PF2e's own roller (a live battle's turns and reactions); `strikesOf` and `strikeId`, the Strikes' action ids. |
+| `strike-roll.js` | A Strike rolled with PF2e's own roller (a live battle's turns and reactions); `strikesOf` and `strikeId`, the Strikes' action ids; the turn's attacks, for a check's multiple attack penalty. |
+| `check-roll.js` | Saves and checks rolled with PF2e's own rollers (a live battle's turns). |
 
 
 ## Slugs
@@ -87,6 +93,7 @@ Features are found by slug (the same in every language). Where each lives:
 - **traits.js:** `reactive-strike` or `attack-of-opportunity` set `flags.reactiveStrike`; `CLASS_LEANS`, `ANCESTRY_LEANS`, `BACKGROUND_LEANS`, `SKILL_LEANS`, `ITEM_LEANS`, `SELFISH_BY_TRAIT`, `LOYAL_BY_TRAIT`, `SANCTIFIED`.
 - **auto.js:** `CLASSES`, `ANCESTRIES`, `TRAITS` (playstyle hints); `CLASS_STYLE`, `SUBCLASS_STYLE`, `CASTERS`; `GUARD_SLUGS`, `SELF_GUARD_SLUGS`, `RESCUE_SLUGS`; `CONSUMABLE_FEATS`.
 - **read-turn.js:** `MANEUVERS` (action slugs to the core's maneuvers; `create-a-diversion` is distract) and `TALK`.
+- **check-roll.js:** `ACTIONS` and `PURPOSES` (PF2e's action slugs: `trip` ... `hide`, `escape`, `steal`, `administer-first-aid`), `ITEM_SKILLS` (`bon-mot`, `battle-medicine`, `swallow-whole`), and the incapacitation trait; `edges.js` `AID_SKILLS`.
 
 ## Words and translation
 

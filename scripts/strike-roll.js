@@ -3,7 +3,8 @@
  * and, on a hit, its damage card, as the sheet's Strike rolls them, with no roll dialog. Every Strike in a turn
  * FastFighting plays (the variant for the attacks made before it: the multiple attack penalty), and a reaction's (the
  * first variant: Reactive Strike takes no multiple attack penalty). The target goes to PF2e's Strike as its `target`
- * (as PF2e's own Damage button passes it), so the user's own targets are never touched.
+ * (as PF2e's own Damage button passes it), so the user's own targets are never touched. Each is counted for this turn's
+ * multiple attack penalty on a check with the attack trait (check-roll.js).
  */
 import { listOf, naturalOf } from "./read-turn.js";
 
@@ -35,7 +36,35 @@ export function strikeFor(actor, id) {
  * is down just when that setting shows them, and there's no dialog. Ctrl rolls it for the GMs only (`secret`); without
  * it, the card goes in the chat's own mode.
  */
-const click = (setting, secret = false) => ({ shiftKey: !!game.user?.settings?.[setting], ctrlKey: !!secret, metaKey: false });
+export const click = (setting, secret = false) => ({ shiftKey: !!game.user?.settings?.[setting], ctrlKey: !!secret, metaKey: false });
+
+/**
+ * The attacks each token has made this turn, as this client rolled them, by token id: {turn, count, card} (the last
+ * one's card). PF2e counts them for the multiple attack penalty; the core tells a Strike's count (attackNumber), not a
+ * check's, so a check with the attack trait (a Trip, an Escape) goes by this.
+ */
+const ATTACKS = new Map();
+
+/** This combat's turn, as a key; null outside a combat under way. */
+function turnKey() {
+  const c = game.combat;
+  return c?.started ? `${c.id}.${c.round}.${c.turn}` : null;
+}
+
+/** The attacks this token has made this turn: none known of, or its last one's card gone (the turn rewound), 0. */
+export function attacksSoFar(token) {
+  const r = ATTACKS.get(token?.id);
+  const key = turnKey();
+  if ( !r || !key || r.turn !== key || (r.card && !game.messages?.get?.(r.card)) ) return 0;
+  return r.count;
+}
+
+/** One more attack this turn, its card's id `card`: counted on from those known of, or `before` (the core's count). */
+export function noteAttack(token, card = null, before = 0) {
+  const key = turnKey();
+  if ( !key || !token?.id ) return;
+  ATTACKS.set(token.id, { turn: key, count: Math.max(attacksSoFar(token), Number(before) || 0) + 1, card });
+}
 
 /**
  * The target as PF2e's Strike takes it: its token on the canvas (PF2e reads its document, and from the two tokens the
@@ -43,13 +72,13 @@ const click = (setting, secret = false) => ({ shiftKey: !!game.user?.settings?.[
  */
 const asTarget = doc => doc.object ?? { document: doc };
 
-/** The attack's card just made (the newest by this actor at this token): its context, as PF2e's own Damage button passes it. */
-function attackContext(actor, target) {
+/** The attack's card just made: the newest by this actor at this token. */
+function attackCard(actor, target) {
   const recent = game.messages?.contents?.slice(-10).reverse() ?? [];
   return recent.find(m => {
     const c = m?.flags?.pf2e?.context;
     return c?.type === "attack-roll" && c.origin?.actor === actor.uuid && c.target?.token === target.uuid;
-  })?.flags.pf2e.context;
+  }) ?? null;
 }
 
 /** A PF2e damage roll's damage by type, as rolled (before the target's IWR); persistent damage, which comes later, left out. */
@@ -82,10 +111,13 @@ export async function rollPf2eStrike(token, { action, target, attackNumber = 0, 
   const roll = await variant.roll({ event: click("showCheckDialogs", secret), target: asTarget(target) });
   const degree = roll?.degreeOfSuccess;
   if ( !Number.isInteger(degree) || degree < 0 || degree > 3 ) return null;
+  // (Counted for a check with the attack trait after it: its MAP.)
+  const card = attackCard(actor, target);
+  noteAttack(token, card?.id ?? null, Math.floor(Number(attackNumber) || 0));
   const out = { attack: { degree, natural: naturalOf(roll), total: Number(roll.total) }, damage: null };
   const kind = degree === 3 ? "critical" : "damage";
   if ( degree < 2 || typeof strike[kind] !== "function" ) return out;
-  const rolled = await strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext: attackContext(actor, target) });
+  const rolled = await strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext: card?.flags.pf2e.context });
   const byType = damageByType(rolled);
   if ( Object.keys(byType).length ) out.damage = { byType };
   return out;
