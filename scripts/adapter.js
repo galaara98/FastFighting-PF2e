@@ -12,7 +12,7 @@ import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
-import { strikesOf, strikeId, rollPf2eReaction } from "./reaction-roll.js";
+import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1070,7 +1070,8 @@ export class Pf2eAdapter extends SystemAdapter {
       if ( seen.has(slug) ) continue;
       seen.add(slug);
       if ( slug === "shield-block" && hasShield && shield.hardness > 0 ) {
-        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: part([], shield.hardness) });
+        // (In a live battle, PF2e's own damage application blocks with it: its hardness, the rest to the shield.)
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: part([], shield.hardness), applies: "shieldBlock" });
       } else if ( slug === "reactive-shield" && hasShield ) {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", melee: true, ac: shield.ac });
       } else if ( slug === "nimble-dodge" ) {
@@ -1493,16 +1494,16 @@ export class Pf2eAdapter extends SystemAdapter {
     return null;
   }
 
-  /**
-   * Do token nameplates decide whether players learn an NPC's name? pf2e's own Tokens Determine NPC Name Visibility:
-   * on, its cards hide an NPC's name its token doesn't show, and a live battle's story does the same.
-   */
   /** An area on the map as pf2e draws its own (its shapeDataFromEffectArea): a cone a quarter turn wide. */
   areaShape(data) {
     if ( data?.type === "cone" ) return { ...data, angle: 90 };
     return data ?? null;
   }
 
+  /**
+   * Do token nameplates decide whether players learn an NPC's name? pf2e's own Tokens Determine NPC Name Visibility:
+   * on, its cards hide an NPC's name its token doesn't show, and a live battle's story does the same.
+   */
   namesFollowNameplates() {
     try {
       return !!game.settings.get("pf2e", "metagame_tokenSetsNameVisibility");
@@ -1512,11 +1513,11 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
-   * API 19. A reaction's Strike rolled with PF2e's own roller, its cards in the chat (reaction-roll.js): the attack at
-   * the target, and on a hit its damage by type as rolled.
+   * API 19. A Strike rolled with PF2e's own roller, its cards in the chat (strike-roll.js): the attack at the target,
+   * the variant for the attacks before it, and on a hit its damage by type as rolled.
    */
-  async rollReaction(token, options) {
-    return rollPf2eReaction(token, options);
+  async rollStrike(token, options) {
+    return rollPf2eStrike(token, options);
   }
 
   /** API 19. Does a critical Reactive Strike disrupt what this card did: a manipulate action (read-turn.js)? */

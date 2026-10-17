@@ -1,8 +1,8 @@
 /**
- * API 19, reactions in a live battle: a reaction's Strike rolled with PF2e's own roller (the engine's strike found by
- * the id the adapter gave it, its first variant rolled at the target with no dialog, the degree, natural die and total
- * read, and on a hit its damage or critical damage by type as rolled); and whether a critical Reactive Strike disrupts
- * what a card did (a manipulate action).
+ * API 19, Strikes in a live battle: a Strike rolled with PF2e's own roller (the engine's strike found by the id the
+ * adapter gave it, the variant for the attacks before it rolled at the target with no dialog, the degree, natural die
+ * and total read, and on a hit its damage or critical damage by type as rolled; for the GMs only when it's secret); and
+ * whether a critical Reactive Strike disrupts what a card did (a manipulate action).
  */
 import { beforeEach, describe, expect, test } from "vitest";
 import { Pf2eAdapter } from "../scripts/adapter.js";
@@ -52,7 +52,7 @@ beforeEach(() => {
   globalThis.game.messages = { contents: [] };
 });
 
-describe("a reaction's Strike, rolled with PF2e's own roller", () => {
+describe("a Strike, rolled with PF2e's own roller", () => {
   test("found by the engine's id, its first variant rolled at the target with no dialog; the degree, natural die and total; a hit's damage by type", async () => {
     const jaws = strike("jaws", { visible: false });
     const claw = strike("claw");
@@ -62,7 +62,7 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
     const card = attackCard(token.actor.uuid, target.uuid);
     game.messages.contents = [card, attackCard("Scene.s.Token.t9.Actor.gob", target.uuid)];
     // (The adapter's id: the actor's, the Strike's slug, and where it is among the Strikes the sheet shows.)
-    const out = await adapter.rollReaction(token, { action: { id: "orc1.strike.tail.1", name: "Tail" }, target });
+    const out = await adapter.rollStrike(token, { action: { id: "orc1.strike.tail.1", name: "Tail" }, target });
     expect(out).toEqual({ attack: { degree: 2, natural: 13, total: 21 }, damage: { byType: { slashing: 9, fire: 3 } } });
     expect(claw.asked).toEqual({});
     // (No multiple attack penalty; the target PF2e's own; Shift down, as the user's dialogs are on, so none opens.)
@@ -76,9 +76,25 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
     expect([...mine]).toEqual(["someone"]);
   });
 
+  test("the attacks before it this turn: the variant with that multiple attack penalty, and its damage's map:increases (none past the third)", async () => {
+    for ( const [attackNumber, variant] of [[1, 1], [2, 2], [5, 2], [-1, 0], ["x", 0]] ) {
+      const claw = strike("claw");
+      await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero(), attackNumber });
+      expect(claw.asked.attack.variant).toBe(variant);
+      expect(claw.asked.damage.mapIncreases).toBe(variant);
+    }
+  });
+
+  test("secret: Ctrl down for the attack and its damage, as PF2e rolls a GM's roll for the GMs only", async () => {
+    const claw = strike("claw");
+    await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero(), secret: true });
+    expect(claw.asked.attack.event.ctrlKey).toBe(true);
+    expect(claw.asked.damage.event.ctrlKey).toBe(true);
+  });
+
   test("a critical hit: its critical damage, as PF2e doubles it, persistent damage left out", async () => {
     const claw = strike("claw", { degree: 3 });
-    const out = await adapter.rollReaction(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
+    const out = await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
     expect(out).toEqual({ attack: { degree: 3, natural: 13, total: 21 }, damage: { byType: { slashing: 18, fire: 6 } } });
     expect(claw.asked.damage).toBeUndefined();
     expect(claw.asked.critical).toMatchObject({ mapIncreases: 0 });
@@ -87,7 +103,7 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
   test("a miss or a critical miss: no damage rolled", async () => {
     for ( const degree of [1, 0] ) {
       const claw = strike("claw", { degree });
-      const out = await adapter.rollReaction(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
+      const out = await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
       expect(out).toEqual({ attack: { degree, natural: 13, total: 21 }, damage: null });
       expect(claw.asked.damage).toBeUndefined();
       expect(claw.asked.critical).toBeUndefined();
@@ -96,10 +112,10 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
 
   test("a Strike built on another (a stratagem) is that Strike; with the sheet's Strikes changed since, the one of the id's slug", async () => {
     const claw = strike("claw");
-    await adapter.rollReaction(orc(claw), { action: { id: "orc1.strike.claw.0.stratagem" }, target: hero() });
+    await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0.stratagem" }, target: hero() });
     expect(claw.asked.attack.variant).toBe(0);
     const moved = strike("claw");
-    await adapter.rollReaction(orc(strike("bite"), moved), { action: { id: "orc1.strike.claw.0" }, target: hero() });
+    await adapter.rollStrike(orc(strike("bite"), moved), { action: { id: "orc1.strike.claw.0" }, target: hero() });
     expect(moved.asked.attack).toBeDefined();
   });
 
@@ -107,7 +123,7 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
     game.user.settings = { showCheckDialogs: false, showDamageDialogs: true };
     const claw = strike("claw");
     const target = hero({ drawn: false });
-    await adapter.rollReaction(orc(claw), { action: { id: "orc1.strike.claw.0" }, target });
+    await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target });
     expect(claw.asked.attack).toMatchObject({ target: { document: target }, event: { shiftKey: false } });
     expect(claw.asked.damage).toMatchObject({ target: { document: target }, event: { shiftKey: true } });
   });
@@ -115,12 +131,12 @@ describe("a reaction's Strike, rolled with PF2e's own roller", () => {
   test("none where it can't: no such Strike (an Elemental Blast, another's), no target, or a roll PF2e didn't make", async () => {
     const claw = strike("claw");
     const token = orc(claw);
-    expect(await adapter.rollReaction(token, { action: { id: "orc1.blast.fire.melee" }, target: hero() })).toBeNull();
-    expect(await adapter.rollReaction(token, { action: { id: "orc2.strike.claw.0" }, target: hero() })).toBeNull();
-    expect(await adapter.rollReaction(token, { action: { id: "orc1.strike.claw.0" }, target: null })).toBeNull();
-    expect(await adapter.rollReaction({ actor: null }, { action: { id: "orc1.strike.claw.0" }, target: hero() })).toBeNull();
+    expect(await adapter.rollStrike(token, { action: { id: "orc1.blast.fire.melee" }, target: hero() })).toBeNull();
+    expect(await adapter.rollStrike(token, { action: { id: "orc2.strike.claw.0" }, target: hero() })).toBeNull();
+    expect(await adapter.rollStrike(token, { action: { id: "orc1.strike.claw.0" }, target: null })).toBeNull();
+    expect(await adapter.rollStrike({ actor: null }, { action: { id: "orc1.strike.claw.0" }, target: hero() })).toBeNull();
     expect(claw.asked).toEqual({});
-    expect(await adapter.rollReaction(orc(strike("claw", { degree: null })), { action: { id: "orc1.strike.claw.0" }, target: hero() })).toBeNull();
+    expect(await adapter.rollStrike(orc(strike("claw", { degree: null })), { action: { id: "orc1.strike.claw.0" }, target: hero() })).toBeNull();
   });
 });
 

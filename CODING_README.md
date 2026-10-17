@@ -22,7 +22,7 @@ This module is also the reference for writing a FastFighting helper for another 
 - **Personality and setup:** `deriveTraits` (`traits.js`), `playstyleHints` and `tacticHints` (`auto.js`), `detectLeaders` (`leadership.js`).
 - **Live battles:** `supportsLive`, `commitChanges` (`commit.js`, returning an undo record), `commitBound`, `commitConcession`, `describeOutcome`, `liveOwnership`, `readLiveState`, `readTurn` and `liveOpening` (`read-turn.js`, from PF2e's chat cards), `reactionsOf`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `rerollResource` (Hero Points), `resourceLabel`.
 - **Players' damage (API 19):** `damageCard` (`read-turn.js` `pf2eDamageCard`), `applyDamageCard` (`commit.js` `applyPf2eDamageCard`: PF2e's `applyDamageFromMessage` for one token, through its `actor.applyDamage`) and `appliesPlayerDamage` (null: no PF2e setting does it).
-- **Reactions (API 19):** `rollReaction` (`reaction-roll.js` `rollPf2eReaction`: the engine's strike id back to the sheet's Strike, its first variant's `roll` and its `damage` or `critical` with PF2e's `target` param, so no MAP, no dialog and the user's targets untouched) and `disruptsAction` (`read-turn.js` `pf2eDisrupts`: a manipulate trait or roll option, not a save's).
+- **Strikes (API 19):** `rollStrike` (`strike-roll.js` `rollPf2eStrike`: the engine's strike id back to the sheet's Strike, the variant for `attackNumber` (MAP, no further than the third) and its `damage` or `critical` with that `mapIncreases`, with PF2e's `target` param, so no dialog and the user's targets untouched; `secret` holds Ctrl, PF2e's GM roll), for every Strike in a turn FastFighting plays and for reactions. Its damage card is applied through `applyDamageCard`; Shield Block's reaction spec says `applies: "shieldBlock"`, so a live battle applies a blow it blocked with PF2e's own Shield Block (`shieldBlockRequest`, which needs the shield raised, as the engine does). `disruptsAction` (`read-turn.js` `pf2eDisrupts`: a manipulate trait or roll option, not a save's).
 - **Other:** `rules` (`pf2eRules`), `supportsLoot`.
 
 Spell Effect items are fetched once a session (`EFFECT_CACHE`); a summon spell's creature comes from the Actor compendiums, the Monster Core first, never a unique one (`CREATURE_CACHE`, `SUMMON_LEVEL`, `SUMMON_TRAITS`). In a world translated with Babele, an item's rules are read from its English original (the core's `englishName` and `englishDescription`), so they parse in any language.
@@ -72,7 +72,7 @@ Spell Effect items are fetched once a session (`EFFECT_CACHE`); a summon spell's
 | `leadership.js` | `rankLeaders`. |
 | `commit.js` | Writing a live battle's turn (`commitPf2eChanges` and the undo record's shape), surrender, concessions, tied-up creatures. |
 | `read-turn.js` | A player's turn read from PF2e's chat cards (`flags.pf2e.context`). |
-| `reaction-roll.js` | A reaction's Strike rolled with PF2e's own roller; `strikesOf` and `strikeId`, the Strikes' action ids. |
+| `strike-roll.js` | A Strike rolled with PF2e's own roller (a live battle's turns and reactions); `strikesOf` and `strikeId`, the Strikes' action ids. |
 
 
 ## Slugs

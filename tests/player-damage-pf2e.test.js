@@ -187,6 +187,14 @@ describe("a damage card applied, as PF2e's own card applies it", () => {
     });
   });
 
+  test("a live battle's Shield Block, used against the blow: blocked as PF2e's own Shield Block toggle blocks it", async () => {
+    const { token, seen } = orc();
+    await adapter.applyDamageCard(card({ total: 12, origin: hero([]) }), token, { multiplier: 1, shieldBlock: true });
+    expect(seen.applied).toMatchObject({ shieldBlockRequest: true });
+    // (The card's own toggle left as it was: off.)
+    expect(globalThis.CONFIG.PF2E.chatDamageButtonShieldToggle).toBe(false);
+  });
+
   test("nothing applied without PF2e's damage roll, a token's actor or a multiplier above 0", async () => {
     const { token, seen } = orc();
     expect(await adapter.applyDamageCard({ ...card(), rolls: [{ total: 9 }] }, token)).toEqual([]);

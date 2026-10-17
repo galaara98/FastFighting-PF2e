@@ -353,12 +353,13 @@ export async function commitPf2eBound(tokenDoc, bound) {
  * A live battle: a player's damage card applied to one token as PF2e's own card applies it (Apply Damage, Half,
  * Double; Healing for a heal), `multiplier` times. PF2e doesn't export that (applyDamageFromMessage, which applies to
  * the selected tokens), so this is it for one token; PF2e's actor.applyDamage does the rest: immunities, weaknesses
- * and resistances, temporary HP, a raised shield (the card's Shield Block toggle), persistent damage, its damage-taken
+ * and resistances, temporary HP, a raised shield (the card's Shield Block toggle, or `shieldBlock`: a live battle's
+ * Shield Block reaction to a Strike FastFighting rolled), persistent damage, its damage-taken
  * card, and death at 0 HP by its Mark NPCs Dead at 0 HP setting. Returns an undo record: everything as it was.
  * @param {ChatMessage} message
  * @param {TokenDocument} tokenDoc
  */
-export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1 } = {}) {
+export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1, shieldBlock = false } = {}) {
   const actor = tokenDoc?.actor;
   const roll = damageRollOf(message);
   multiplier = Number(multiplier);
@@ -380,7 +381,7 @@ export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1 } 
   const before = sheetNow(tokenDoc);
   await clone.applyDamage({
     damage: healing ? -multiplier * roll.total : roll.alter(multiplier, 0), token: tokenDoc, item, skipIWR: healing, rollOptions,
-    shieldBlockRequest: !!globalThis.CONFIG?.PF2E?.chatDamageButtonShieldToggle, outcome: context.outcome
+    shieldBlockRequest: !!shieldBlock || !!globalThis.CONFIG?.PF2E?.chatDamageButtonShieldToggle, outcome: context.outcome
   });
   shieldBlockOff(message.id);
   sinceThen(before, tokenDoc, undo);
