@@ -5,6 +5,7 @@
  */
 import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
+import { hideApply, hideApplyMenu } from "./cards.js";
 
 /**
  * The core API majors this helper is known to work with (the core's api.major). Its own call: the core never refuses a
@@ -30,6 +31,10 @@ Hooks.once("init", () => {
   // How much a Lore-Collector's sizing a foe up pays off (lore.js).
   registerLoreBoost();
 });
+
+// The damage cards FastFighting rolls and applies itself: no Apply on them, which would apply them again (cards.js).
+Hooks.on("renderChatMessageHTML", hideApply);
+Hooks.on("getChatMessageContextOptions", hideApplyMenu);
 
 Hooks.once("fastFighting.init", api => {
   // module.json limits this module to PF2e worlds; this guard covers anything that slips past.

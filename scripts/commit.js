@@ -10,6 +10,7 @@
 import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord } from "./core.js";
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
+import { timesOf } from "./cards.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
 const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
@@ -356,13 +357,15 @@ export async function commitPf2eBound(tokenDoc, bound) {
  * and resistances, temporary HP, a raised shield (the card's Shield Block toggle, or `shieldBlock`: a live battle's
  * Shield Block reaction to a Strike FastFighting rolled), persistent damage, its damage-taken
  * card, and death at 0 HP by its Mark NPCs Dead at 0 HP setting. Returns an undo record: everything as it was.
+ * The same for a damage card FastFighting rolled in its own turn (rollStrike's, rollDamage's: a save's share, half or
+ * double, by `multiplier`), times what the card's mark says (cards.js: a spell attack's critical hit, doubled).
  * @param {ChatMessage} message
  * @param {TokenDocument} tokenDoc
  */
 export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1, shieldBlock = false } = {}) {
   const actor = tokenDoc?.actor;
   const roll = damageRollOf(message);
-  multiplier = Number(multiplier);
+  multiplier = Number(multiplier) * timesOf(message);
   if ( !actor || !roll || !(multiplier > 0) ) return [];
   const context = message.flags?.pf2e?.context ?? {};
   const healing = heals(roll, actor);

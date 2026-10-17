@@ -112,6 +112,7 @@
     "SpellLost": "loses the spell to a muddled mind: flat check {natural} against DC {dc}",
     "FlatCheckFor": "Flat check: {what}",
     "Persistent": "persistent {type}",
+    "DamageHandled": "FastFighting handles this damage.",
     "Poisoned": "{strike} with {poison}",
     "Remedy": {
       "Retch": "Retch",

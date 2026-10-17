@@ -195,6 +195,21 @@ describe("a damage card applied, as PF2e's own card applies it", () => {
     expect(globalThis.CONFIG.PF2E.chatDamageButtonShieldToggle).toBe(false);
   });
 
+  test("a card FastFighting rolled (rollDamage's, a spell's): each target's share by its save's multiplier; one marked doubled (a spell attack's critical hit), doubled", async () => {
+    const spell = { type: "spell", isOfType: (...types) => types.includes("spell") };
+    const rolled = (times = null) => {
+      const m = card({ total: 30, sourceType: "save", outcome: null, options: ["item:defense:reflex", "item:defense:basic"], target: null, item: spell, origin: hero([]) });
+      if ( times ) m.flags["fast-fighting-pf2e"] = { rolled: { times } };
+      return m;
+    };
+    for ( const [multiplier, times, applied] of [[0.5, null, 0.5], [2, null, 2], [1, 1, 1], [1, 2, 2], [0.5, 2, 1]] ) {
+      const { token, seen } = orc();
+      await adapter.applyDamageCard(rolled(times), token, { multiplier });
+      expect([multiplier, times, seen.applied.damage.from]).toEqual([multiplier, times, { multiplier: applied, addend: 0 }]);
+      expect(seen.applied).toMatchObject({ item: spell, skipIWR: false, outcome: null });
+    }
+  });
+
   test("nothing applied without PF2e's damage roll, a token's actor or a multiplier above 0", async () => {
     const { token, seen } = orc();
     expect(await adapter.applyDamageCard({ ...card(), rolls: [{ total: 9 }] }, token)).toEqual([]);

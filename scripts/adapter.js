@@ -14,6 +14,7 @@ import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
+import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1515,10 +1516,26 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /**
    * API 19. A Strike rolled with PF2e's own roller, its cards in the chat (strike-roll.js): the attack at the target,
-   * the variant for the attacks before it, and on a hit its damage by type as rolled.
+   * the variant for the attacks before it, and on a hit its damage by type as rolled. A spell attack as its card rolls it.
    */
   async rollStrike(token, options) {
     return rollPf2eStrike(token, options);
+  }
+
+  /**
+   * API 19. An action's own card, as its user shows it from the sheet (action-roll.js): a spell's (cast, nothing spent),
+   * an ability's, a self-buff's, a consumable's; none for an action with no item, or a spell attack rollStrike rolls.
+   */
+  async useAction(token, options) {
+    return usePf2eAction(token, options);
+  }
+
+  /**
+   * API 19. An action's damage, rolled once for all it catches (action-roll.js): a spell's as its card's Damage button
+   * rolls it, an ability's as the first @Damage link on its card; nothing applied.
+   */
+  async rollDamage(token, options) {
+    return rollPf2eDamage(token, options);
   }
 
   /** API 19. A save rolled with PF2e's own roller, its card in the chat (check-roll.js): the actor's save against the DC. */

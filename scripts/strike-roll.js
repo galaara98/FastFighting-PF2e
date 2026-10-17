@@ -4,8 +4,11 @@
  * FastFighting plays (the variant for the attacks made before it: the multiple attack penalty), and a reaction's (the
  * first variant: Reactive Strike takes no multiple attack penalty). The target goes to PF2e's Strike as its `target`
  * (as PF2e's own Damage button passes it), so the user's own targets are never touched.
+ * A spell attack (a spell with the attack trait and damage) the same way, as its card's buttons roll it (rollSpell).
+ * The damage card is marked as FastFighting's (cards.js), its Apply buttons gone: FastFighting applies it.
  */
 import { listOf, naturalOf } from "./read-turn.js";
+import { cardIds, damageCardSince, markRolled } from "./cards.js";
 
 /** A character's or creature's weapon Strikes, as the system lists them (the ones it shows). */
 export const strikesOf = actor => (actor.system?.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
@@ -31,6 +34,19 @@ export function strikeFor(actor, id) {
 }
 
 /**
+ * The spell attack an engine action stands for, by the adapter's id (the actor's id, "spell", the spell's id): an
+ * attack spell with damage, from a spellcasting entry, as rollStrike rolls one. Null for anything else (a spell attack
+ * with no damage: crowd control, the engine's roll).
+ */
+export function spellAttackFor(actor, id) {
+  const parts = typeof id === "string" ? id.split(".") : [];
+  if ( !actor?.items || parts.length !== 3 || parts[0] !== actor.id || parts[1] !== "spell" ) return null;
+  const spell = actor.items.get?.(parts[2]);
+  const damaging = Object.keys(spell?.system?.damage ?? {}).length > 0;
+  return spell?.type === "spell" && spell.isAttack && damaging && typeof spell.rollAttack === "function" && spell.spellcasting?.statistic ? spell : null;
+}
+
+/**
  * A click PF2e reads (eventToRollParams): Shift flips the user's own Show check (or damage) dialogs setting, so Shift
  * is down just when that setting shows them, and there's no dialog. Ctrl rolls it for the GMs only (`secret`); without
  * it, the card goes in the chat's own mode.
@@ -52,41 +68,79 @@ function attackContext(actor, target) {
   })?.flags.pf2e.context;
 }
 
-/** A PF2e damage roll's damage by type, as rolled (before the target's IWR); persistent damage, which comes later, left out. */
-export function damageByType(roll) {
+/**
+ * A PF2e damage roll's damage by type, as rolled (before the target's IWR), `times` over; persistent damage, which comes
+ * later, left out (PF2e's own application lays it on the target as its condition).
+ */
+export function damageByType(roll, times = 1) {
   const out = {};
   for ( const i of listOf(roll?.instances) ) {
     const n = Number(i?.total);
     if ( i?.persistent || !(n > 0) || (i.kinds instanceof Set && !i.kinds.has("damage")) ) continue;
     const type = typeof i.type === "string" && i.type ? i.type : "untyped";
-    out[type] = (out[type] ?? 0) + n;
+    out[type] = (out[type] ?? 0) + n * times;
   }
   return out;
+}
+
+/** What PF2e's attack roll came to: {degree (0-3), natural, total}, or null (cancelled, or no degree). */
+function attackOf(roll) {
+  const degree = roll?.degreeOfSuccess;
+  if ( !Number.isInteger(degree) || degree < 0 || degree > 3 ) return null;
+  return { degree, natural: naturalOf(roll), total: Number(roll.total) };
+}
+
+/**
+ * A hit's damage, rolled by `roll` (PF2e's own roller): {damage: {byType} | null, card}, its card marked as
+ * FastFighting's, `times` over (cards.js). No card found: no `card`, and the core looks for it itself.
+ */
+async function damageOf(actor, roll, times = 1) {
+  const seen = cardIds();
+  const rolled = await roll();
+  const card = damageCardSince(seen, actor);
+  if ( card ) await markRolled(card, times);
+  const byType = damageByType(rolled, times);
+  return { damage: Object.keys(byType).length ? { byType } : null, ...(card ? { card: card.id } : {}) };
 }
 
 /**
  * A Strike rolled with PF2e's own roller: the attack at `target` (its AC and the degree PF2e's), the variant for the
  * attacks made before it (no more than the third: MAP -10, or -8 agile), and on a hit the damage, critical damage on a
- * critical hit, as that variant's (PF2e's map:increases).
+ * critical hit, as that variant's (PF2e's map:increases). A spell attack: rollSpell.
  * @param {TokenDocument} token   the one striking
  * @param {object} options        {action: the engine's strike, {id, name}; target: the TokenDocument it strikes;
  *                                 attackNumber: the attacks before it this turn; secret: for the GMs only}
- * @returns {Promise<object|null>} {attack: {degree, natural, total}, damage: {byType} | null}, or null (the engine rolls it)
+ * @returns {Promise<object|null>} {attack: {degree, natural, total}, damage: {byType} | null, card: the damage card's
+ *                                 id, where it's found}, or null (the engine rolls it)
  */
 export async function rollPf2eStrike(token, { action, target, attackNumber = 0, secret = false } = {}) {
   const actor = token?.actor;
-  const strike = strikeFor(actor, action?.id);
   const map = Math.max(0, Math.min(2, Math.floor(Number(attackNumber) || 0)));
+  const spell = spellAttackFor(actor, action?.id);
+  if ( spell ) return rollSpell(spell, actor, target, map, secret);
+  const strike = strikeFor(actor, action?.id);
   const variant = strike?.variants?.[map] ?? strike?.variants?.[0];
   if ( !strike || !target || typeof variant?.roll !== "function" ) return null;
-  const roll = await variant.roll({ event: click("showCheckDialogs", secret), target: asTarget(target) });
-  const degree = roll?.degreeOfSuccess;
-  if ( !Number.isInteger(degree) || degree < 0 || degree > 3 ) return null;
-  const out = { attack: { degree, natural: naturalOf(roll), total: Number(roll.total) }, damage: null };
-  const kind = degree === 3 ? "critical" : "damage";
-  if ( degree < 2 || typeof strike[kind] !== "function" ) return out;
-  const rolled = await strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext: attackContext(actor, target) });
-  const byType = damageByType(rolled);
-  if ( Object.keys(byType).length ) out.damage = { byType };
-  return out;
+  const attack = attackOf(await variant.roll({ event: click("showCheckDialogs", secret), target: asTarget(target) }));
+  if ( !attack ) return null;
+  const kind = attack.degree === 3 ? "critical" : "damage";
+  if ( attack.degree < 2 || typeof strike[kind] !== "function" ) return { attack, damage: null };
+  const checkContext = attackContext(actor, target);
+  return { attack, ...(await damageOf(actor, () => strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext }))) };
+}
+
+/**
+ * A spell attack, as its card's buttons roll it: Attack (spell.rollAttack: the spellcasting's attack at the target's
+ * AC, the multiple attack penalty for the attacks before it) and, a hit, Damage (spell.rollDamage, at the rank the
+ * adapter took it). PF2e's spell damage takes no target but the user's own targets, which stay untouched (the GM's,
+ * none as a rule). Its card is a hit's, which PF2e doubles only as it's applied on a critical hit (its Double button):
+ * then byType is doubled and the card applied doubled (cards.js). Only at a target drawn here (PF2e finds it by its
+ * actor's tokens on this canvas); else null, the engine's roll.
+ */
+async function rollSpell(spell, actor, target, map, secret) {
+  if ( !target?.object || !target.actor ) return null;
+  const attack = attackOf(await spell.rollAttack(click("showCheckDialogs", secret), map + 1, { target: target.actor }));
+  if ( !attack ) return null;
+  if ( attack.degree < 2 || typeof spell.rollDamage !== "function" ) return { attack, damage: null };
+  return { attack, ...(await damageOf(actor, () => spell.rollDamage(click("showDamageDialogs", secret)), attack.degree === 3 ? 2 : 1)) };
 }

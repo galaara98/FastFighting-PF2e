@@ -140,6 +140,105 @@ describe("a Strike, rolled with PF2e's own roller", () => {
   });
 });
 
+/** A damage card in the chat, as PF2e's DamagePF2e.roll makes it: the actor its speaker; its flags set as setFlag sets them. */
+function damageCardOf(id, actorId = "orc1") {
+  const m = { id, speaker: { actor: actorId }, flags: { pf2e: { context: { type: "damage-roll" } } } };
+  m.setFlag = async (scope, key, value) => {
+    (m.flags[scope] ??= {})[key] = value;
+    return m;
+  };
+  return m;
+}
+
+describe("a Strike's damage card", () => {
+  test("the one its damage roll made, the actor's: marked as FastFighting's (its Apply buttons gone) and named, for the core to apply", async () => {
+    const claw = strike("claw");
+    const made = damageCardOf("dmg1");
+    claw.damage = async params => {
+      claw.asked.damage = params;
+      game.messages.contents.push(damageCardOf("other", "gob1"), made);
+      return damageRoll([["slashing", 7]]);
+    };
+    const out = await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
+    expect(out).toEqual({ attack: { degree: 2, natural: 13, total: 21 }, damage: { byType: { slashing: 7 } }, card: "dmg1" });
+    expect(made.flags["fast-fighting-pf2e"]).toEqual({ rolled: { times: 1 } });
+    expect(game.messages.contents[0].flags["fast-fighting-pf2e"]).toBeUndefined();
+  });
+});
+
+describe("a spell attack, rolled as its card's buttons roll it", () => {
+  /** An attack spell on the orc's sheet, from a spellcasting entry: its Attack and Damage buttons' rolls, keeping what they were asked. */
+  function ray({ degree = 2, damage = { 0: { formula: "2d6", type: "fire" } }, hit = [["fire", 9], ["fire", 2, true]] } = {}) {
+    const asked = {};
+    return {
+      id: "sp1", type: "spell", isAttack: true, system: { damage }, spellcasting: { statistic: { slug: "arcane" } }, asked,
+      rollAttack: async (event, attackNumber, context) => {
+        asked.attack = { event, attackNumber, context };
+        return degree === null ? null : checkRoll(degree, 19, 12);
+      },
+      rollDamage: async (event, map) => {
+        asked.damage = { event, map };
+        game.messages.contents.push(damageCardOf("dmg1"));
+        return damageRoll(hit);
+      }
+    };
+  }
+
+  /** The orc, the spell on its sheet. */
+  const caster = spell => ({ uuid: "Scene.s.Token.t1", actor: { id: "orc1", uuid: "Scene.s.Token.t1.Actor.orc1", system: { actions: [] }, items: new Map([[spell.id, spell]]) } });
+
+  /** The hero it's cast at: drawn here, or not. */
+  const at = ({ drawn = true } = {}) => {
+    const doc = { uuid: "Scene.s.Token.pc1", actor: { id: "pc" } };
+    doc.object = drawn ? { document: doc } : null;
+    return doc;
+  };
+
+  test("its attack at the target's actor, no dialog; a hit's damage by its Damage button, its card marked and named; the user's targets untouched", async () => {
+    const spell = ray();
+    const target = at();
+    const out = await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1", name: "Ray" }, target });
+    expect(out).toEqual({ attack: { degree: 2, natural: 12, total: 19 }, damage: { byType: { fire: 9 } }, card: "dmg1" });
+    expect(spell.asked.attack).toEqual({ event: { shiftKey: true, ctrlKey: false, metaKey: false }, attackNumber: 1, context: { target: target.actor } });
+    expect(spell.asked.damage).toEqual({ event: { shiftKey: false, ctrlKey: false, metaKey: false }, map: undefined });
+    expect(game.messages.contents[0].flags["fast-fighting-pf2e"]).toEqual({ rolled: { times: 1 } });
+    expect([...game.user.targets]).toEqual(["someone"]);
+  });
+
+  test("the attacks before it: PF2e's attack number (no further than the third); secret: Ctrl down for both", async () => {
+    for ( const [attackNumber, number] of [[1, 2], [2, 3], [5, 3], [-1, 1]] ) {
+      const spell = ray();
+      await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1" }, target: at(), attackNumber });
+      expect(spell.asked.attack.attackNumber).toBe(number);
+    }
+    const spell = ray();
+    await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1" }, target: at(), secret: true });
+    expect([spell.asked.attack.event.ctrlKey, spell.asked.damage.event.ctrlKey]).toEqual([true, true]);
+  });
+
+  test("a critical hit: the hit's card, which PF2e doubles as it's applied: byType doubled, the card marked to be applied doubled", async () => {
+    const spell = ray({ degree: 3 });
+    const out = await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1" }, target: at() });
+    expect(out).toEqual({ attack: { degree: 3, natural: 12, total: 19 }, damage: { byType: { fire: 18 } }, card: "dmg1" });
+    expect(game.messages.contents[0].flags["fast-fighting-pf2e"]).toEqual({ rolled: { times: 2 } });
+  });
+
+  test("a miss: no damage rolled; none where it can't (a target not drawn here, none, a roll PF2e didn't make); a spell attack with no damage isn't one", async () => {
+    const missed = ray({ degree: 1 });
+    expect(await adapter.rollStrike(caster(missed), { action: { id: "orc1.spell.sp1" }, target: at() })).toEqual({ attack: { degree: 1, natural: 12, total: 19 }, damage: null });
+    expect(missed.asked.damage).toBeUndefined();
+    const spell = ray();
+    expect(await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1" }, target: at({ drawn: false }) })).toBeNull();
+    expect(await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1" }, target: null })).toBeNull();
+    expect(await adapter.rollStrike(caster(spell), { action: { id: "orc1.spell.sp1.affliction" }, target: at() })).toBeNull();
+    expect(spell.asked).toEqual({});
+    expect(await adapter.rollStrike(caster(ray({ degree: null })), { action: { id: "orc1.spell.sp1" }, target: at() })).toBeNull();
+    const control = ray({ damage: {} });
+    expect(await adapter.rollStrike(caster(control), { action: { id: "orc1.spell.sp1" }, target: at() })).toBeNull();
+    expect(control.asked).toEqual({});
+  });
+});
+
 describe("what a critical Reactive Strike disrupts", () => {
   test("a manipulate action: a spell cast with its hands, an action whose traits or roll options say so", () => {
     const spell = { flags: { pf2e: { origin: { type: "spell", rollOptions: ["origin:item:spell", "origin:item:trait:concentrate", "origin:item:trait:manipulate"] } } } };
