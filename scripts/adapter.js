@@ -26,6 +26,8 @@ import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
 import { skillManeuvers, strikeMove } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
+import { linkedEffect, theirsToOpen } from "./granted.js";
+import { AURA_REACTIONS, championReaction } from "./champion.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -46,8 +48,6 @@ const ALWAYS_ON = ["implements-empowerment"];
 /** Knowledge skills for Recall Knowledge (and any Lore). */
 const RECALL_SKILLS = new Set(["arcana", "crafting", "medicine", "nature", "occultism", "religion", "society"]);
 
-/** Spell Effect items, fetched once a session (the same Bless serves every cleric). */
-const EFFECT_CACHE = new Map();
 const CREATURE_CACHE = new Map();
 
 /** The highest creature level a summon spell of each rank calls (PF2e's summon trait), from rank 1. */
@@ -80,29 +80,6 @@ async function creatureFor(level, trait) {
     return null;
   })().catch(() => null));
   return CREATURE_CACHE.get(key);
-}
-/**
- * The PF2e effect an item links to (its self-effect, a spell's effect), or null. Only an Item of type "effect": the link
- * is the item's own data, which a player can write, and what it finds may be copied onto a sheet by the GM's client.
- */
-async function linkedEffect(uuid) {
-  if ( !EFFECT_CACHE.has(uuid) ) {
-    EFFECT_CACHE.set(uuid, (async () => {
-      const doc = typeof uuid === "string" ? await fromUuid(uuid) : null;
-      return doc?.documentName === "Item" && doc.type === "effect" ? doc : null;
-    })().catch(() => null));
-  }
-  return EFFECT_CACHE.get(uuid);
-}
-/**
- * Could an actor's players open this document themselves? One in a compendium: only if each of them may see the pack
- * (a link a player wrote could name a hidden one's). A world document, any (every client has the world's).
- */
-function theirsToOpen(actor, doc) {
-  if ( !doc?.pack ) return true;
-  const pack = game.packs?.get(doc.pack);
-  const players = game.users?.filter(u => !u.isGM && actor?.testUserPermission?.(u, "OWNER")) ?? [];
-  return !!pack && players.every(u => pack.testUserPermission(u, "OBSERVER"));
 }
 
 /** PF2e conditions the engine keeps elsewhere (its own numbers and its persistent damage), not as conditions. */
@@ -386,7 +363,7 @@ export class Pf2eAdapter extends SystemAdapter {
       actions,
       iwr,
       resources,
-      reactions: this.#reactions(actor),
+      reactions: await this.#reactions(actor),
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags, ...(hazard ? { fearless: true, mindless: true } : {}), masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
@@ -1061,12 +1038,14 @@ export class Pf2eAdapter extends SystemAdapter {
   /**
    * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
    * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
-   * against one attack). By slug, on characters and monsters alike. Null when it has none.
+   * against one attack), a guardian's Intercept Attack and a champion's reaction for an ally (champion.js). By slug, on
+   * characters and monsters alike. Null when it has none.
    */
-  #reactions(actor) {
+  async #reactions(actor) {
     const out = [];
     const shield = actor.system.attributes?.shield;
     const hasShield = shield?.ac > 0 && !shield.broken && !shield.destroyed;
+    const slugs = new Set(actor.items.map(i => slugOf(i)).filter(Boolean));
     const seen = new Set(); // (a feat and the action it grants share a slug)
     for ( const item of actor.items ) {
       if ( !["feat", "action"].includes(item.type) ) continue;
@@ -1083,12 +1062,10 @@ export class Pf2eAdapter extends SystemAdapter {
       } else if ( slug === "intercept-attack" ) {
         // A guardian's: an ally within 10 feet taking physical damage, it takes the blow instead (its own resistances).
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "allyHit", range: 10, physical: true, redirect: true, tell: "intercept" });
-      } else if ( ["retributive-strike", "glimpse-of-redemption", "liberating-step"].includes(slug) ) {
-        // A champion's reaction: a friend within 15 feet hit takes 2 + its level less (and the attacker, in reach of a
-        // Retributive Strike, gets struck).
-        const level = actor.level ?? 1;
-        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "allyHit", range: 15,
-          reduce: part([], 2 + level), strike: slug === "retributive-strike" || undefined });
+      } else if ( AURA_REACTIONS.has(slug) ) {
+        // A champion's reaction: a friend hit in its aura, the foe in it too, resists the blow (and the foe, in reach of
+        // a Retributive Strike, gets struck).
+        out.push(await championReaction(actor, item, { slug, slugs }));
       }
     }
     return out.length ? out : null;

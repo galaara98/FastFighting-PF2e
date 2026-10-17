@@ -11,6 +11,7 @@ import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, st
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
+import { grantedResistance } from "./granted.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
 const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
@@ -355,17 +356,20 @@ export async function commitPf2eBound(tokenDoc, bound) {
  * Double; Healing for a heal), `multiplier` times. PF2e doesn't export that (applyDamageFromMessage, which applies to
  * the selected tokens), so this is it for one token; PF2e's actor.applyDamage does the rest: immunities, weaknesses
  * and resistances, temporary HP, a raised shield (the card's Shield Block toggle, or `shieldBlock`: a live battle's
- * Shield Block reaction to a Strike FastFighting rolled), persistent damage, its damage-taken
- * card, and death at 0 HP by its Mark NPCs Dead at 0 HP setting. Returns an undo record: everything as it was.
+ * Shield Block reaction to a Strike FastFighting rolled), a friend's reaction's effect (`effect:<item id>`: friendsGrant),
+ * persistent damage, its damage-taken card, and death at 0 HP by its Mark NPCs Dead at 0 HP setting. Returns an undo
+ * record: everything as it was.
  * The same for a damage card FastFighting rolled in its own turn (rollStrike's, rollDamage's: a save's share, half or
  * double, by `multiplier`), times what the card's mark says (cards.js: a spell attack's critical hit, doubled).
  * @param {ChatMessage} message
  * @param {TokenDocument} tokenDoc
+ * @param {object} given    {multiplier, shieldBlock, ["effect:<item id>"]: {by: the friend's TokenDocument}}
  */
-export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1, shieldBlock = false } = {}) {
+export async function applyPf2eDamageCard(message, tokenDoc, given = {}) {
+  const { shieldBlock = false } = given ?? {};
   const actor = tokenDoc?.actor;
   const roll = damageRollOf(message);
-  multiplier = Number(multiplier) * timesOf(message);
+  const multiplier = Number(given?.multiplier ?? 1) * timesOf(message);
   if ( !actor || !roll || !(multiplier > 0) ) return [];
   const context = message.flags?.pf2e?.context ?? {};
   const healing = heals(roll, actor);
@@ -377,7 +381,7 @@ export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1, s
   const itemOptions = item?.isOfType?.("affliction", "condition", "effect") ? item.getRollOptions("item") : [];
   if ( actor.alliance && origin ) options.push(`origin:${actor.alliance === origin.alliance ? "ally" : "enemy"}`);
   if ( !options.some(o => o.startsWith("target")) ) options.push(...actor.getSelfRollOptions("target"));
-  const ephemeral = healing ? [] : await ephemeralEffects(origin, actor, item, options);
+  const ephemeral = healing ? [] : [...await ephemeralEffects(origin, actor, item, options), ...await friendsGrant(actor, tokenDoc, given)];
   const clone = actor.getContextualClone(originOptions, ephemeral);
   const rollOptions = new Set([...options.filter(o => !/^(?:self|target)(?::|$)/.test(o)), ...itemOptions, ...originOptions, ...clone.getSelfRollOptions()]);
   const undo = undoRecord(tokenDoc, actor);
@@ -408,6 +412,45 @@ async function ephemeralEffects(origin, target, item, options) {
     e.system.duration = { value: -1, unit: "unlimited", expiry: null, sustained: false };
   }
   return effects;
+}
+
+/**
+ * What a friend's reaction grants the one it shields against this blow (the core's `applies` on a friend's reaction,
+ * `effect:<its item's id>` with whose it is, {by: its token}): the effect its card links (granted.js: Champion's
+ * Resistance from a Retributive Strike), as PF2e makes it when that link is dragged from the card onto the target: from
+ * the friend (its origin, so "2 + level" is the champion's level, and Oath of the Defender's resistance grows with it),
+ * the reaction's traits where it has none. Laid on the target's copy only, as PF2e lays its ephemeral effects: its
+ * applyDamage resists the blow with it and its damage-taken card says so, and the sheet never holds it (nothing to take
+ * off after, nothing for Rewind to undo). None found (the reaction gone from the friend's sheet, its effect from the
+ * compendium): the blow lands as rolled, and the core counts what the sheet lost.
+ */
+async function friendsGrant(target, tokenDoc, given) {
+  const out = [];
+  const laid = new Set();
+  for ( const [key, value] of Object.entries(given ?? {}) ) {
+    const id = /^effect:(.+)$/.exec(key)?.[1];
+    const friend = value?.by?.actor ?? null;
+    const reaction = id ? friend?.items?.get?.(id) ?? null : null;
+    const granted = reaction ? await grantedResistance(reaction) : null;
+    if ( !granted || laid.has(granted.uuid) ) continue;
+    laid.add(granted.uuid);
+    const data = granted.effect.toObject();
+    const traits = data.system?.traits?.value ?? [];
+    const valid = globalThis.CONFIG?.PF2E?.effectTraits ?? {};
+    data.system = {
+      ...data.system,
+      traits: { ...(data.system?.traits ?? {}), value: traits.length ? traits : (reaction.system?.traits?.value ?? []).filter(t => t in valid) },
+      context: {
+        origin: { actor: friend.uuid, token: value.by.uuid ?? null, item: reaction.uuid ?? null, spellcasting: null, rollOptions: reaction.getOriginData?.()?.rollOptions ?? [] },
+        target: { actor: target.uuid, token: tokenDoc.uuid ?? null },
+        roll: null
+      },
+      // (For this blow alone, as PF2e's ephemeral effects are.)
+      duration: { value: -1, unit: "unlimited", expiry: null, sustained: false }
+    };
+    out.push(data);
+  }
+  return out;
 }
 
 /** PF2e's Shield Block toggle, used by the damage it was on for: off again, as PF2e's own buttons leave it. */

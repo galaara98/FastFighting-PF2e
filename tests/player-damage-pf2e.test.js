@@ -219,6 +219,58 @@ describe("a damage card applied, as PF2e's own card applies it", () => {
   });
 });
 
+describe("a friend's reaction's effect, laid for the blow it answers (effect:<item id>: Champion's Resistance)", () => {
+  // (PF2e's Champion's Resistance, as fromUuid finds it; the reaction on the champion's sheet whose card links it.)
+  const RESISTANCE = "Compendium.pf2e.feat-effects.Item.resist";
+  const effect = {
+    documentName: "Item", type: "effect", system: { rules: [{ key: "Resistance", type: "all-damage", value: "@item.origin.level+2" }], traits: { value: [] } },
+    toObject() { return { _id: "resist", type: "effect", system: JSON.parse(JSON.stringify(this.system)) }; }
+  };
+  const retribution = { id: "rs", uuid: "Actor.seelah.Item.rs", getOriginData: () => ({ rollOptions: ["origin:level:1"] }),
+    system: { description: { value: `<p>@UUID[${RESISTANCE}]{Effect}</p>` }, traits: { value: ["champion", "divine"] } } };
+  const seelah = (items = [retribution]) => ({ uuid: "Scene.s.Token.seelah", actor: { uuid: "Actor.seelah", items: new Map(items.map(i => [i.id, i])) } });
+  const before = { fromUuid: globalThis.fromUuid };
+  beforeEach(() => {
+    globalThis.fromUuid = async uuid => (uuid === RESISTANCE ? effect : null);
+    globalThis.CONFIG.PF2E.effectTraits = { divine: "" };
+  });
+  afterEach(() => { globalThis.fromUuid = before.fromUuid; });
+
+  test("on the target's copy, from the champion (its origin: the champion's level is its number), for this blow alone; the sheet never holds it", async () => {
+    const { token, actor, seen } = orc();
+    const [record] = await adapter.applyDamageCard(card({ total: 12, origin: hero([]) }), token, { multiplier: 1, "effect:rs": { by: seelah() } });
+    // (Beside what the attacker's own blows lay: as PF2e makes it dragged from the reaction's card onto the target.)
+    expect(seen.clone.ephemeral).toHaveLength(2);
+    const laid = seen.clone.ephemeral.find(e => e._id === "resist");
+    expect(laid.system).toEqual({
+      rules: [{ key: "Resistance", type: "all-damage", value: "@item.origin.level+2" }], traits: { value: ["divine"] },
+      context: {
+        origin: { actor: "Actor.seelah", token: "Scene.s.Token.seelah", item: "Actor.seelah.Item.rs", spellcasting: null, rollOptions: ["origin:level:1"] },
+        target: { actor: actor.uuid, token: "Scene.s.Token.orc" }, roll: null
+      },
+      duration: { value: -1, unit: "unlimited", expiry: null, sustained: false }
+    });
+    // (PF2e's own application, as ever; nothing of the effect for Rewind to undo.)
+    expect(seen.applied).toMatchObject({ token, skipIWR: false });
+    expect(record).toMatchObject({ createdItems: ["pd1"], deletedItems: [], createdEffects: [] });
+    // (Its compendium copy untouched.)
+    expect(effect.system).not.toHaveProperty("context");
+  });
+
+  test("none to lay (the reaction gone from the champion's sheet, its card linking nothing, no champion's token, a heal): the blow as rolled", async () => {
+    const bare = { ...retribution, id: "bare", system: { ...retribution.system, description: { value: "<p></p>" } } };
+    for ( const given of [{ "effect:rs": { by: seelah([]) } }, { "effect:bare": { by: seelah([bare]) } }, { "effect:rs": { by: null } }, { "effect:rs": true }] ) {
+      const { token, seen } = orc();
+      await adapter.applyDamageCard(card({ total: 12, origin: hero([]) }), token, { multiplier: 1, ...given });
+      expect(seen.clone.ephemeral).toHaveLength(1);
+      expect(seen.applied.damage.total).toBe(12);
+    }
+    const { token, seen } = orc();
+    await adapter.applyDamageCard(card({ total: 8, kinds: ["healing"], origin: hero([]) }), token, { multiplier: 1, "effect:rs": { by: seelah() } });
+    expect(seen.clone.ephemeral).toEqual([]);
+  });
+});
+
 describe("a PF2e setting that applies players' damage itself", () => {
   test("there is none: FastFighting's own toggles stand", () => {
     expect(adapter.appliesPlayerDamage()).toBeNull();
