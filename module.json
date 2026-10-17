@@ -1,7 +1,7 @@
 {
   "id": "fast-fighting-pf2e",
   "title": "FastFighting PF2e",
-  "description": "Pathfinder Second Edition support for FastFighting Core: reads PF2e strikes, spells, healing, afflictions, IWR, languages and social skills; PF2e degrees of success, multiple attack penalty, dying and wounded; PF2e personality defaults and leadership (Commander tactics); and writes live battles' turns onto PF2e actors.",
+  "description": "Pathfinder Second Edition support for FastFighting Core: reads PF2e actors, plays PF2e's rules, and writes live battles back onto PF2e sheets.",
   "version": "0.3.0",
   "authors": [
     { "name": "galaara98", "url": "https://github.com/galaara98" }

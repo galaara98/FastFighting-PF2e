@@ -6,8 +6,15 @@
 import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
 
-/** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 18;
+/**
+ * The core API majors this helper is known to work with (the core's api.major). Its own call: the core never refuses a
+ * helper. Older than the oldest, it doesn't run (it uses what came since); any other it doesn't know, it runs, and the
+ * GM is told it hasn't been tried with that core yet. Add a major once this helper has been tried with it.
+ */
+const KNOWN_API = Object.freeze([18]);
+
+/** The core's API major, when it's one this helper doesn't know: the GM is told when the world is ready. */
+let untested = null;
 
 /**
  * The last translation module we knew of for this game system, by language: in a language other than English, this
@@ -30,11 +37,13 @@ Hooks.once("fastFighting.init", api => {
     console.warn(`${MODULE_ID} | not a Pathfinder Second Edition world (${game.system.id}); FastFighting PF2e stays inactive.`);
     return;
   }
-  if ( (api.version ?? 1) < NEEDS_API ) {
+  const major = Number(api.major) || 0;
+  if ( major < Math.min(...KNOWN_API) ) {
     console.error(`${MODULE_ID} | FastFighting Core is too old for this version of FastFighting PF2e; update it.`);
     ui.notifications?.error(game.i18n.localize("FFPF2E.CoreTooOld"), { permanent: true });
     return;
   }
+  if ( !KNOWN_API.includes(major) ) untested = major;
   api.registerAdapter("pf2e", Pf2eAdapter, { priority: 10, source: MODULE_ID });
   api.adviseTranslation(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
   // Words kept in English for now, while the system isn't translated (hardcoded-toEN.json).
@@ -42,6 +51,7 @@ Hooks.once("fastFighting.init", api => {
 });
 
 Hooks.once("ready", () => {
+  if ( untested !== null && game.user.isGM ) ui.notifications.warn(game.i18n.format("FFPF2E.CoreUntested", { major: untested }));
   if ( !game.modules.get("fast-fighting")?.active && game.user.isGM ) {
     ui.notifications.warn(game.i18n.localize("FFPF2E.NeedsCore"));
   }

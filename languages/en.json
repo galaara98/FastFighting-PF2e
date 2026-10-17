@@ -2,11 +2,12 @@
   "FFPF2E": {
     "Label": "Pathfinder 2e",
     "NeedsCore": "FastFighting PF2e needs the FastFighting Core module. Install and enable it.",
-    "CoreTooOld": "FastFighting PF2e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
+    "CoreTooOld": "FastFighting PF2e needs a newer FastFighting Core. Update it in Add-on Modules.",
+    "CoreUntested": "FastFighting PF2e hasn't been tried with FastFighting Core API {major}; some things may not work.",
     "FocusPoint": "Focus Point",
     "SlotRank": "Rank {rank} spell slot",
     "Surrendered": "Surrendered",
-    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
+    "SurrenderedHint": "Laid down arms in a FastFighting battle; at the victors' mercy.",
     "Remains": "Remains of {name}",
     "RemainsUnnamed": "Remains",
     "HeroPoints": "Hero Points",
@@ -15,7 +16,7 @@
     "Settings": {
       "loreBoost": {
         "Name": "Lore-Collector advantage",
-        "Hint": "How much likelier a Lore-Collector's rolls against a foe it has sized up are to succeed, for the rest of the turn it spent an action on Recall Knowledge (when the check worked; never without it). 1.25× is a nudge, 3× a sure thing more often than not. Default 2×: Recall Knowledge costs one action of three, and the payoff covers the two left. It matters across the range in PF2e: attacks after the first in a turn carry a penalty, so their odds start low and there is room to raise them."
+        "Hint": "After a successful Recall Knowledge, how much likelier a Lore-Collector's rolls against that foe are to succeed for the rest of the turn. Default 2×."
       }
     },
     "HeroPoint": "Hero Point",
@@ -87,8 +88,8 @@
     },
     "Affliction": {
       "Name": "{name} (Stage {stage})",
-      "Description": "<p>Afflicted during a FastFighting battle. {when} {save} DC {dc}. Continue tracking stages per the affliction's rules.</p>",
-      "DescriptionNoDc": "<p>Afflicted during a FastFighting battle. {when} Its save: {save}. Continue tracking stages per the affliction's rules.</p>",
+      "Description": "<p>From a FastFighting battle. {when} {save} DC {dc}. Track its stages by the affliction's rules.</p>",
+      "DescriptionNoDc": "<p>From a FastFighting battle. {when} Save: {save}. Track its stages by the affliction's rules.</p>",
       "Onset": "Still in its onset: takes hold in {n} rounds at stage {stage}.",
       "Stage": "Stage {stage}."
     },
@@ -104,10 +105,10 @@
     },
     "Gullet": {
       "Cut": "cuts at it from inside with {strike}: {damage} damage against Rupture {rupture}",
-      "Ruptured": "is cut open from inside by {name}'s {strike}: {damage} damage against Rupture {rupture}"
+      "Ruptured": "{name} cuts free with {strike}: {damage} damage against Rupture {rupture}"
     },
-    "FlatCheck": "can't make {target} out: flat check {natural} against DC {dc}, and the blow goes astray",
-    "FlatCheckSpell": "{caster} can't make it out: flat check {natural} against DC {dc}, and the spell passes it by",
+    "FlatCheck": "can't make out {target}: flat check {natural} against DC {dc}, a miss",
+    "FlatCheckSpell": "{caster} can't make it out: flat check {natural} against DC {dc}, a miss",
     "SpellLost": "loses the spell to a muddled mind: flat check {natural} against DC {dc}",
     "Poisoned": "{strike} with {poison}",
     "Remedy": {
