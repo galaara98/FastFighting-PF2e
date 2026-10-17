@@ -89,6 +89,17 @@ async function linkedEffect(uuid) {
   }
   return EFFECT_CACHE.get(uuid);
 }
+/**
+ * Could an actor's players open this document themselves? One in a compendium: only if each of them may see the pack
+ * (a link a player wrote could name a hidden one's). A world document, any (every client has the world's).
+ */
+function theirsToOpen(actor, doc) {
+  if ( !doc?.pack ) return true;
+  const pack = game.packs?.get(doc.pack);
+  const players = game.users?.filter(u => !u.isGM && actor?.testUserPermission?.(u, "OWNER")) ?? [];
+  return !!pack && players.every(u => pack.testUserPermission(u, "OBSERVER"));
+}
+
 /** PF2e conditions the engine keeps elsewhere (its own numbers and its persistent damage), not as conditions. */
 const NOT_CONDITIONS = new Set(["dying", "wounded", "doomed", "persistent-damage"]);
 
@@ -949,7 +960,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const type = item.system.actionType?.value;
       if ( type === "reaction" || type === "passive" ) continue;
       const effect = await linkedEffect(uuid);
-      if ( !effect ) continue;
+      if ( !effect || !theirsToOpen(actor, effect) ) continue;
       const slug = String(effect.system?.slug ?? slugOf(effect) ?? "");
       const short = slug.replace(/^effect-/, "");
       // What a fight can tell: the effect is on, and the Strike is a melee one.

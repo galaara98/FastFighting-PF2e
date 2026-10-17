@@ -103,6 +103,15 @@ describe("reading what an ability does from its trigger", () => {
     expect(guardsAllies({ type: "passive", text: "<p>It grants an adjacent ally a +1 bonus to AC.</p>" })).toBe(false);
   });
 
+  test("a long text a player wrote is read in one pass (no search that backtracks for minutes)", () => {
+    const start = Date.now();
+    const trigger = "an enemy attacks ".repeat(6000);
+    expect(guardsAllies(reaction("x", "X", trigger))).toBe(false);
+    expect(guardsAllies(reaction("x", "X", `${trigger} your ally`))).toBe(true);
+    expect(guardsAllies({ type: "action", text: `<p>${"it grants an ally ".repeat(6000)}</p>` })).toBe(false);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
   test("a reaction to a fallen ally; a reaction that guards only itself", () => {
     expect(rescuesAllies(reaction("x", "X", "An ally is reduced to 0 Hit Points."))).toBe(true);
     expect(rescuesAllies(reaction("x", "X", "An enemy damages your ally"))).toBe(false);

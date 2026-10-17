@@ -50,6 +50,12 @@ describe("PF2e crowd control", () => {
   test("a damage spell's critical-failure rider", () => {
     expect(parseCritRider(DAZE)).toMatchObject({ kind: "condition", conditions: { stunned: 1 }, critOnly: true });
     expect(parseCritRider("<p>Deals 2d6 fire damage.</p>")).toBeNull();
+    // (The sentence that says it, ended by a full stop; and a long text a player wrote, read in one pass.)
+    expect(parseCritRider("<p>If it critically fails, it is also frightened 2</p>")).toBeNull();
+    expect(parseCritRider("<p>It critically fails. It is also frightened 2.</p>")).toBeNull();
+    const start = Date.now();
+    expect(parseCritRider(`<p>${"critically fails is also ".repeat(4000)}</p>`)).toBeNull();
+    expect(Date.now() - start).toBeLessThan(1000);
   });
 
   test("durations", () => {

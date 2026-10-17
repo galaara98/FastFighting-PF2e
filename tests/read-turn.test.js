@@ -19,6 +19,17 @@ describe("a player's turn read from PF2e's cards", () => {
     expect(events[0]).toMatchObject({ type: "attack", targetId: "B", degree: 3, melee: true, damage: 14, damageType: "slashing", sure: true });
   });
 
+  test("a card with odd data (made by hand) is passed over, not the turn's other cards", () => {
+    const odd = card({ type: "skill-check", options: ["action:trip"] });
+    odd.flags.pf2e.context.domains = "diplomacy";
+    const thrown = card();
+    thrown.flags.pf2e.context.traits = { thrown: true };
+    const proto = card({ outcome: "toString", target: "Scene.s.Token.constructor" });
+    const events = readPf2eTurn([odd, thrown, proto, card({ outcome: "failure", options: ["item:melee"] })], context);
+    expect(events.map(e => e.type)).toEqual(["control", "attack", "attack"]);
+    expect(events[2]).toMatchObject({ targetId: "B", degree: 1 });
+  });
+
   test("a skill action at a creature is its maneuver; a Diplomacy roll is words for the GM", () => {
     const [trip] = readPf2eTurn([card({ type: "skill-check", options: ["action:trip"], title: "Trip" })], context);
     expect(trip).toMatchObject({ type: "control", maneuver: "trip", took: true, degree: 2, sure: true });

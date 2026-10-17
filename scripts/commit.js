@@ -104,19 +104,29 @@ async function removeCondition(actor, slug, undo) {
   }
 }
 
+/**
+ * Is an affliction's DC for the table to see? As PF2e shows a check's DC: when its setting shows every DC, or when the
+ * one it's from is a player's (an affliction's id starts with its giver's actor id).
+ */
+function dcShown(a) {
+  if ( game.pf2e?.settings?.metagame?.dcs ) return true;
+  return !!game.actors?.get(String(a.id ?? "").split(".")[0])?.hasPlayerOwner;
+}
+
 /** An affliction's effect item, as a fight lays it. */
 function afflictionItem(a) {
+  const when = a.onset > 0 ? t("Affliction.Onset", { n: a.onset, stage: a.stage }) : t("Affliction.Stage", { stage: a.stage });
   return {
     type: "effect",
     name: t("Affliction.Name", { name: a.name, stage: a.stage }),
     img: "icons/svg/poison.svg",
     system: {
-      description: { value: t("Affliction.Description", { when: a.onset > 0 ? t("Affliction.Onset", { n: a.onset, stage: a.stage }) : t("Affliction.Stage", { stage: a.stage }), save: a.save, dc: a.dc }) },
+      description: { value: dcShown(a) ? t("Affliction.Description", { when, save: a.save, dc: a.dc }) : t("Affliction.DescriptionNoDc", { when, save: a.save }) },
       badge: { type: "counter", value: a.stage },
       duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
       tokenIcon: { show: true }
     },
-    flags: { [MODULE_ID]: { affliction: a } }
+    flags: { [MODULE_ID]: { affliction: { id: a.id } } }
   };
 }
 
@@ -194,7 +204,7 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
       const item = actor.itemTypes.effect.find(i => i.getFlag(MODULE_ID, "affliction")?.id === a.id);
       if ( !item ) continue;
       undo.itemUpdates.push({ id: item.id, update: { name: item.name, "system.badge.value": item.system.badge?.value ?? 1, [`flags.${MODULE_ID}.affliction`]: item.getFlag(MODULE_ID, "affliction") } });
-      await item.update({ name: t("Affliction.Name", { name: a.name, stage: a.stage }), "system.badge.value": a.stage, [`flags.${MODULE_ID}.affliction`]: a });
+      await item.update({ name: t("Affliction.Name", { name: a.name, stage: a.stage }), "system.badge.value": a.stage, [`flags.${MODULE_ID}.affliction`]: { id: a.id } });
     }
   }
   for ( const id of changes.afflictions?.ended ?? [] ) {
@@ -443,8 +453,10 @@ async function handleLoot(tokenDoc, actor, options, undo) {
     return data;
   });
   if ( !items.length ) return;
+  // (Named for it when its name shows to everyone, or it's a player's: else the players would learn it here.)
+  const named = actor.hasPlayerOwner || [CONST.TOKEN_DISPLAY_MODES.ALWAYS, CONST.TOKEN_DISPLAY_MODES.HOVER].includes(tokenDoc.displayName);
   const pileActor = await Actor.create({
-    name: game.i18n.format("FFPF2E.Remains", { name: tokenDoc.name }),
+    name: named ? game.i18n.format("FFPF2E.Remains", { name: tokenDoc.name }) : game.i18n.localize("FFPF2E.RemainsUnnamed"),
     type: "loot",
     img: "icons/containers/bags/sack-leather-brown.webp",
     system: { lootSheetType: "Loot" },

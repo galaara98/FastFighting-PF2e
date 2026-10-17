@@ -146,10 +146,20 @@ export function parseControl({ description, duration = "" }) {
  * deafened for 1 minute". Returns an engine effect {kind: "condition", conditions, rounds, critOnly} or null.
  */
 export function parseCritRider(description) {
-  const text = plain(description);
-  const m = /critically fails[^.]*?\b(?:also|is)\b([^.]*)\./i.exec(text);
-  if ( !m ) return null;
-  const conditions = conditionsIn(m[1]);
+  // (Sentence by sentence, those ended by a full stop: its words after the first "also" or "is" past "critically
+  // fails". A search over the whole text backtracks, and a spell's description is item data a player can write.)
+  const sentences = plain(description).split(".").slice(0, -1);
+  let rest = null;
+  for ( const s of sentences ) {
+    const fails = /critically fails/i.exec(s);
+    const after = fails ? /\b(?:also|is)\b/i.exec(s.slice(fails.index + fails[0].length)) : null;
+    if ( after ) {
+      rest = s.slice(fails.index + fails[0].length + after.index + after[0].length);
+      break;
+    }
+  }
+  if ( rest === null ) return null;
+  const conditions = conditionsIn(rest);
   if ( !Object.keys(conditions).length ) return null;
-  return { kind: "condition", conditions, rounds: durationRounds(m[1]) ?? 1, label: label(conditions), critOnly: true };
+  return { kind: "condition", conditions, rounds: durationRounds(rest) ?? 1, label: label(conditions), critOnly: true };
 }

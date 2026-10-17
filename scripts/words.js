@@ -63,8 +63,15 @@ export const coin = c => sys(`PF2E.CurrencyAbbreviations.${c}`, c);
 /** An item's name as the English books have it. */
 export const englishName = item => item?.flags?.babele?.originalName ?? item?.name ?? "";
 
-/** An item's description as the English books have it. */
+/**
+ * The most of a description read: twice the longest the books have (about 10,000 characters). A description is item
+ * data a player can write, and the GM's client reads it.
+ */
+export const DESCRIPTION_MOST = 20000;
+
+/** An item's description as the English books have it (up to DESCRIPTION_MOST). */
 export function englishDescription(item) {
   const original = item?.flags?.babele?.originalPayload?.description;
-  return typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
+  const text = typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
+  return typeof text === "string" ? text.slice(0, DESCRIPTION_MOST) : "";
 }

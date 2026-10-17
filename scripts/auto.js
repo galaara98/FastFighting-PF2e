@@ -107,11 +107,34 @@ export function triggerOf(html) {
   return m ? words(m[1]) : "";
 }
 
-const FOE_STRIKES_ALLY = /\b(?:enem(?:y|ies)|creatures?|opponents?|foes?)\b[^.]*\b(?:damages?|attacks?|hits?|targets?|grabs?)\b[^.]*\ball(?:y|ies)\b/i;
-const ALLY_STRUCK = /\ball(?:y|ies)\b[^.]*\b(?:would take|takes?|is hit|are hit|is the target|are the target|is targeted|are targeted)\b/i;
-const ALLY_FALLS = /\ball(?:y|ies)\b[^.]*\b(?:reduced to 0 Hit Points|falls? unconscious|is dying|gains? the dying condition)\b/i;
-const FOE_STRIKES_SELF = /\benem(?:y|ies)\b[^.]*\bdamages you\b/i;
-const SHIELDS_ALLY = /\b(?:grants?|gives?)\b[^.]*\ball(?:y|ies)\b[^.]*\bbonus to (?:AC|Armor Class)\b/i;
+/**
+ * Does one sentence of the text (up to a full stop) say these, in this order? Each a word pattern with the g flag. Each
+ * found from where the last ended, the first time it's there: one pass a pattern, however long the text (a reaction's
+ * text is item data a player can write, and a search that backtracks could keep the GM's client at it for minutes).
+ */
+export function saysInOrder(text, ...patterns) {
+  for ( const sentence of String(text ?? "").split(".") ) {
+    let at = 0;
+    const found = patterns.every(re => {
+      re.lastIndex = at;
+      const m = re.exec(sentence);
+      if ( m ) at = m.index + m[0].length;
+      return !!m;
+    });
+    if ( found ) return true;
+  }
+  return false;
+}
+
+const FOE = /\b(?:enem(?:y|ies)|creatures?|opponents?|foes?)\b/gi;
+const ENEMY = /\benem(?:y|ies)\b/gi;
+const STRIKES = /\b(?:damages?|attacks?|hits?|targets?|grabs?)\b/gi;
+const ALLY = /\ball(?:y|ies)\b/gi;
+const STRUCK = /\b(?:would take|takes?|is hit|are hit|is the target|are the target|is targeted|are targeted)\b/gi;
+const FALLS = /\b(?:reduced to 0 Hit Points|falls? unconscious|is dying|gains? the dying condition)\b/gi;
+const DAMAGES_YOU = /\bdamages you\b/gi;
+const GRANTS = /\b(?:grants?|gives?)\b/gi;
+const AC_BONUS = /\bbonus to (?:AC|Armor Class)\b/gi;
 
 /**
  * Does it guard an ally? A reaction set off by a foe striking an ally (or an ally about to be hurt), or an action that
@@ -121,16 +144,16 @@ const SHIELDS_ALLY = /\b(?:grants?|gives?)\b[^.]*\ball(?:y|ies)\b[^.]*\bbonus to
 export function guardsAllies({ type, text } = {}) {
   if ( type === "reaction" ) {
     const trigger = triggerOf(text);
-    return FOE_STRIKES_ALLY.test(trigger) || ALLY_STRUCK.test(trigger);
+    return saysInOrder(trigger, FOE, STRIKES, ALLY) || saysInOrder(trigger, ALLY, STRUCK);
   }
-  return type === "action" && SHIELDS_ALLY.test(words(text));
+  return type === "action" && saysInOrder(words(text), GRANTS, ALLY, AC_BONUS);
 }
 
 /** Is it a reaction to an ally falling (reduced to 0 Hit Points, dying)? */
-export const rescuesAllies = ({ type, text } = {}) => type === "reaction" && ALLY_FALLS.test(triggerOf(text));
+export const rescuesAllies = ({ type, text } = {}) => type === "reaction" && saysInOrder(triggerOf(text), ALLY, FALLS);
 
 /** Is it a reaction that guards only itself (set off by a foe damaging it)? */
-export const guardsSelf = ({ type, text } = {}) => type === "reaction" && FOE_STRIKES_SELF.test(triggerOf(text));
+export const guardsSelf = ({ type, text } = {}) => type === "reaction" && saysInOrder(triggerOf(text), ENEMY, DAMAGES_YOU);
 
 /**
  * What it heals others with, by name, from its actions (spec.actions): its heal spells, Battle Medicine. Not one that

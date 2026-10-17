@@ -8,6 +8,7 @@
     "Surrendered": "Surrendered",
     "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
     "Remains": "Remains of {name}",
+    "RemainsUnnamed": "Remains",
     "HeroPoints": "Hero Points",
     "Aid": "Aid",
     "RecallKnowledge": "Recall Knowledge",
@@ -86,6 +87,7 @@
     "Affliction": {
       "Name": "{name} (Stage {stage})",
       "Description": "<p>Afflicted during a FastFighting battle. {when} {save} DC {dc}. Continue tracking stages per the affliction's rules.</p>",
+      "DescriptionNoDc": "<p>Afflicted during a FastFighting battle. {when} Its save: {save}. Continue tracking stages per the affliction's rules.</p>",
       "Onset": "Still in its onset: takes hold in {n} rounds at stage {stage}.",
       "Stage": "Stage {stage}."
     },
