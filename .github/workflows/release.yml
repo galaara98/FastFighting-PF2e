@@ -42,9 +42,12 @@ jobs:
              --arg d "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/module.zip" \
              '.version = $v | .download = $d' module.json > module.tmp && mv module.tmp module.json
 
+      # Only what Foundry loads, with the README and the license. Coders get the rest from the repository.
       - name: Build module.zip
         working-directory: FastFighting-PF2e
-        run: zip -r module.zip module.json scripts languages hardcoded-toEN.json README.md LICENSE
+        run: |
+          zip -r module.zip module.json scripts languages hardcoded-toEN.json README.md LICENSE
+          unzip -l module.zip
 
       - name: Create release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
