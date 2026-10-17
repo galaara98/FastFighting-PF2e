@@ -4,8 +4,10 @@
  */
 import { describe, expect, test } from "vitest";
 import { wordList } from "../scripts/words.js";
+import { listWords } from "../scripts/core.js";
 
-const fromFile = key => game.i18n.localize(`FFPF2E.${key}`).split(",").map(w => w.trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean);
+// (Each word as the core reads a list: trimmed of anything but letters and digits at either end, in lower case.)
+const fromFile = key => listWords(game.i18n.localize(`FFPF2E.${key}`));
 
 describe("an innate spell's brackets", () => {
   test("at will and constant, as the language file has them, in lower case", () => {

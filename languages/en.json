@@ -37,7 +37,8 @@
     },
     "Lead": {
       "Best": "best social/warfare skill {n}",
-      "Commander": "Commander ({n} tactics)"
+      "Commander": "Commander ({n} tactics)",
+      "Separator": "; "
     },
     "Reason": {
       "Mindless": "Mindless",

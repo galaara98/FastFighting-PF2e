@@ -2,18 +2,20 @@
  * Pathfinder 2e adapter: reads PF2e actors into CombatantSpecs and commits outcomes back.
  * Data paths verified against pf2e 8.6.0 on Foundry v14.
  */
-import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart } from "./core.js";
+// (In a translated world, a Babele translation of PF2e's compendiums, an item's rules are read from the English Babele
+// keeps of it, so they're understood whatever the language: the core's englishName and englishDescription.)
+import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart, part, englishName, englishDescription, plainText } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
-import { pf2eHints, pf2eTactics, healsOthers, plainText, textOf } from "./auto.js";
+import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
-import { parseControl, parseCritRider, conditionsIn, plain, escapeAt, failureRiders } from "./control.js";
+import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
-import { t, actionName, traitName, featureName, coin, englishName, englishDescription, wordList, conditionLabel as conditionName } from "./words.js";
+import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -265,7 +267,7 @@ const NOT_SENSES = new Set(["vision", "low-light-vision", "see-invisibility"]);
 /** The senses that see (dazzled clouds them all). */
 const SIGHTS = new Set([...NOT_SENSES, "darkvision", "greater-darkvision", "infrared-vision", "truesight"]);
 
-/** Has it a precise sense besides sight (so dazzled doesn't conceal everything from it: rules.js flatCheckDC)? */
+/** Has it a precise sense besides sight (so dazzled doesn't conceal everything from it: rules.js flatCheck)? */
 export const otherPrecise = senses => Array.from(senses ?? []).some(s => s?.acuity === "precise" && !SIGHTS.has(String(s?.type ?? "")));
 
 export class Pf2eAdapter extends SystemAdapter {
@@ -767,8 +769,8 @@ export class Pf2eAdapter extends SystemAdapter {
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
         const isHeal = kinds.has?.("healing") && traits.includes("healing");
-        // (A hand for one cast with gestures: the manipulate trait, or a somatic or material component before the remaster.)
-        const hands = traitHands(traits, spell.system.components);
+        // (A hand for one cast with gestures: the manipulate trait.)
+        const hands = traitHands(traits);
         if ( summon ) {
           out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, ...summon });
           continue;
@@ -940,7 +942,7 @@ export class Pf2eAdapter extends SystemAdapter {
     const conditions = !save && !spell.isAttack && /\benem(?:y|ies)\b/i.test(text) ? conditionsIn(text) : {};
     if ( Object.keys(conditions).length ) {
       return { kind: "control", auto: true, ...reachFoes, area: many > 1 ? { targets: many } : undefined,
-        outcome: { conditions, rounds: Math.max(rounds, conditions.frightened ?? 1), label: Object.entries(conditions).map(([k, v]) => `${k === "offGuard" ? "off-guard" : k}${v > 1 ? ` ${v}` : ""}`).join(", ") } };
+        outcome: { conditions, rounds: Math.max(rounds, conditions.frightened ?? 1), label: conditionsLabel(conditions) } };
     }
     return null;
   }
@@ -1034,7 +1036,7 @@ export class Pf2eAdapter extends SystemAdapter {
     const flat = 2 + Math.floor(level / 2);
     return [{ id: `${actor.id}.exploit-vulnerability`, name: featureName(ownNames(actor), "exploit-vulnerability"), kind: "control", auto: true, cost: 1, oncePerTurn: true,
       traits: ["esoterica", "manipulate"], melee: false, range: { increment: 60, max: 60, noPenalty: true },
-      outcome: { mark: [{ dice: [], flat, type: "untyped", persistent: false, category: null }], rounds: 10, label: t("Exploited", { n: flat }) } }];
+      outcome: { mark: [part([], flat)], rounds: 10, label: t("Exploited", { n: flat }) } }];
   }
 
   /** Regeneration (deactivated by acid, fire ...) and fast healing, from the FastHealing rule elements on its abilities. */
@@ -1068,7 +1070,7 @@ export class Pf2eAdapter extends SystemAdapter {
       if ( seen.has(slug) ) continue;
       seen.add(slug);
       if ( slug === "shield-block" && hasShield && shield.hardness > 0 ) {
-        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: { dice: [], flat: shield.hardness, type: "untyped", persistent: false, category: null } });
+        out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", needsShield: true, physical: true, reduce: part([], shield.hardness) });
       } else if ( slug === "reactive-shield" && hasShield ) {
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "hit", melee: true, ac: shield.ac });
       } else if ( slug === "nimble-dodge" ) {
@@ -1081,7 +1083,7 @@ export class Pf2eAdapter extends SystemAdapter {
         // Retributive Strike, gets struck).
         const level = actor.level ?? 1;
         out.push({ id: `${actor.id}.${slug}`, label: item.name, on: "allyHit", range: 15,
-          reduce: { dice: [], flat: 2 + level, type: "untyped", persistent: false, category: null }, strike: slug === "retributive-strike" || undefined });
+          reduce: part([], 2 + level), strike: slug === "retributive-strike" || undefined });
       }
     }
     return out.length ? out : null;
@@ -1171,7 +1173,7 @@ export class Pf2eAdapter extends SystemAdapter {
         name: featureName(ownNames(actor), "battle-medicine"),
         kind: "heal",
         cost: 1,
-        heal: [{ dice: [{ n: 2, faces: 8, mult: 1 }], flat: bonus, type: "healing", persistent: false, category: null }],
+        heal: [part([{ n: 2, faces: 8, mult: 1 }], bonus, "healing")],
         healCheck: { mod: medicine.mod, dc },
         oncePerTarget: true,
         reach: 5, // yourself or an adjacent creature

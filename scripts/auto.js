@@ -5,8 +5,8 @@
  * what they do), a creature's traits (by slug: undead, mindless, devil, holy ...), its spellcasting, skills, languages
  * and gear; and its biography as plain text for the keywords. Pure.
  */
-import { listJoin } from "./core.js";
-import { t, traitName } from "./words.js";
+import { listJoin, plainText } from "./core.js";
+import { t, traitName, modifier } from "./words.js";
 
 /** What each class leans toward. */
 const CLASSES = Object.freeze({
@@ -324,8 +324,7 @@ export function pf2eTactics(f = {}) {
   } else if ( f.social ) {
     const listed = social.filter(s => s.listed && Number.isFinite(s.mod));
     const best = listed.reduce((a, b) => (!a || b.mod > a.mod ? b : a), null);
-    const sign = n => `${n >= 0 ? "+" : ""}${n}`;
-    if ( best ) say("talk", best.mod >= highSkill(f.level) ? "first" : "opportune", t("Why.Skill", { skill: best.name || best.slug, mod: sign(best.mod) }));
+    if ( best ) say("talk", best.mod >= highSkill(f.level) ? "first" : "opportune", t("Why.Skill", { skill: best.name || best.slug, mod: modifier(best.mod) }));
   }
 
   // Healing others (with what it heals others with): a healer eagerly, anyone else as the fight allows. An ally dying:
@@ -393,12 +392,7 @@ export function pf2eTactics(f = {}) {
   return out;
 }
 
-/** Text from the sheet's HTML. */
-export function plainText(html) {
-  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, "\"").replace(/\s+/g, " ").trim();
-}
-
-/** Every string in it (a biography's fields, edicts and anathema), as one text. */
+/** Every string in it (a biography's fields, edicts and anathema), as one text (each the core's plainText). */
 export function textOf(value) {
   const parts = [];
   const walk = v => {

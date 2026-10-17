@@ -7,8 +7,8 @@
  *    A creature's attack goes by the weapon it's linked to; without one, it's its own body (a tail, a wing, a
  *    stinger), and needs no hands.
  *  - Anything else: one if it has the manipulate trait (a spell cast with gestures, drinking a potion, Exploit
- *    Vulnerability), none if not (a spell of words alone, a breath, a shout, Demoralize). A spell from before the
- *    remaster says it with its components instead: somatic or material, a hand.
+ *    Vulnerability), none if not (a spell of words alone, a breath, a shout, Demoralize). (A spell from before the
+ *    remaster has the trait too: PF2e's own migration makes its somatic or material component manipulate.)
  * Trip, Disarm, Grapple, Shove and Reposition say so in their requirements (a free hand): maneuvers.js gives them one.
  */
 
@@ -42,13 +42,8 @@ export function strikeHands(item) {
 }
 
 /**
- * Free hands anything else needs: one with the manipulate trait (or, before the remaster, a somatic or material
- * component), else none.
+ * Free hands anything else needs: one with the manipulate trait, else none.
  * @param {string[]} [traits]
- * @param {object} [components]   a legacy spell's {somatic, material, verbal, focus}
  * @returns {number}
  */
-export function traitHands(traits = [], components = null) {
-  if ( (traits ?? []).includes("manipulate") ) return 1;
-  return components?.somatic || components?.material ? 1 : 0;
-}
+export const traitHands = (traits = []) => ((traits ?? []).includes("manipulate") ? 1 : 0);

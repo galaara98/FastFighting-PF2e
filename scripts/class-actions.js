@@ -5,10 +5,11 @@
  * Pure, unit-tested.
  */
 import { featureName } from "./words.js";
-import { doubled } from "./core.js";
+import { doubled, part, meanPart } from "./core.js";
 
-const meanDamage = parts => (parts ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
-const score = s => (s.bonus ?? 0) + meanDamage(s.damage);
+/** A Strike's mean damage, each part once (persistent damage too: only to tell the better Strike). */
+const meanOf = parts => (parts ?? []).reduce((s, p) => s + meanPart(p), 0);
+const score = s => (s.bonus ?? 0) + meanOf(s.damage);
 const best = list => [...list].sort((a, b) => score(b) - score(a))[0] ?? null;
 
 /** n more of the weapon's own damage die (its first part's die, of its type). */
@@ -16,7 +17,7 @@ function weaponDice(strike, n) {
   const first = strike.damage?.[0];
   const faces = first?.dice?.[0]?.faces;
   if ( !faces ) return null;
-  return { dice: [{ n, faces }], flat: 0, type: first.type, persistent: false, category: null };
+  return part([{ n, faces }], 0, first.type);
 }
 
 /**
@@ -49,7 +50,7 @@ export function extraParts(base, more, category = null) {
     const flat = Math.max(0, (p.flat ?? 0) - h.flat);
     h.flat = Math.max(0, h.flat - (p.flat ?? 0));
     had.set(key(p), h);
-    if ( dice.length || flat > 0 ) out.push({ dice, flat, type: p.type, persistent: !!p.persistent, category: category ?? p.category ?? null });
+    if ( dice.length || flat > 0 ) out.push(part(dice, flat, p.type, { persistent: !!p.persistent, category: category ?? p.category ?? null }));
   }
   return out;
 }
@@ -75,7 +76,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   if ( has("hunt-prey") && has("precision") ) {
     const n = level >= 19 ? 3 : level >= 11 ? 2 : 1;
     changed = changed.map(s => ({ ...s, bonusDamage: [...(s.bonusDamage ?? []), { id: "hunters-precision", when: "always", oncePerTurn: true,
-      parts: [{ dice: [{ n, faces: 8 }], flat: 0, type: s.damage?.[0]?.type ?? "untyped", persistent: false, category: "precision" }] }] }));
+      parts: [part([{ n, faces: 8 }], 0, s.damage?.[0]?.type ?? "untyped", { category: "precision" })] }] }));
   }
   const melee = changed.filter(s => s.kind === "strike" && s.melee && s.damage?.length && !s.sequence);
   // Vicious Swing (Power Attack): two actions, an extra weapon die (two from 10th level, three from 18th), and it

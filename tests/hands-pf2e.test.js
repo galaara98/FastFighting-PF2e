@@ -40,11 +40,9 @@ describe("a Strike's hands", () => {
 });
 
 describe("everything else's hands", () => {
-  test("the manipulate trait, or a somatic or material component before the remaster", () => {
+  test("the manipulate trait", () => {
     expect(traitHands(["concentrate", "manipulate"])).toBe(1);
     expect(traitHands(["concentrate"])).toBe(0);
-    expect(traitHands([], { verbal: true, somatic: true })).toBe(1);
-    expect(traitHands([], { verbal: true, material: false })).toBe(0);
     expect(traitHands(undefined)).toBe(0);
   });
 

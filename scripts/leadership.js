@@ -3,7 +3,8 @@
  * A leader is the creature with the best social/warfare skill relative to its level, boosted by the
  * Commander class (tactics), and by abilities that read like rallying cries or commanding auras.
  */
-import { t } from "./words.js";
+import { listItems } from "./core.js";
+import { t, modifier } from "./words.js";
 
 // Matched against slugs too, so hyphens count as spaces.
 const LEADER_ABILITY = /(commander|captain|warlord|rally|inspir|command|leader|banner|battle[ -]cry|tactic)/i;
@@ -20,7 +21,7 @@ export function rankLeaders(entries) {
     if ( best <= -99 ) continue;
     const typical = e.level + 4;
     let score = best - typical;
-    const reasons = [t("Lead.Best", { n: `${best >= 0 ? "+" : ""}${best}` })];
+    const reasons = [t("Lead.Best", { n: modifier(best) })];
     if ( e.isCommander ) {
       score += 4 + Math.min(4, e.tactics ?? 0);
       reasons.push(t("Lead.Commander", { n: e.tactics ?? 0 }));
@@ -29,9 +30,9 @@ export function rankLeaders(entries) {
       .filter(a => LEADER_ABILITY.test(a.key ?? "") || LEADER_ABILITY.test(a.name ?? ""));
     if ( leaderAbilities.length ) {
       score += 3;
-      reasons.push(leaderAbilities.slice(0, 2).map(a => a.name).join(", "));
+      reasons.push(listItems(leaderAbilities.slice(0, 2).map(a => a.name)));
     }
-    out.push({ id: e.id, score, reason: reasons.join("; "), bonus: leaderBonus(score, e.isCommander) });
+    out.push({ id: e.id, score, reason: reasons.join(t("Lead.Separator")), bonus: leaderBonus(score, e.isCommander) });
   }
   return out.sort((a, b) => b.score - a.score);
 }

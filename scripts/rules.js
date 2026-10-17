@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf } from "./core.js";
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
@@ -89,9 +89,9 @@ const ingested = action => action?.kind === "heal" && !!action.itemId && !!actio
  * Rupture value or more, as rolled, from one blow, and the one who struck it is out. Not harm that lingers. Returns what's
  * said ({text}), or null.
  */
-function ruptured(holder, ctx) {
+function ruptured(run, holder, ctx) {
   const by = ctx?.by;
-  if ( !by || ctx.lingering || holderId(by) !== holder.id ) return null;
+  if ( !by || ctx.lingering || holderOf(run, by)?.id !== holder.id ) return null;
   const key = Number(by.conds?.swallowed) > 0 ? "swallowed" : "engulfed";
   const rupture = holder.spec?.gullet?.[key]?.rupture;
   const cut = (Number(ctx.byType?.piercing) || 0) + (Number(ctx.byType?.slashing) || 0);
@@ -143,13 +143,8 @@ function foeCovers(run, u) {
 /**
  * The flat check a creature must make to affect another with an attack (PF2e's): DC 11 against one hidden from it, DC 5
  * against one concealed from it, or from it dazzled (unless it has a precise sense besides sight); 0 for none. Not
- * against an area.
+ * against an area. And why (the story tells it: "hidden", "concealed", "dazzled"): {dc, why}.
  */
-function flatCheckDC(attacker, target, action) {
-  return flatCheck(attacker, target, action).dc;
-}
-
-/** The flat check, and why (the story tells it: "hidden", "concealed", "dazzled"): {dc, why}. */
 function flatCheck(attacker, target, action) {
   if ( action?.area || !target ) return { dc: 0, why: null };
   if ( Number(target.conds?.hidden) > 0 ) return { dc: 11, why: "hidden" };
@@ -380,10 +375,10 @@ export const pf2eRules = {
    * of the largest size it lists); from inside a gullet, Strikes only with unarmed attacks or light weapons.
    */
   usable(run, u, action, t) {
-    if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderId(t) && !full(run, u);
+    if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderOf(run, t) && !full(run, u);
     // (Sickened: it can't willingly drink a potion or an elixir.)
     if ( ingested(action) && Number(u.conds?.sickened) > 0 ) return false;
-    if ( action?.kind === "strike" && !action.light && holderId(u) ) return false;
+    if ( action?.kind === "strike" && !action.light && holderOf(run, u) ) return false;
     // Take Cover: with standard cover from a foe to make greater, or prone (greater against ranged attacks).
     if ( action?.takeCover ) return !!u.prone || foeCovers(run, u).includes("some");
     // Hide: concealed, or with cover from every foe that can see it (and one at least).
@@ -420,7 +415,7 @@ export const pf2eRules = {
    * everything outside from reaching in, and out).
    */
   canTarget(run, a, t) {
-    const holder = holderId(a);
+    const holder = holderOf(run, a)?.id;
     return !holder || t.id === holder;
   },
 
@@ -437,7 +432,7 @@ export const pf2eRules = {
   },
 
   /**
-   * An attack's flat check (flatCheckDC: against one hidden from it, or concealed, or with it dazzled), rolled once the
+   * An attack's flat check (flatCheck: against one hidden from it, or concealed, or with it dazzled), rolled once the
    * attack would hit: failed, the blow doesn't affect the target.
    */
   adjustRoll(run, u, roll, ctx = {}) {
@@ -470,7 +465,7 @@ export const pf2eRules = {
   /** A fall: bludgeoning damage of half the distance in feet; landing from it, prone. */
   fallDamage(feet) {
     const half = Math.floor((Number(feet) || 0) / 2);
-    return feet > 5 && half > 0 ? [{ dice: [], flat: half, type: "bludgeoning", persistent: false, category: null }] : [];
+    return feet > 5 && half > 0 ? [part([], half, "bludgeoning")] : [];
   },
   fallProne: true,
 
@@ -760,7 +755,7 @@ export const pf2eRules = {
    */
   afterHarm(run, u, amount, rng, ctx = {}) {
     if ( u.status === STATUS.STANDING ) drain(run, u);
-    const cut = ruptured(u, ctx);
+    const cut = ruptured(run, u, ctx);
     if ( !u.ferocityNote ) return cut;
     const label = u.ferocityNote;
     u.ferocityNote = null;

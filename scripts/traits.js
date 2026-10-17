@@ -9,8 +9,8 @@
  * skills, its Perception, and whether it's in a party.
  * Anyone else is read from what it is: its Intelligence and Wisdom, its Will for its level, its creature traits.
  */
-import { clamp, listItems, traitsFromParts, PC_BASELINE, TRAITS } from "./core.js";
-import { t, traitName } from "./words.js";
+import { clamp, traitsFromParts, partsOf, PC_BASELINE } from "./core.js";
+import { t, traitName, modifier } from "./words.js";
 
 const SELFISH_BY_TRAIT = {
   demon: 85, fiend: 70, daemon: 80, devil: 55, undead: 60, aberration: 60, dragon: 70, giant: 50,
@@ -119,11 +119,6 @@ function expectedWill(level) {
 /** The usual player character's Will at a level: trained or expert, Wisdom +1 or +2. */
 const usualPcWill = level => level + 5;
 
-const signed = n => `${n >= 0 ? "+" : ""}${n}`;
-
-/** Parts from a table's leaning ({trait: n}), with the reason they're shown with. */
-const partsOf = (lean, why, scale = 1) => Object.entries(lean ?? {}).map(([trait, n]) => ({ trait, n: n * scale, why }));
-
 /**
  * A player character's parts: everything on its sheet that moves it from the usual hero.
  * @param {object} d   see derivePf2eTraits
@@ -137,17 +132,17 @@ function pcParts(d) {
   const mod = k => Number(d[k]) || 0;
 
   // A good head: Intelligence above all, Wisdom (awareness) too; and experience.
-  add("tactical", (mod("int") - 1) * 4, t("Reason.Ability", { name: ability("int"), n: signed(mod("int")) }));
-  add("tactical", (mod("wis") - 1) * 2, t("Reason.Ability", { name: ability("wis"), n: signed(mod("wis")) }));
+  add("tactical", (mod("int") - 1) * 4, t("Reason.Ability", { name: ability("int"), n: modifier(mod("int")) }));
+  add("tactical", (mod("wis") - 1) * 2, t("Reason.Ability", { name: ability("wis"), n: modifier(mod("wis")) }));
   add("tactical", (level - 5) * 0.5, t("Reason.Level", { n: level }));
   if ( Number(d.perception) >= 2 ) add("tactical", (Number(d.perception) - 1) * 2, t("Reason.Proficient", { name: names.perception ?? "", rank: names.ranks?.[d.perception] ?? d.perception }));
 
   // Nerve: its Will against the usual hero's at its level, and its toughness.
   if ( Number.isFinite(d.will) ) {
     const delta = d.will - usualPcWill(level);
-    add("brave", delta * 3, t("Reason.Will", { n: signed(delta) }));
+    add("brave", delta * 3, t("Reason.Will", { n: modifier(delta) }));
   }
-  add("brave", (mod("con") - 1) * 1.5, t("Reason.Ability", { name: ability("con"), n: signed(mod("con")) }));
+  add("brave", (mod("con") - 1) * 1.5, t("Reason.Ability", { name: ability("con"), n: modifier(mod("con")) }));
 
   // Who it is: class, ancestry, background, holy or unholy.
   parts.push(...partsOf(CLASS_LEANS[d.cls], names.cls ?? d.cls));
@@ -170,9 +165,6 @@ function pcParts(d) {
   if ( d.inParty === false ) add("loyal", -10, t("Reason.NoParty"));
   return parts;
 }
-
-/** A trait's reason with more after it (the parts that moved it). */
-const joinReasons = (first, more) => Object.fromEntries(TRAITS.map(k => [k, listItems([first[k], more[k]].filter(Boolean))]));
 
 /**
  * @param {object} d
@@ -218,7 +210,7 @@ export function derivePf2eTraits(d) {
     reasons.tactical = t("Reason.Animal");
   } else {
     tactical = clamp(38 + d.int * 8 + d.wis * 2, 10, 95);
-    reasons.tactical = t("Reason.Int", { n: signed(d.int) });
+    reasons.tactical = t("Reason.Int", { n: modifier(d.int) });
   }
   if ( flags.packTactics ) reasons.tactical = t("Reason.PackHunter", { reason: reasons.tactical });
 
@@ -230,7 +222,7 @@ export function derivePf2eTraits(d) {
   else {
     const delta = (d.will ?? expectedWill(d.level)) - expectedWill(d.level);
     brave = clamp(55 + delta * 5 - (traits.has("animal") ? 15 : 0), 10, 90);
-    reasons.brave = t(traits.has("animal") ? "Reason.WillAnimal" : "Reason.Will", { n: signed(delta) });
+    reasons.brave = t(traits.has("animal") ? "Reason.WillAnimal" : "Reason.Will", { n: modifier(delta) });
   }
   if ( traits.has("minion") ) brave = Math.max(brave, 70);
 
@@ -264,6 +256,7 @@ export function derivePf2eTraits(d) {
     for ( const s of ["holy", "unholy"] ) if ( traits.has(s) ) parts.push(...partsOf(SANCTIFIED[s], traitName(s), 1.5));
     for ( const item of d.items ?? [] ) parts.push(...partsOf(ruleLeans(item.rules), item.name ?? item.slug));
   }
-  const built = traitsFromParts({ tactical, brave, selfish, loyal }, parts, { min: 0, max: 100 });
-  return { traits: built.traits, flags, reasons: joinReasons(reasons, built.reasons) };
+  // (Each trait's reason first, then the parts that moved it.)
+  const built = traitsFromParts({ tactical, brave, selfish, loyal }, parts, { lead: reasons, min: 0, max: 100 });
+  return { traits: built.traits, flags, reasons: built.reasons };
 }

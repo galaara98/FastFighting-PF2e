@@ -5,7 +5,7 @@
  *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
  *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, undoRecord } from "./core.js";
 import { t, traitName, conditionLabel } from "./words.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
@@ -17,18 +17,8 @@ function partFormula(p) {
   return [...dice, ...flat].join("+").replace(/\+-/g, "-") || "1";
 }
 
-/**
- * Whose side the token is on after the fight, when words (or a quarrel) changed it: won over (switched sides), talked
- * out of the fight (it takes no side now), or a neutral that turned on the party. Null when nothing changed.
- * @returns {"friendly"|"hostile"|"neutral"|null}
- */
-function sideChange(final) {
-  if ( final.swayed === "switched" ) return final.side === "friendly" ? "friendly" : "hostile";
-  if ( final.side !== "neutralParty" || final.status === STATUS.DEAD ) return null;
-  if ( final.against?.includes("friendly") ) return "hostile";
-  return final.swayed === "neutral" ? "neutral" : null;
-}
-const DISPOSITIONS = { friendly: "FRIENDLY", hostile: "HOSTILE", neutral: "NEUTRAL" };
+/** An undo record with nothing in it yet (the core's; no statuses kept from before: PF2e's conditions are items). */
+const emptyRecord = (tokenDoc, actor) => undoRecord(tokenDoc, actor, { statusesBefore: false });
 
 /** What a fight changes on a creature, for the summary of the fight (the planner's). */
 export function describePf2eOutcome(spec, final) {
@@ -139,10 +129,7 @@ function afflictionItem(a) {
  */
 export async function commitPf2eChanges(tokenDoc, spec, changes, final, options = {}) {
   const actor = tokenDoc.actor;
-  const undo = {
-    tokenUuid: tokenDoc.uuid, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [],
-    deletedItems: [], tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
-  };
+  const undo = emptyRecord(tokenDoc, actor);
   const itemsBefore = new Set(actor.items.map(i => i.id));
   const sys = actor.system;
   const hp = sys.attributes.hp;
@@ -243,12 +230,12 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
     }]);
     if ( effect ) undo.createdItems.push(effect.id);
   }
-  const side = changes.side ? sideChange(final) : null;
+  // (A change of side: PF2e's alliance, which its token's disposition is drawn from. The core sets the disposition
+  // itself, should the token not show it yet.)
+  const side = changes.side ? sideAfter(final) : null;
   if ( side ) {
     undo.actorUpdate["system.details.alliance"] = actor.system.details?.alliance ?? null;
-    undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
     await actor.update({ "system.details.alliance": { friendly: "party", hostile: "opposition", neutral: null }[side] });
-    await tokenDoc.update({ disposition: CONST.TOKEN_DISPOSITIONS[DISPOSITIONS[side]] });
   }
   // (PF2e adds linked conditions on its own: dying → unconscious → prone. Undo takes them off too.)
   const live = tokenDoc.actor ?? actor;
@@ -339,11 +326,6 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
 /* -------------------------------------------- */
 /*  Giving something up                         */
 /* -------------------------------------------- */
-
-const emptyRecord = (tokenDoc, actor) => ({
-  tokenUuid: tokenDoc?.uuid ?? null, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [], deletedItems: [],
-  tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
-});
 
 /**
  * A live battle: a creature tied up (a prisoner, the core's engine/behavior/fallen.js), or no longer: PF2e's own

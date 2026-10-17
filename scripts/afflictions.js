@@ -3,7 +3,8 @@
  */
 import { parseTypedFormula } from "./core.js";
 
-const UNIT_ROUNDS = { round: 1, rounds: 1, minute: 10, minutes: 10, hour: 600, hours: 600, day: 14400, days: 14400, week: 100800, weeks: 100800 };
+/** Rounds in a unit of time, as PF2e's English names it (control.js reads a spell's durations with it too). */
+export const UNIT_ROUNDS = Object.freeze({ round: 1, rounds: 1, minute: 10, minutes: 10, hour: 600, hours: 600, day: 14400, days: 14400, week: 100800, weeks: 100800 });
 
 const CONDITION_KEYS = {
   "off-guard": "offGuard",

@@ -6,7 +6,7 @@
  * Pure, unit-tested.
  */
 import { parseTypedFormula } from "./core.js";
-import { parseControl, plain, conditionsIn, durationRounds, escapeAt, escapeIn, failureRiders } from "./control.js";
+import { parseControl, plain, conditionsIn, conditionsLabel, durationRounds, escapeAt, escapeIn, failureRiders } from "./control.js";
 
 const SAVES = { fortitude: "fortitude", fort: "fortitude", reflex: "reflex", ref: "reflex", will: "will" };
 
@@ -129,7 +129,7 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
     const conditions = conditionsIn(effect);
     if ( !Object.keys(conditions).length ) return null;
     const escape = escapeIn(effect, conditions);
-    const lasting = { conditions, rounds: durationRounds(effect) ?? conditions.frightened ?? 1, label: Object.entries(conditions).map(([k, v]) => `${k === "offGuard" ? "off-guard" : k}${v > 1 ? ` ${v}` : ""}`).join(", "),
+    const lasting = { conditions, rounds: durationRounds(effect) ?? conditions.frightened ?? 1, label: conditionsLabel(conditions),
       ...(escape ? { escape: { ...escape, dc: escape.dc ?? save.dc } } : {}) };
     outcomes = [lasting, lasting, null, null];
   }

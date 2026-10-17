@@ -20,7 +20,7 @@
  * and the combined three actions of several friends at a corpse (one friend's three).
  * Pure, unit-tested.
  */
-import { meanPart, localize } from "./core.js";
+import { meanPart, localize, holderOf } from "./core.js";
 import { damageIn, saveIn } from "./abilities.js";
 import { plain } from "./control.js";
 
@@ -105,7 +105,10 @@ export function gulletAction({ id, name, slug, html, traits = [], actions = null
   };
 }
 
-/** Who holds it inside (swallowed it, engulfed it): that one's id, or null. */
+/**
+ * Who holds it inside (swallowed it, engulfed it): that one's id, or null. For the rules' modifiers, which have no run
+ * to ask; with one, the core's holderOf.
+ */
 export function holderId(u) {
   if ( !(Number(u?.conds?.swallowed) > 0 || Number(u?.conds?.engulfed) > 0) ) return null;
   const e = (u.effects ?? []).find(x => !x.onlyVs && x.sourceId && (Number(x.conditions?.swallowed) > 0 || Number(x.conditions?.engulfed) > 0));
@@ -116,7 +119,7 @@ export function holderId(u) {
 export function full(run, u) {
   const most = u.spec?.gullet?.swallowed?.most;
   if ( !Number.isFinite(most) ) return false;
-  return run.units.some(o => o !== u && Number(o.conds?.swallowed) > 0 && holderId(o) === u.id && Number(o.spec?.size ?? 2) >= most);
+  return run.units.some(o => o !== u && Number(o.conds?.swallowed) > 0 && holderOf(run, o)?.id === u.id && Number(o.spec?.size ?? 2) >= most);
 }
 
 /** The chance a total of these parts (times `mult`) comes to at least `n`: the dice convolved, exactly. */

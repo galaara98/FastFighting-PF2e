@@ -6,7 +6,9 @@
  * values, and how long they last ("for 1 round", "for 1 minute", "until the end of its next turn"), falling back to
  * the spell's own duration.
  */
+import { listItems } from "./core.js";
 import { t, conditionLabel } from "./words.js";
+import { UNIT_ROUNDS } from "./afflictions.js";
 
 /** PF2e condition words -> engine conditions (the engine's own: prone, immobilized, incapacitated). */
 const CONDITIONS = {
@@ -30,7 +32,6 @@ const CONDITIONS = {
 const CONDITION_RE = /\b(frightened|slowed|stunned|sickened|clumsy|enfeebled|off-guard|prone|immobilized|restrained|grabbed|paralyzed|fleeing|unconscious|controlled)\b\s*(\d+)?/g;
 
 const DEGREES = ["Critical Failure", "Failure", "Success", "Critical Success"];
-const UNIT_ROUNDS = { round: 1, rounds: 1, minute: 10, minutes: 10, hour: 600, hours: 600 };
 
 export function plain(html) {
   return String(html ?? "")
@@ -70,9 +71,9 @@ export function conditionsIn(text) {
   return out;
 }
 
-// (Unconscious says it all: not "unconscious, helpless, off-guard".)
-const label = conds => (conds.unconscious ? conditionLabel("unconscious")
-  : Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null))).join(", "));
+/** Some conditions in the system's words ("frightened 2, off-guard"); unconscious says it all, not "unconscious, helpless, off-guard". */
+export const conditionsLabel = conds => (conds.unconscious ? conditionLabel("unconscious")
+  : listItems(Object.entries(conds).map(([k, v]) => (k === "incapacitated" ? t("Helpless") : conditionLabel(k === "offGuard" ? "off-guard" : k, v > 1 ? v : null)))));
 
 /** A hold its words say an Escape breaks: "It can attempt to Escape", "until it Escapes (against your spell DC)". */
 const ESCAPES = /\bEscapes?\b/;
@@ -134,7 +135,7 @@ export function parseControl({ description, duration = "" }) {
     // "It can attempt to Escape to remove its immobilized condition": its hold, an Escape away (as a failure's, said so).
     const escape = escapeIn(text, conditions) ?? (degree === 0 && /\bas (?:a )?failure\b/i.test(text) ? escapeIn(texts[1], conditions) : null);
     return {
-      conditions, rounds: Math.max(1, rounds), label: label(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text),
+      conditions, rounds: Math.max(1, rounds), label: conditionsLabel(conditions), endsOnDamage: !!conditions.incapacitated && /unconscious/i.test(text),
       ...(repeat ? { repeatSave: true } : {}), ...(escape ? { escape } : {})
     };
   });
@@ -161,5 +162,5 @@ export function parseCritRider(description) {
   if ( rest === null ) return null;
   const conditions = conditionsIn(rest);
   if ( !Object.keys(conditions).length ) return null;
-  return { kind: "condition", conditions, rounds: durationRounds(rest) ?? 1, label: label(conditions), critOnly: true };
+  return { kind: "condition", conditions, rounds: durationRounds(rest) ?? 1, label: conditionsLabel(conditions), critOnly: true };
 }
