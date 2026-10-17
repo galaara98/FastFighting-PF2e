@@ -11,7 +11,8 @@ import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
-import { readPf2eTurn, pf2eOpening, pf2eDamageCard } from "./read-turn.js";
+import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
+import { strikesOf, strikeId, rollPf2eReaction } from "./reaction-roll.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -114,12 +115,6 @@ function ownNames(actor) {
   }
   return out;
 }
-
-/** A character's weapon Strikes, as the system lists them (the ones it shows). */
-const strikesOf = actor => (actor.system?.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
-
-/** The id of a Strike's action: the `index`th of strikesOf(actor). */
-const strikeId = (actor, s, index) => `${actor.id}.strike.${s.slug ?? index}.${index}`;
 
 function slugOf(item) {
   const slug = item?.slug ?? item?.system?.slug;
@@ -1503,6 +1498,19 @@ export class Pf2eAdapter extends SystemAdapter {
     } catch ( err ) {
       return false;
     }
+  }
+
+  /**
+   * API 19. A reaction's Strike rolled with PF2e's own roller, its cards in the chat (reaction-roll.js): the attack at
+   * the target, and on a hit its damage by type as rolled.
+   */
+  async rollReaction(token, options) {
+    return rollPf2eReaction(token, options);
+  }
+
+  /** API 19. Does a critical Reactive Strike disrupt what this card did: a manipulate action (read-turn.js)? */
+  disruptsAction(message) {
+    return pf2eDisrupts(message);
   }
 
   /** Tied up in a live battle: Restrained, PF2e's own condition (commit.js). */

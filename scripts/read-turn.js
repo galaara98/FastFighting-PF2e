@@ -6,7 +6,8 @@
  *     Diplomacy, Intimidation or Deception roll at it as words (the GM looks: was it talk?).
  *   - Healing (a damage roll of healing): told as healing (the sheets say how much).
  * Each event says whether it's `sure`; what isn't, the GM looks at before the turn is told.
- * A damage roll's card is read here too as it's made (pf2eDamageCard), for the core to apply it or put it before a GM.
+ * A damage roll's card is read here too as it's made (pf2eDamageCard), for the core to apply it or put it before a GM;
+ * and a card that opened a character up to a foe's reaction, for whether a critical hit disrupts it (pf2eDisrupts).
  */
 import { asksSave } from "./abilities.js";
 
@@ -22,7 +23,7 @@ const TALK = { diplomacy: "persuade", intimidation: "intimidate", deception: "de
 const tokenIdOf = ref => (typeof ref === "string" ? ref.split(".").pop() : null);
 
 /** The natural die of a d20 check, where it shows. */
-function naturalOf(roll) {
+export function naturalOf(roll) {
   const d20 = roll?.dice?.find?.(d => d.faces === 20);
   return d20?.total ?? d20?.results?.find?.(r => r.active)?.result ?? null;
 }
@@ -185,6 +186,9 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
   return events;
 }
 
+/** Cards that are no action of their roller's (a save against another's spell carries that spell's traits). */
+const NOT_ACTIONS = new Set(["saving-throw", "flat-check", "initiative"]);
+
 /**
  * A card that lowers the character's guard in a foe's reach (Reactive Strike's other triggers): a ranged attack, or
  * anything with the manipulate trait (a spell cast with its hands, a potion drawn and drunk).
@@ -197,9 +201,24 @@ export function pf2eOpening(message, tokenId) {
   if ( c?.type === "attack-roll" ) {
     return !meleeOf(c);
   }
+  // (A save against another's spell is no action of the saver's, whatever traits that spell has.)
+  if ( NOT_ACTIONS.has(c?.type) ) return false;
   const list = v => (Array.isArray(v) ? v : []);
   const options = [...list(f.origin?.rollOptions), ...list(c?.options)];
-  return options.some(o => /(^|:)trait:manipulate$/.test(String(o)));
+  return options.some(o => typeof o === "string" && !o.startsWith("target:") && /(^|:)trait:manipulate$/.test(o));
+}
+
+/**
+ * Whether a critical Reactive Strike disrupts what a card did: a manipulate action, by its traits, or by its roll options
+ * and its item's (PF2e's trait:manipulate; not the target's). A ranged attack without it isn't one.
+ */
+export function pf2eDisrupts(message) {
+  const f = message?.flags?.pf2e ?? {};
+  const c = f.context;
+  if ( NOT_ACTIONS.has(c?.type) ) return false;
+  if ( listOf(c?.traits).includes("manipulate") ) return true;
+  return [...listOf(f.origin?.rollOptions), ...listOf(c?.options)]
+    .some(o => typeof o === "string" && !o.startsWith("target:") && /(^|:)trait:manipulate$/.test(o));
 }
 
 /** The item a card came from, by its name, where the card says. */

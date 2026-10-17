@@ -54,5 +54,8 @@ describe("a card that lowers the guard in a foe's reach (Reactive Strike)", () =
     expect(pf2eOpening(spell, "tokA")).toBe(true);
     expect(pf2eOpening({ ...spell, flags: { pf2e: { origin: { type: "spell", rollOptions: ["origin:item:trait:concentrate"] } } } }, "tokA")).toBe(false);
     expect(pf2eOpening(spell, "tokB")).toBe(false);
+    // (A save against a foe's manipulate spell is no action of the saver's: it lowers no guard.)
+    const save = { speaker: { token: "tokA" }, flags: { pf2e: { context: { type: "saving-throw", options: ["item:trait:manipulate"] }, origin: { rollOptions: ["origin:item:trait:manipulate"] } } } };
+    expect(pf2eOpening(save, "tokA")).toBe(false);
   });
 });
