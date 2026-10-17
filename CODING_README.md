@@ -79,7 +79,7 @@ Spell Effect items are fetched once a session (`EFFECT_CACHE`); a summon spell's
 | `hands.js` | Free hands each action needs. |
 | `gullet.js` | Swallow Whole and Engulf. |
 | `remedies.js` | Assisted recovery, First Aid on a bleed, retching. |
-| `traits.js` | Personality defaults (`derivePf2eTraits`, `ruleLeans`, `creatureKindOf`). |
+| `traits.js` | Personality defaults (`derivePf2eTraits`, `ruleLeans`, `creatureKindOf`, `animalisticOf`). |
 | `auto.js` | Playstyle hints and tactics answers for "set up by itself" (`pf2eHints`, `pf2eTactics`). |
 | `leadership.js` | `rankLeaders`. |
 | `commit.js` | Writing a live battle's turn (`commitPf2eChanges` and the undo record's shape), surrender, concessions, tied-up creatures. |
@@ -98,7 +98,7 @@ Features are found by slug (the same in every language). Where each lives:
 - **maneuvers.js:** `strikeMove` reads `push`, `improved-push`, `push-or-pull`, `pull` and their `-N-feet` forms.
 - **gullet.js:** `GULLETS`: `swallow-whole` to swallowed, `engulf` to engulfed.
 - **class-actions.js:** `vicious-swing`, `power-attack`, `double-slice`, `sudden-charge`, `flurry-of-blows`; `hunt-prey` with `flurry` or `precision`.
-- **traits.js:** `reactive-strike` or `attack-of-opportunity` set `flags.reactiveStrike`; `CLASS_LEANS`, `ANCESTRY_LEANS`, `BACKGROUND_LEANS`, `SKILL_LEANS`, `ITEM_LEANS`, `SELFISH_BY_TRAIT`, `LOYAL_BY_TRAIT`, `SANCTIFIED`.
+- **traits.js:** `animalisticOf` gives the core's `spec.animalistic` (an NPC that fights as an animal does): the `animal` trait, or `beast` with no language, else Intelligence +0 or lower with no language; never `mindless`, never a character. `reactive-strike` or `attack-of-opportunity` set `flags.reactiveStrike`; `CLASS_LEANS`, `ANCESTRY_LEANS`, `BACKGROUND_LEANS`, `SKILL_LEANS`, `ITEM_LEANS`, `SELFISH_BY_TRAIT`, `LOYAL_BY_TRAIT`, `SANCTIFIED`.
 - **auto.js:** `CLASSES`, `ANCESTRIES`, `TRAITS` (playstyle hints); `CLASS_STYLE`, `SUBCLASS_STYLE`, `CASTERS`; `GUARD_SLUGS`, `SELF_GUARD_SLUGS`, `RESCUE_SLUGS`; `CONSUMABLE_FEATS`.
 - **read-turn.js:** `MANEUVERS` (action slugs to the core's maneuvers; `create-a-diversion` is distract) and `TALK`.
 - **check-roll.js:** `ACTIONS` and `PURPOSES` (PF2e's action slugs: `trip` ... `hide`, `escape`, `steal`, `administer-first-aid`, `tumble-through`), `ITEM_SKILLS` (`bon-mot`, `battle-medicine`, `swallow-whole`), and the incapacitation trait; `edges.js` `AID_SKILLS`.

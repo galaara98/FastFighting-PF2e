@@ -7,7 +7,7 @@
 import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart, part, englishName, englishDescription, plainText } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction, spellAffliction } from "./afflictions.js";
-import { derivePf2eTraits, creatureKindOf } from "./traits.js";
+import { derivePf2eTraits, creatureKindOf, animalisticOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
@@ -426,6 +426,8 @@ export class Pf2eAdapter extends SystemAdapter {
       // What its Swallow Whole or Engulf does to whoever is inside it (gullet.js; rules.conditionHarm and cutFree).
       gullet: gulletsOf(actions),
       creatureTraits: traits,
+      // (Whether it fights as an animal does: the core's behavior/animal.js.)
+      animalistic: !hazard && actor.type !== "character" && animalisticOf({ traits, int: actor.system.abilities?.int?.mod ?? 0, languages: [...(actor.system.details?.languages?.value ?? [])] }),
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
       social: hazard ? { mindless: true, languages: [], pitches: {}, resist: {} } : this.#social(actor, level, traits),

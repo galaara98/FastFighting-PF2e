@@ -97,6 +97,20 @@ const CREATURE_TYPES = new Set(["aberration", "animal", "astral", "beast", "cele
   "ethereal", "fey", "fiend", "fungus", "giant", "humanoid", "monitor", "ooze", "petitioner", "plant", "spirit", "time", "undead"]);
 
 /**
+ * Does it fight as an animal (the core's spec.animalistic)? PF2e's own traits say so first: an animal always; a beast
+ * with no language (a talking sphinx is no animal). Else a creature of animal wits, Intelligence +0 or lower, with no
+ * language. Never a mindless one: a zombie or a golem is mindless, not wild.
+ * @param {{traits?: string[], int?: number, languages?: string[]}} d
+ */
+export function animalisticOf({ traits = [], int = 0, languages = [] } = {}) {
+  if ( traits.includes("mindless") ) return false;
+  const speaks = languages.length > 0;
+  if ( traits.includes("animal") ) return true;
+  if ( traits.includes("beast") ) return !speaks;
+  return !speaks && Number(int) <= 0;
+}
+
+/**
  * What kind of creature, for grouping neutrals: its ancestry if it has one (goblin, human, kobold), else its creature
  * types (animal; dragon and elemental).
  * @param {string[]} traits
