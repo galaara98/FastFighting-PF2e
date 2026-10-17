@@ -6,7 +6,9 @@
  *     Diplomacy, Intimidation or Deception roll at it as words (the GM looks: was it talk?).
  *   - Healing (a damage roll of healing): told as healing (the sheets say how much).
  * Each event says whether it's `sure`; what isn't, the GM looks at before the turn is told.
+ * A damage roll's card is read here too as it's made (pf2eDamageCard), for the core to apply it or put it before a GM.
  */
+import { asksSave } from "./abilities.js";
 
 /** A PF2e degree of success as the engine counts it (0 critical failure ... 3 critical success). */
 const DEGREE = { criticalFailure: 0, failure: 1, success: 2, criticalSuccess: 3 };
@@ -32,7 +34,83 @@ function meleeOf(c) {
 }
 
 /** A card's list, where it is one (a card's data is its author's to write). */
-const listOf = v => (Array.isArray(v) ? v : []);
+export const listOf = v => (Array.isArray(v) ? v : []);
+
+/** The token a card was rolled at, by its uuid (PF2e writes it in the card's context, and again in its flags). */
+const targetOf = m => m.flags?.pf2e?.context?.target?.token ?? m.flags?.pf2e?.target?.token ?? null;
+
+/** A damage roll's kinds (damage, healing), from the roll or from each of its parts. */
+function kindsOf(roll) {
+  if ( roll?.kinds instanceof Set ) return roll.kinds;
+  return new Set(listOf(roll?.instances).flatMap(i => (i?.kinds instanceof Set ? [...i.kinds] : [])));
+}
+
+/**
+ * Whether a damage roll heals: healing alone, or harm and healing both (Heal, Harm) at a creature its harm doesn't
+ * touch (PF2e's isAffectedBy: vitality hurts only the undead, void only the living). At no one known: it heals.
+ */
+export function heals(roll, actor = null) {
+  const kinds = kindsOf(roll);
+  if ( !kinds.has("healing") ) return false;
+  if ( !kinds.has("damage") || typeof actor?.isAffectedBy !== "function" ) return true;
+  const types = globalThis.CONFIG?.PF2E?.damageTypes ?? {};
+  return !listOf(roll.instances).some(i => i?.kinds?.has?.("damage") && Object.hasOwn(types, String(i.type)) && actor.isAffectedBy(String(i.type)));
+}
+
+/** A card's first roll, where it's PF2e's damage roll (what its Apply Damage buttons take), else null. */
+export function damageRollOf(message) {
+  const roll = message?.rolls?.[0] ?? null;
+  const DamageRoll = globalThis.CONFIG?.Dice?.rolls?.find?.(r => r?.name === "DamageRoll");
+  return roll && (DamageRoll ? roll instanceof DamageRoll : typeof roll.alter === "function") ? roll : null;
+}
+
+/** The item a card came from (PF2e's own reading of it: a spell as it was cast), or null. */
+export function itemOf(message) {
+  try {
+    return message.item ?? null;
+  } catch ( err ) {
+    return null;
+  }
+}
+
+/** A spell's defense, by its roll options (PF2e's item:defense:...): a save against its damage. */
+const SAVE_OPTION = /^item:defense:(?:basic|fortitude|reflex|will)$/;
+/** Area Fire and Auto-Fire, by their damage's domains: a basic Reflex save. */
+const SAVE_DOMAINS = new Set(["area-fire-damage", "auto-fire-damage"]);
+
+/**
+ * Whether a damage roll's damage waits on a save its target rolls: a spell with a save, Area Fire or Auto-Fire, or an
+ * effect (a feat's, an impulse's, a consumable's) whose text asks for one. Not an attack's, nor one whose degree is
+ * known already (an affliction's stage, after its save).
+ */
+function withSave(message) {
+  const c = message.flags.pf2e.context;
+  if ( c.sourceType !== "save" || c.outcome ) return false;
+  if ( listOf(c.options).some(o => SAVE_OPTION.test(o)) || listOf(c.domains).some(d => SAVE_DOMAINS.has(d)) ) return true;
+  const item = itemOf(message);
+  return !!item && item.type !== "spell" && asksSave(item.system?.description?.value);
+}
+
+/**
+ * A damage roll's card (context type "damage-roll"): {amount (the roll's total), kind ("damage" or "healing"), targets
+ * (the token it was rolled at, by id), save}; null for any other card.
+ * @param {ChatMessage} message
+ */
+export function pf2eDamageCard(message) {
+  const c = message?.flags?.pf2e?.context;
+  if ( c?.type !== "damage-roll" ) return null;
+  const roll = damageRollOf(message);
+  const amount = Number(roll?.total);
+  if ( !roll || !Number.isFinite(amount) ) return null;
+  const at = tokenIdOf(targetOf(message));
+  let actor = null;
+  try {
+    actor = message.target?.actor ?? null;
+  } catch ( err ) {
+    actor = null;
+  }
+  return { amount, kind: heals(roll, actor) ? "healing" : "damage", targets: at ? [at] : [], save: withSave(message) };
+}
 
 /** The action a check was made for, by its slug (from its roll options: "action:demoralize"). */
 function actionOf(context) {
@@ -58,7 +136,7 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
     try {
       const c = m.flags?.pf2e?.context;
       if ( !c || !mine(m) ) continue;
-      const at = tokenIdOf(c.target?.token);
+      const at = tokenIdOf(targetOf(m));
       const target = at && Object.hasOwn(ids, at) ? ids[at] : null;
       const roll = m.rolls?.[0] ?? null;
       const degree = Object.hasOwn(DEGREE, String(c.outcome)) ? DEGREE[c.outcome] : null;
@@ -72,8 +150,7 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
         });
       } else if ( c.type === "damage-roll" ) {
         const total = Number(roll?.total) || 0;
-        const healing = roll?.kinds?.has?.("healing") || (roll?.instances ?? []).every?.(i => i.kinds?.has?.("healing")) && (roll?.instances ?? []).length > 0;
-        if ( healing ) {
+        if ( heals(roll) ) {
           events.push({ type: "heal", targetId: target, action: itemName(m) ?? "", amount: total, sure: !!target });
           continue;
         }

@@ -1,12 +1,15 @@
 /**
- * PF2e: write a live battle's turn onto a token's actor (commitPf2eChanges), returning an undo record.
+ * PF2e: write a live battle's turn onto a token's actor (commitPf2eChanges), returning an undo record; and a player's
+ * damage card applied through PF2e's own damage application (applyPf2eDamageCard).
  *
  * Undo record shape (consumed by foundry/make-it-so.js):
  *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
  *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
+ *   A damage card's also: createdEffects: [id], statusesBefore: [id], combatant: {uuid, defeated}.
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, undoRecord } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord } from "./core.js";
 import { t, traitName, conditionLabel } from "./words.js";
+import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
 const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
@@ -344,6 +347,127 @@ export async function commitPf2eBound(tokenDoc, bound) {
     await actor.deleteEmbeddedDocuments("Item", held.map(c => c.id));
   }
   return undo.createdItems.length || undo.deletedItems.length ? undo : null;
+}
+
+/**
+ * A live battle: a player's damage card applied to one token as PF2e's own card applies it (Apply Damage, Half,
+ * Double; Healing for a heal), `multiplier` times. PF2e doesn't export that (applyDamageFromMessage, which applies to
+ * the selected tokens), so this is it for one token; PF2e's actor.applyDamage does the rest: immunities, weaknesses
+ * and resistances, temporary HP, a raised shield (the card's Shield Block toggle), persistent damage, its damage-taken
+ * card, and death at 0 HP by its Mark NPCs Dead at 0 HP setting. Returns an undo record: everything as it was.
+ * @param {ChatMessage} message
+ * @param {TokenDocument} tokenDoc
+ */
+export async function applyPf2eDamageCard(message, tokenDoc, { multiplier = 1 } = {}) {
+  const actor = tokenDoc?.actor;
+  const roll = damageRollOf(message);
+  multiplier = Number(multiplier);
+  if ( !actor || !roll || !(multiplier > 0) ) return [];
+  const context = message.flags?.pf2e?.context ?? {};
+  const healing = heals(roll, actor);
+  const item = itemOf(message);
+  const origin = message.actor ?? null;
+  const options = listOf(context.options).filter(o => typeof o === "string");
+  // (As PF2e has them: the card's own options, the origin's as seen from the target, the item's for an effect's damage.)
+  const originOptions = options.filter(o => o.startsWith("self:")).map(o => o.replace(/^self\b/, "origin"));
+  const itemOptions = item?.isOfType?.("affliction", "condition", "effect") ? item.getRollOptions("item") : [];
+  if ( actor.alliance && origin ) options.push(`origin:${actor.alliance === origin.alliance ? "ally" : "enemy"}`);
+  if ( !options.some(o => o.startsWith("target")) ) options.push(...actor.getSelfRollOptions("target"));
+  const ephemeral = healing ? [] : await ephemeralEffects(origin, actor, item, options);
+  const clone = actor.getContextualClone(originOptions, ephemeral);
+  const rollOptions = new Set([...options.filter(o => !/^(?:self|target)(?::|$)/.test(o)), ...itemOptions, ...originOptions, ...clone.getSelfRollOptions()]);
+  const undo = undoRecord(tokenDoc, actor);
+  const before = sheetNow(tokenDoc);
+  await clone.applyDamage({
+    damage: healing ? -multiplier * roll.total : roll.alter(multiplier, 0), token: tokenDoc, item, skipIWR: healing, rollOptions,
+    shieldBlockRequest: !!globalThis.CONFIG?.PF2E?.chatDamageButtonShieldToggle, outcome: context.outcome
+  });
+  shieldBlockOff(message.id);
+  sinceThen(before, tokenDoc, undo);
+  return [undo];
+}
+
+/**
+ * What the one dealing the damage lays on its target as it lands (its EphemeralEffect rule elements on
+ * damage-received), for the target's copy only: PF2e's extractEphemeralEffects, which it doesn't export.
+ */
+async function ephemeralEffects(origin, target, item, options) {
+  if ( !origin || !target ) return [];
+  const domains = ["damage-received"];
+  const test = [...options, ...origin.getRollOptions(domains), ...target.getSelfRollOptions("target")];
+  const resolvables = item ? (item.isOfType?.("spell") ? { spell: item } : { weapon: item }) : {};
+  const makers = domains.flatMap(d => origin.synthetics?.ephemeralEffects?.[d]?.target ?? []);
+  const effects = (await Promise.all(makers.map(make => make({ test, resolvables })))).filter(Boolean);
+  for ( const e of effects ) {
+    if ( e.type !== "effect" ) continue;
+    e.system.context = { origin: { actor: origin.uuid, token: null, item: null, spellcasting: null, rollOptions: [] }, target: { actor: target.uuid, token: null }, roll: null };
+    e.system.duration = { value: -1, unit: "unlimited", expiry: null, sustained: false };
+  }
+  return effects;
+}
+
+/** PF2e's Shield Block toggle, used by the damage it was on for: off again, as PF2e's own buttons leave it. */
+function shieldBlockOff(messageId) {
+  const config = globalThis.CONFIG?.PF2E;
+  if ( config ) config.chatDamageButtonShieldToggle = false;
+  const buttons = globalThis.document?.querySelectorAll?.(`li.chat-message[data-message-id="${messageId}"] button[data-action=shieldBlock]`) ?? [];
+  for ( const b of buttons ) b.classList.remove("shield-activated");
+}
+
+/** Every value in an object by its path ("system.attributes.hp.value"); a list is one value. */
+function leaves(obj, at, out = {}) {
+  for ( const [k, v] of Object.entries(obj ?? {}) ) {
+    const path = `${at}.${k}`;
+    if ( v && typeof v === "object" && !Array.isArray(v) ) leaves(v, path, out);
+    else out[path] = v;
+  }
+  return out;
+}
+
+/** What of `was` is no longer so in `now` (paths to values): each such path, as it was. */
+function asWas(was, now) {
+  return Object.fromEntries(Object.entries(was).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(now[k])));
+}
+
+/** A copy of a document's system data, as it is now. */
+const systemNow = doc => JSON.parse(JSON.stringify(doc?._source?.system ?? {}));
+
+/** What a damage card can change on a token's sheet, as it is now: its data, items, effects, death and the tracker's mark. */
+function sheetNow(tokenDoc) {
+  const actor = tokenDoc.actor;
+  const combatant = tokenDoc.combatant ?? null;
+  return {
+    system: leaves(systemNow(actor), "system"),
+    items: new Map(Array.from(actor.items ?? []).map(i => [i.id, i.toObject()])),
+    effects: new Set(Array.from(actor.effects ?? []).map(e => e.id)),
+    dead: statusesOf(actor).has("dead"),
+    combatant: combatant ? { uuid: combatant.uuid, defeated: !!combatant.defeated } : null
+  };
+}
+
+/**
+ * Whatever a damage card changed on a token's sheet since `was`, into its undo record as it was: its HP, temporary HP
+ * and Stamina (any of its data), its items' (a shield's HP, a condition's value), the items it made (persistent damage)
+ * or took off, the effects it made (dead), and the tracker's Defeated. Dead again, if it was: PF2e lifts death from
+ * one healed after the fact (unawaited), and statusesBefore puts back only what it lays.
+ */
+function sinceThen(was, tokenDoc, undo) {
+  const actor = tokenDoc.actor;
+  Object.assign(undo.actorUpdate, asWas(was.system, leaves(systemNow(actor), "system")));
+  const items = new Map(Array.from(actor.items ?? []).map(i => [i.id, i]));
+  for ( const [id, data] of was.items ) {
+    const item = items.get(id);
+    if ( !item ) {
+      undo.deletedItems.push(data);
+      continue;
+    }
+    const update = asWas(leaves(data.system, "system"), leaves(systemNow(item), "system"));
+    if ( Object.keys(update).length ) undo.itemUpdates.push({ id, update });
+  }
+  for ( const id of items.keys() ) if ( !was.items.has(id) ) undo.createdItems.push(id);
+  for ( const e of Array.from(actor.effects ?? []) ) if ( !was.effects.has(e.id) ) undo.createdEffects.push(e.id);
+  if ( was.dead ) undo.statuses.push({ id: "dead", active: true, overlay: true });
+  if ( was.combatant ) undo.combatant = was.combatant;
 }
 
 /** Coin items as they are now, to work out what a coin transfer changed. */

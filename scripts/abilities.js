@@ -21,6 +21,12 @@ export function checkParams(inside) {
   return out;
 }
 
+/** Whether a text asks for a save at all: an @Check of Fortitude, Reflex or Will, whatever its DC (a class DC's too). */
+export function asksSave(html) {
+  for ( const m of String(html ?? "").matchAll(/@Check\[([^\]]+)\]/gi) ) if ( Object.hasOwn(SAVES, checkParams(m[1]).type ?? "") ) return true;
+  return false;
+}
+
 /** The first save an ability's text asks for: {type, dc, basic} or null. */
 export function saveIn(html) {
   const text = String(html ?? "");

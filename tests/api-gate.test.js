@@ -34,15 +34,17 @@ describe("the core's API major, as this helper sees it", () => {
     expect(said.error).toEqual([game.i18n.localize("FFPF2E.CoreTooOld")]);
   });
 
-  test("one it knows: it registers, and says nothing", async () => {
-    const { registered, said } = await start(18);
-    expect(registered).toHaveLength(1);
-    expect([...said.error, ...said.warn]).toEqual([]);
+  test("one it knows (18, 19): it registers, and says nothing", async () => {
+    for ( const major of [18, 19] ) {
+      const { registered, said } = await start(major);
+      expect(registered).toHaveLength(1);
+      expect([...said.error, ...said.warn]).toEqual([]);
+    }
   });
 
   test("a newer one: it registers, and the GM is told it hasn't been tried with that core", async () => {
-    const { registered, said } = await start(19);
+    const { registered, said } = await start(20);
     expect(registered).toHaveLength(1);
-    expect(said.warn).toEqual([game.i18n.format("FFPF2E.CoreUntested", { major: 19 })]);
+    expect(said.warn).toEqual([game.i18n.format("FFPF2E.CoreUntested", { major: 20 })]);
   });
 });

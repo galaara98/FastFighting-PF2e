@@ -10,8 +10,8 @@ import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
-import { readPf2eTurn, pf2eOpening } from "./read-turn.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
+import { readPf2eTurn, pf2eOpening, pf2eDamageCard } from "./read-turn.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1471,6 +1471,26 @@ export class Pf2eAdapter extends SystemAdapter {
   /** A player's turn in a live battle, read from the cards PF2e made for it (read-turn.js). */
   readTurn(messages, context) {
     return readPf2eTurn(messages, context);
+  }
+
+  /** API 19. A player's damage card (read-turn.js): its total, damage or healing, the token it's at, a save first. */
+  damageCard(message) {
+    return pf2eDamageCard(message);
+  }
+
+  /** API 19. A damage card applied to a token as PF2e's own card applies it (commit.js), with its undo record. */
+  async applyDamageCard(message, token, options) {
+    return applyPf2eDamageCard(message, token, options);
+  }
+
+  /**
+   * API 19. None: PF2e applies no one's damage by itself (its automation settings are rules-based vision, IWR, removing
+   * expired effects, flanking, encumbrance, lootable NPCs, reach and NPCs dead at 0 HP; its Apply Damage buttons are
+   * clicked by hand). A module's setting is named here only once its key and meaning are read from the module's own
+   * source; none has been.
+   */
+  appliesPlayerDamage() {
+    return null;
   }
 
   /** Tied up in a live battle: Restrained, PF2e's own condition (commit.js). */
