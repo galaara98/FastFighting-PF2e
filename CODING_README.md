@@ -27,7 +27,7 @@ Spell Effect items are fetched once a session (`EFFECT_CACHE`); a summon spell's
 
 ## Rules keys (scripts/rules.js)
 
-`pf2eRules` is pure: no Foundry globals. Each key has a doc comment; by concern:
+`pf2eRules` is pure: no Foundry globals. Most keys have a doc comment; by concern:
 
 | Concern | Keys |
 | --- | --- |
