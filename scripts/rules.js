@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies } from "./core.js";
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
@@ -198,6 +198,21 @@ export const pf2eRules = {
   tauntCost: { actions: 1 },
   /** A creature keeping a low profile on the way in Avoids Notice: Stealth for initiative, when it's better. */
   stealthInitiative: true,
+  /**
+   * Surprise as PF2e has it (the planner's Follow System): no surprise round and no one surprised. Those sneaking up as
+   * it starts (hidden tokens, Avoiding Notice) roll Stealth for initiative; one whose Stealth beats the Perception DC of
+   * every foe starts unnoticed, hidden: its first blow finds its target off-guard, and then it's seen.
+   */
+  surprise(run) {
+    const sneaking = run.units.filter(u => u.spec.hidden);
+    if ( !sneaking.length ) return null;
+    const hidden = sneaking.filter(u => {
+      const foes = run.units.filter(o => o !== u && areEnemies(run, u, o));
+      const dc = Math.max(0, ...foes.map(o => 10 + (Number(o.spec.perception ?? o.spec.initiative?.mod) || 0)));
+      return run.rng.die(20) + (Number(u.spec.initiative?.stealth) || 0) >= dc;
+    }).map(u => u.id);
+    return { stealthSides: [...new Set(sneaking.map(u => u.side))], hidden };
+  },
   /** A nonlethal attack (fists, a sap; the rules' -2 for a lethal weapon isn't played) knocks a foe out instead. */
   pullsBlow(u, action) {
     return (action?.traits ?? []).includes("nonlethal");
