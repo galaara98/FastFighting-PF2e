@@ -2,7 +2,7 @@
 
 > **AI use:** This module used AI in its creation.
 > - **Programming:** I am a skilled programmer by profession, but AI was used heavily as a co-pilot.
-> - **Strings:** ALL initial strings were created by AI. An AI-made Spanish translation was used to test localization and has since been removed.
+> - **Strings:** ALL initial strings were proposed by a LLM to get the concepts out, ALL strings were  tracked to make sure they were re-written (for simple or ttrpg/game specific phrases, approved by) a native speaker.
 
 Pathfinder Second Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT battle estimator, storyteller and resolver.
 
