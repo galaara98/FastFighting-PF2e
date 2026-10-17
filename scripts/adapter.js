@@ -143,6 +143,11 @@ export function selfOnlySpell(system) {
 }
 
 /** Rough number of enemies caught by an area. */
+/** A spell's area as the core takes it: how many it catches, and its shape and size where pf2e gives them. */
+function areaSpec(area, targets) {
+  return area?.type ? { targets, shape: area.type === "cylinder" ? "burst" : area.type, feet: Number(area.value) || 5 } : { targets };
+}
+
 function areaTargets(area, targetText) {
   if ( /1 or 2 creatures/i.test(targetText ?? "") ) return 2;
   const n = /up to (\d+) creatures/i.exec(targetText ?? "");
@@ -811,7 +816,7 @@ export class Pf2eAdapter extends SystemAdapter {
             action.onHit = escapeAt(control, spellDC);
           }
           const targets = areaTargets(area, spell.system.target?.value);
-          if ( targets > 1 ) action.area = { targets };
+          if ( targets > 1 ) action.area = areaSpec(area, targets);
           out.push(action);
           continue;
         }
@@ -828,7 +833,7 @@ export class Pf2eAdapter extends SystemAdapter {
           action.range = null;
         }
         const targets = areaTargets(area, spell.system.target?.value);
-        if ( targets > 1 ) action.area = { targets };
+        if ( targets > 1 ) action.area = areaSpec(area, targets);
         if ( spell.isAttack ) {
           action.kind = "spell-attack";
           action.bonus = stat.check?.mod ?? 0;
@@ -925,7 +930,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const effectRef = uuids.length ? { uuids: [...new Set(uuids)] } : undefined;
       if ( save ) {
         return { kind: "control", ...reachFoes, save: { type: save.statistic, dc: stat.dc?.value ?? 10 + (spell.actor?.level ?? 0), basic: false },
-          onSave: [outcome, outcome, null, null], area: many > 1 ? { targets: many } : undefined, effectRef };
+          onSave: [outcome, outcome, null, null], area: many > 1 ? areaSpec(area, many) : undefined, effectRef };
       }
       // Good for one roll (Guidance: "one attack roll, Perception check, saving throw, or skill check"; Sure Strike:
       // "the next time you make an attack roll").
@@ -936,7 +941,7 @@ export class Pf2eAdapter extends SystemAdapter {
     // Conditions on enemies, no save (Dirge of Doom: "Enemies within the area are Frightened 1").
     const conditions = !save && !spell.isAttack && /\benem(?:y|ies)\b/i.test(text) ? conditionsIn(text) : {};
     if ( Object.keys(conditions).length ) {
-      return { kind: "control", auto: true, ...reachFoes, area: many > 1 ? { targets: many } : undefined,
+      return { kind: "control", auto: true, ...reachFoes, area: many > 1 ? areaSpec(area, many) : undefined,
         outcome: { conditions, rounds: Math.max(rounds, conditions.frightened ?? 1), label: conditionsLabel(conditions) } };
     }
     return null;
@@ -1492,6 +1497,12 @@ export class Pf2eAdapter extends SystemAdapter {
    * Do token nameplates decide whether players learn an NPC's name? pf2e's own Tokens Determine NPC Name Visibility:
    * on, its cards hide an NPC's name its token doesn't show, and a live battle's story does the same.
    */
+  /** An area on the map as pf2e draws its own (its shapeDataFromEffectArea): a cone a quarter turn wide. */
+  areaShape(data) {
+    if ( data?.type === "cone" ) return { ...data, angle: 90 };
+    return data ?? null;
+  }
+
   namesFollowNameplates() {
     try {
       return !!game.settings.get("pf2e", "metagame_tokenSetsNameVisibility");

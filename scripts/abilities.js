@@ -148,7 +148,7 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
     id, name, kind: damage.length ? "save" : "control", cost: Math.max(1, Math.min(3, Number(actions) || 1)), traits,
     save, ability: true,
     ...(feet ? { range: { increment: feet, max: feet, noPenalty: true }, melee: false } : { melee: true, reach: 5 }),
-    ...(area ? { area: { targets: areaFoes(area) } } : {}),
+    ...(area ? { area: { targets: areaFoes(area), shape: area.shape, feet: area.feet } } : {}),
     ...(cooldown ? { uses: 1, cooldown } : {})
   };
   if ( damage.length ) {
