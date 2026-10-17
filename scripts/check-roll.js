@@ -13,14 +13,14 @@
  *    or an ability uses (Bon Mot, Battle Medicine, Swallow Whole: with that item), Medicine to heal, or the skill the
  *    spec names (by slug, or the label its sheet shows; talk by the core's kind of pitch). Against a target's defense
  *    (`against`), the target goes with it where its token is drawn, so the card says whose DC it was.
- *  - The multiple attack penalty on a check with the attack trait (a maneuver, an Escape, Swallow Whole): PF2e's own,
- *    for the attacks the token made before it this turn as this client rolled them (strike-roll.js attacksSoFar: the
- *    core counts a Strike's, not a check's). Not counted: a Strike the engine rolled itself.
- * Null where it can't tell what to roll (a spell check: PF2e has none) or PF2e rolled nothing: the engine rolls it.
- * {gm: true} for an Aid whose best way is a Strike: PF2e's Aid rolls a skill, and the check that aids is the GM's call.
+ *  - The multiple attack penalty, on a check with the attack trait (a maneuver, Swallow Whole): for the core's
+ *    `attackNumber`, the attacks before it as the engine counted them for its own penalty (none: null). An Escape takes
+ *    none, as the engine's doesn't (PF2e's has the attack trait).
+ * Null where it can't tell what to roll (a spell check: PF2e has none; an Aid only a Strike would make: PF2e's Aid
+ * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
 import { naturalOf } from "./read-turn.js";
-import { click, strikesOf, attacksSoFar, noteAttack } from "./strike-roll.js";
+import { click, strikesOf } from "./strike-roll.js";
 import { AID_SKILLS } from "./edges.js";
 
 /** PF2e's saves, by the keys the engine may name them with. */
@@ -29,7 +29,10 @@ const SAVES = Object.freeze({ __proto__: null, fortitude: "fortitude", fort: "fo
 /** The adapter's actions PF2e has an action of its own for (game.pf2e.actions), by slug: the action's id ends in it. */
 const ACTIONS = new Set(["trip", "grapple", "shove", "disarm", "reposition", "demoralize", "feint", "create-a-diversion", "hide"]);
 
-/** What a check is for, where PF2e has an action for it: [its slug, its variant]. */
+/**
+ * What a check is for, where PF2e has an action for it: [its slug, its variant]. First aid on a bleed, Administer First
+ * Aid's other variant: its action id ends in it (rules.js stopBleeding).
+ */
 const PURPOSES = Object.freeze({ __proto__: null, escape: ["escape"], theft: ["steal"], firstAid: ["administer-first-aid", "stabilize"] });
 
 /** The skill a feat or an ability rolls, by its slug: Bon Mot, Battle Medicine, Swallow Whole (gullet.js). */
@@ -104,21 +107,16 @@ function statisticOf(actor, name) {
 }
 
 /**
- * Aid as the adapter weighs it (edges.js): its best skill of AID_SKILLS, as PF2e's Aid rolls it. A Strike better than
- * any is a GM's call ({gm: true}): PF2e's Aid rolls a skill, and the check that aids is the GM's to say. Null with
- * neither.
+ * Aid as the adapter weighs it (edges.js): its best skill of AID_SKILLS, as PF2e's Aid rolls it. Null with none, or a
+ * Strike better than any (PF2e's Aid rolls a skill): the engine rolls it, as it weighed it.
  */
 function aidWay(actor) {
   const skill = AID_SKILLS.map(s => actor.skills?.[s]).filter(s => Number.isFinite(s?.mod)).reduce((a, b) => (!a || b.mod > a.mod ? b : a), null);
   const strike = Math.max(...strikesOf(actor).map(s => Number(s.totalModifier)).filter(Number.isFinite));
-  if ( strike > (skill?.mod ?? -Infinity) ) return { gm: true };
-  return skill ? { action: "aid", statistic: skill.slug } : null;
+  return skill && skill.mod >= strike ? { action: "aid", statistic: skill.slug } : null;
 }
 
-/**
- * What a check is rolled with: PF2e's action ({action, variant, statistic}), a statistic ({statistic, item}), a GM's
- * call ({gm: true}), or null (it can't tell).
- */
+/** What a check is rolled with: PF2e's action ({action, variant, statistic}), a statistic ({statistic, item}), or null. */
 function checkFor(actor, { purpose, skill, action }) {
   const id = typeof action?.id === "string" ? action.id : "";
   const last = id.split(".").pop();
@@ -127,7 +125,10 @@ function checkFor(actor, { purpose, skill, action }) {
   const item = itemIn(actor, id);
   const own = ITEM_SKILLS[slugOf(item)];
   if ( own && actor.skills?.[own] ) return { statistic: actor.skills[own], item };
-  if ( PURPOSES[purpose] ) return { action: PURPOSES[purpose][0], variant: PURPOSES[purpose][1] ?? null };
+  if ( PURPOSES[purpose] ) {
+    const [slug, variant = null] = PURPOSES[purpose];
+    return { action: slug, variant: purpose === "firstAid" && last === "stop-bleeding" ? last : variant };
+  }
   // (PF2e has no spell check.)
   if ( purpose === "cast" ) return null;
   // (Talk names its skill by the label the sheet shows, or the kind of pitch; with no action, the kind is its name.)
@@ -138,59 +139,51 @@ function checkFor(actor, { purpose, skill, action }) {
 }
 
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
-async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, secret }) {
+async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, attacks, secret }) {
   const pf2e = game.pf2e?.actions?.get?.(slug);
   if ( typeof pf2e?.use !== "function" ) return null;
-  const attack = (pf2e.traits ?? []).includes("attack");
-  const before = attack ? attacksSoFar(token) : 0;
   const results = await pf2e.use({
     actors: [token.actor], event: click("showCheckDialogs", secret), difficultyClass: dc,
     ...(variant ? { variant } : {}), ...(statistic ? { statistic } : {}), ...(at ? { target: at.object } : {}),
-    // (PF2e's -5 an attack before it, no further than the third.)
-    ...(before > 0 ? { multipleAttackPenalty: before } : {})
+    // (PF2e's -5 an attack before it, no further than -10, as the engine's maneuvers take it.)
+    ...(attacks > 0 ? { multipleAttackPenalty: attacks } : {})
   });
   const done = (Array.isArray(results) ? results : []).find(r => r?.actor === token.actor) ?? null;
-  const out = rolled(done?.roll);
-  if ( out && attack ) noteAttack(token, done.message?.id ?? null);
-  return out;
+  return rolled(done?.roll);
 }
 
 /** A skill or Perception, as its sheet rolls it; a feat's or an ability's with that item (its name, traits and action). */
-async function rollStatistic(token, { statistic, item = null }, { dc, at, secret }) {
+async function rollStatistic(token, { statistic, item = null }, { dc, at, attacks, secret }) {
   const traits = traitsOf(item);
-  const attack = traits.includes("attack");
   const slug = slugOf(item);
-  let card = null;
   const roll = await statistic.roll({
     dc, skipDialog: true, ...mode(secret), ...(at ? { target: at.actor } : {}),
     ...(item ? { item, title: item.name, traits, extraRollOptions: slug ? [`action:${slug}`] : [] } : {}),
-    // (PF2e's multiple attack penalty for that item: an agile one's -4.)
-    ...(attack ? { attackNumber: attacksSoFar(token) + 1 } : {}),
-    callback: (_roll, _outcome, message) => {
-      card = message?.id ?? null;
-    }
+    // (PF2e's multiple attack penalty for that item, by its attack number.)
+    ...(item && attacks !== null ? { attackNumber: attacks + 1 } : {})
   });
-  const out = rolled(roll);
-  if ( out && attack ) noteAttack(token, card);
-  return out;
+  return rolled(roll);
 }
 
 /**
  * A check rolled with PF2e's own roller: PF2e's action, or the skill, against the engine's DC.
  * @param {TokenDocument} token   the one rolling it
- * @param {object} options        {purpose; skill: the spec's, if it names one; against: the target's defense; dc;
- *                                 action: {id, name}; target: a TokenDocument, or null; secret: for the GMs only}
- * @returns {Promise<object|null>} {degree, natural, total}; {gm: true}; or null (the engine rolls it)
+ * @param {object} options        {purpose; skill: the spec's, if it names one; against: the target's defense;
+ *                                 attackNumber: the attacks before it this turn, for one with the attack trait, else
+ *                                 null; dc; action: {id, name}; target: a TokenDocument, or null; secret: for the GMs}
+ * @returns {Promise<object|null>} {degree, natural, total}, or null (the engine rolls it)
  */
-export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, dc, action = null, target = null, secret = false } = {}) {
+export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, attackNumber = null, dc, action = null, target = null, secret = false } = {}) {
   const actor = token?.actor;
   const value = dcOf(dc);
   if ( !actor || value === null ) return null;
   const how = checkFor(actor, { purpose, skill, action });
-  if ( !how || how.gm ) return how;
+  const attacks = Number.isInteger(attackNumber) && attackNumber >= 0 ? attackNumber : null;
+  // (A penalty PF2e can't take without an action or an item to take it by: the engine rolls it, with its own.)
+  if ( !how || (attacks > 0 && !how.action && !how.item) ) return null;
   // (At another's defense, the target goes with it where its token is drawn here: the card says whose DC it was.)
   const other = target && target !== token && !(target.id && target.id === token.id);
   const at = other && typeof against === "string" && against && target.object ? target : null;
-  const options = { dc: at ? { value, slug: against } : { value }, at, secret };
+  const options = { dc: at ? { value, slug: against } : { value }, at, attacks, secret };
   return how.action ? useAction(token, how, options) : rollStatistic(token, how, options);
 }

@@ -1528,7 +1528,7 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /**
    * API 19. A check rolled with PF2e's own roller, its card in the chat (check-roll.js): PF2e's own action where it has
-   * one (Trip, Demoralize, Escape ...), else the skill; {gm: true} for an Aid only a Strike would make.
+   * one (Trip, Demoralize, Escape ...), else the skill; a maneuver with the core's multiple attack penalty.
    */
   async rollCheck(token, options) {
     return rollPf2eCheck(token, options);

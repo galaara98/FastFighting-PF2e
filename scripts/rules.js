@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies, systemRolled, rollCheck } from "./core.js";
 import { t } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
@@ -332,7 +332,9 @@ export const pf2eRules = {
     }
     if ( !escapes ) return null;
     const mod = work.mod - statusPenalty(who);
-    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    // (A live battle's, the system's own roll where it makes checks, as the engine's own Escape: systemRolled.)
+    const rolled = systemRolled(run, who, "check", { dc, purpose: "escape", label: hold.key });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: who, rolled });
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
     // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself, and of a spell's
     // hold with what it laid with it, Impaling Spike's off-guard.)
@@ -873,7 +875,10 @@ export const pf2eRules = {
     const base = Number(who.spec?.firstAid?.mod);
     if ( !Number.isFinite(base) || !held ) return { success: false };
     const mod = base - statusPenalty(who, "mind", "skill");
-    const { natural, total, degree } = this.roll(run.rng, mod, hold.dc);
+    // (A live battle's, the system's own roll: its Administer First Aid, the variant its id ends in. The flat check
+    // after it, the engine's.)
+    const rolled = systemRolled(run, who, "check", { dc: hold.dc, target: held, purpose: "firstAid", action: { id: `${who.id}.stop-bleeding` }, label: hold.key });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, hold.dc, { kind: "check", roller: who, rolled });
     const flat = degree >= 2 ? run.rng.d20() : null;
     const success = flat !== null && flat >= APPROPRIATE_DC;
     if ( success ) held.persistent = (held.persistent ?? []).filter(e => e.part?.type !== "bleed");
@@ -894,7 +899,9 @@ export const pf2eRules = {
   retch(run, u) {
     const dc = sickDC(run, u);
     const mod = (Number(u.spec?.defenses?.fortitude) || 0) + this.modifiers.save({ unit: u, type: "fortitude" }).bonus + (Number(u.mods?.saves) || 0);
-    const { natural, total, degree } = this.roll(run.rng, mod, dc);
+    // (A live battle's, the system's own save: systemRolled.)
+    const rolled = systemRolled(run, u, "save", { dc, save: "fortitude", label: t("Remedy.Retch") });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "save", roller: u, rolled });
     if ( degree >= 2 ) lower(u, "sickened", degree === 3 ? 2 : 1);
     return { success: degree >= 2, said: { text: t("Remedy.RetchRoll", { natural, total, dc }) } };
   },

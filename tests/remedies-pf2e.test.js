@@ -115,6 +115,19 @@ describe("Administer First Aid on a friend's bleed", () => {
     expect(hero.persistent.length).toBe(1);
     expect(pf2eRules.breakFree(run, hero, hold)).toBeNull();
   });
+
+  test("in a live battle, the system's own Administer First Aid (stop bleeding: its id says) where it makes checks; the flat check after it, the engine's", () => {
+    const run = fight([creature("hero", "friendly", 0), creature("medic", "friendly", 5, { firstAid: { mod: 2 } }), creature("orc", "hostile", 40)]);
+    const [hero, medic] = ["hero", "medic"].map(id => run.byId.get(id));
+    hero.persistent = [bleed()];
+    const hold = freeable(run, hero);
+    const asked = [];
+    run.live = { playing: true, roll: (r, request) => { asked.push(request); return { degree: 2, natural: 15, total: 17 }; } };
+    run.rng.d20 = () => 12;
+    expect(tryHold(run, medic, hold, { freeing: true, held: hero })).toMatchObject({ success: true, degree: 2, natural: 15, total: 17, dc: 18 });
+    expect(hero.persistent).toEqual([]);
+    expect(asked).toEqual([{ kind: "check", unitId: "medic", targetId: "hero", purpose: "firstAid", skill: null, against: null, dc: 18, action: { id: "medic.stop-bleeding", name: "bleeding" } }]);
+  });
 });
 
 describe("retching while sickened", () => {
@@ -143,6 +156,19 @@ describe("retching while sickened", () => {
     pf2eRules.retch(run, hero);
     expect(hero.conds.sickened).toBeUndefined();
     expect(hero.effects.some(e => e.conditions?.sickened)).toBe(false);
+  });
+
+  test("in a live battle, the system's own Fortitude save where it makes saves (systemRolled), against the same DC", () => {
+    const spell = { id: "orc.spell", kind: "control", save: { type: "fortitude", dc: 21 } };
+    const run = fight([creature("hero", "friendly", 0), creature("orc", "hostile", 40, { actions: [blade(), spell] })]);
+    const [hero, orc] = ["hero", "orc"].map(id => run.byId.get(id));
+    sicken(run, hero, orc, 2, spell);
+    const asked = [];
+    run.live = { playing: true, roll: (r, request) => { asked.push(request); return { degree: 3, natural: 19, total: 26 }; } };
+    run.rng.d20 = () => 1;
+    expect(pf2eRules.retch(run, hero).success).toBe(true);
+    expect(hero.conds.sickened).toBeUndefined();
+    expect(asked).toEqual([{ kind: "save", unitId: "hero", targetId: null, save: "fortitude", dc: 21, action: { id: null, name: pf2eRules.remedies(run, { conds: { sickened: 1 } })[0].label } }]);
   });
 
   test("sickened, it can't drink a potion or an elixir (usable, which the core asks of heals); a healing spell, yes", () => {

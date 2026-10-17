@@ -4,7 +4,7 @@
  * incapacitation one's, which the engine shifts itself); a check as PF2e's own action (a maneuver, Aid, Hide, Escape,
  * Steal, Administer First Aid) or the skill (a feat's, a heal's, the spec's, talk's), with no dialog, the target with
  * it where it's rolled against that target's defense; the multiple attack penalty on a check with the attack trait,
- * for the attacks made before it this turn; a GM's call for an Aid only a Strike would make; none where it can't tell.
+ * for the attacks the engine counted before it; none where it can't tell (an Aid only a Strike would make).
  */
 import { beforeEach, describe, expect, test } from "vitest";
 import { Pf2eAdapter } from "../scripts/adapter.js";
@@ -14,22 +14,15 @@ const adapter = new Pf2eAdapter();
 /** PF2e's check roll: its degree of success (0-3), total and d20. */
 const checkRoll = (degree, total = 19, natural = 11) => ({ degreeOfSuccess: degree, total, dice: [{ faces: 20, total: natural }] });
 
-/** A card in the chat, by id (a rewound turn's are deleted). */
-let cards;
-
 /**
  * A statistic as PF2e has it (a save, a skill, Perception): its slug, label and modifier, its roll keeping what it was
- * asked and calling back with its card, as PF2e's Check.roll does. `degree` null: PF2e rolled nothing (cancelled).
+ * asked. `degree` null: PF2e rolled nothing (cancelled).
  */
 function statistic(slug, mod, { label = slug, degree = 2 } = {}) {
   const s = { slug, label, mod, asked: [] };
   s.roll = async params => {
     s.asked.push(params);
-    if ( degree === null ) return null;
-    const card = { id: `${slug}-${s.asked.length}` };
-    cards.add(card.id);
-    params.callback?.(checkRoll(degree), "success", card);
-    return checkRoll(degree);
+    return degree === null ? null : checkRoll(degree);
   };
   return s;
 }
@@ -71,17 +64,13 @@ function creature(id, { tokenId = `t-${id}`, items = [], strikes = [], drawn = t
  */
 function pf2eActions({ degree = 2 } = {}) {
   const asked = {};
-  const traits = { trip: ["attack"], grapple: ["attack"], shove: ["attack"], disarm: ["attack"], reposition: ["attack"], escape: ["attack"] };
   const slugs = ["trip", "grapple", "shove", "disarm", "reposition", "demoralize", "feint", "create-a-diversion", "hide", "aid", "escape", "steal", "administer-first-aid"];
   game.pf2e = {
     actions: new Map(slugs.map(slug => [slug, {
-      slug, traits: traits[slug] ?? [],
+      slug,
       use: async params => {
         (asked[slug] ??= []).push(params);
-        if ( degree === null ) return [];
-        const card = { id: `${slug}-${asked[slug].length}` };
-        cards.add(card.id);
-        return [{ actor: params.actors[0], roll: checkRoll(degree), message: card, outcome: "success" }];
+        return degree === null ? [] : [{ actor: params.actors[0], roll: checkRoll(degree), message: { id: slug }, outcome: "success" }];
       }
     }]))
   };
@@ -90,12 +79,9 @@ function pf2eActions({ degree = 2 } = {}) {
 
 let asked;
 beforeEach(() => {
-  cards = new Set();
   asked = pf2eActions();
   Object.assign(globalThis.game, {
     user: { isGM: true, settings: { showCheckDialogs: true, showDamageDialogs: false }, targets: new Set() },
-    combat: { id: "c1", round: 2, turn: 0, started: true },
-    messages: { contents: [], get: id => (cards.has(id) ? { id } : undefined) },
     actors: new Map()
   });
 });
@@ -199,22 +185,24 @@ describe("a check, rolled as PF2e's own action", () => {
     expect(asked.hide[0].difficultyClass).toEqual({ value: 21 });
   });
 
-  test("by what it's for: Escape, Steal, Administer First Aid (stabilize)", async () => {
+  test("by what it's for: Escape (no multiple attack penalty), Steal, Administer First Aid (stabilize; stop bleeding by its id)", async () => {
     const goblin = creature("gob1");
     await adapter.rollCheck(goblin, { purpose: "escape", dc: 19, action: { id: null, name: "grabbed" } });
     await adapter.rollCheck(goblin, { purpose: "theft", skill: "Thievery", dc: 16, action: { id: null }, target: creature("pc1") });
     await adapter.rollCheck(goblin, { purpose: "firstAid", dc: 16, action: { id: null } });
+    await adapter.rollCheck(goblin, { purpose: "firstAid", dc: 18, action: { id: "medic.stop-bleeding", name: "bleeding" }, target: creature("pc1") });
     expect(asked.escape[0]).toMatchObject({ actors: [goblin.actor], difficultyClass: { value: 19 } });
+    expect(asked.escape[0]).not.toHaveProperty("multipleAttackPenalty");
     expect(asked.steal[0].difficultyClass).toEqual({ value: 16 });
-    expect(asked["administer-first-aid"][0]).toMatchObject({ variant: "stabilize", difficultyClass: { value: 16 } });
+    expect(asked["administer-first-aid"].map(a => [a.variant, a.difficultyClass])).toEqual([["stabilize", { value: 16 }], ["stop-bleeding", { value: 18 }]]);
   });
 
-  test("Aid: PF2e's Aid with its best skill of those the adapter weighs; a Strike better than any, a GM's call", async () => {
-    const goblin = creature("gob1", { strikes: [5] });
-    await adapter.rollCheck(goblin, { purpose: "aid", dc: 15, action: { id: "gob1.aid", name: "Aid" } });
-    expect(asked.aid[0]).toMatchObject({ statistic: "intimidation", difficultyClass: { value: 15 } });
-    expect(await adapter.rollCheck(creature("orc1", { strikes: [9, 4] }), { purpose: "aid", dc: 15, action: { id: "orc1.aid" } })).toEqual({ gm: true });
-    expect(asked.aid).toHaveLength(1);
+  test("Aid: PF2e's Aid with its best skill of those the adapter weighs (one on a par with its best Strike too); a Strike better, the engine's", async () => {
+    await adapter.rollCheck(creature("gob1", { strikes: [5] }), { purpose: "aid", dc: 15, action: { id: "gob1.aid", name: "Aid" } });
+    await adapter.rollCheck(creature("gob2", { strikes: [6] }), { purpose: "aid", dc: 15, action: { id: "gob2.aid", name: "Aid" } });
+    expect(asked.aid.map(a => [a.statistic, a.difficultyClass])).toEqual([["intimidation", { value: 15 }], ["intimidation", { value: 15 }]]);
+    expect(await adapter.rollCheck(creature("orc1", { strikes: [9, 4] }), { purpose: "aid", dc: 15, action: { id: "orc1.aid" } })).toBeNull();
+    expect(asked.aid).toHaveLength(2);
   });
 
   test("none where PF2e rolled nothing, or hasn't the action", async () => {
@@ -228,66 +216,34 @@ describe("a check, rolled as PF2e's own action", () => {
 });
 
 describe("the multiple attack penalty on a check with the attack trait", () => {
-  /** A Strike the engine has the system roll (strike-roll.js), its attack card in the chat. */
-  async function strikes(token, target, attackNumber) {
-    const card = { id: `strike-${attackNumber}`, flags: { pf2e: { context: { type: "attack-roll", origin: { actor: token.actor.uuid }, target: { token: target.uuid } } } } };
-    cards.add(card.id);
-    game.messages.contents = [card];
-    token.actor.system.actions = [{ type: "strike", slug: "claw", variants: [0, 1, 2].map(() => ({ roll: async () => checkRoll(1) })) }];
-    await adapter.rollStrike(token, { action: { id: `${token.actor.id}.strike.claw.0` }, target, attackNumber });
-  }
-
-  test("for the attacks made before it this turn (its Strikes, as the core counts them, and its own), as PF2e's action takes it", async () => {
+  test("a maneuver: the attacks the engine counted before it, as PF2e's action takes them; none for the first, or none told", async () => {
     const goblin = creature("gob1");
     const hero = creature("pc1");
-    const trip = () => adapter.rollCheck(goblin, { purpose: "control", against: "reflex", dc: 22, action: { id: "gob1.trip" }, target: hero });
-    await strikes(goblin, hero, 0);
-    await strikes(goblin, hero, 1);
-    await trip();
-    await trip();
-    expect(asked.trip.map(a => a.multipleAttackPenalty)).toEqual([2, 3]);
-    // (Not an attack: no penalty, and not counted.)
-    await adapter.rollCheck(goblin, { purpose: "control", against: "will", dc: 18, action: { id: "gob1.demoralize" }, target: hero });
-    expect(asked.demoralize[0]).not.toHaveProperty("multipleAttackPenalty");
-    await adapter.rollCheck(goblin, { purpose: "escape", dc: 18, action: { id: null } });
-    expect(asked.escape[0].multipleAttackPenalty).toBe(4);
+    for ( const attackNumber of [0, 1, 2, 5, null, -1, 1.5] ) {
+      await adapter.rollCheck(goblin, { purpose: "control", against: "reflex", attackNumber, dc: 22, action: { id: "gob1.trip" }, target: hero });
+    }
+    expect(asked.trip.map(a => a.multipleAttackPenalty)).toEqual([undefined, 1, 2, 5, undefined, undefined, undefined]);
   });
 
-  test("the first attack, a new turn, another's, or a turn rewound (its cards gone): none", async () => {
-    const goblin = creature("gob1");
-    const hero = creature("pc1");
-    const trip = () => adapter.rollCheck(goblin, { purpose: "control", against: "reflex", dc: 22, action: { id: "gob1.trip" }, target: hero });
-    await trip();
-    expect(asked.trip[0]).not.toHaveProperty("multipleAttackPenalty");
-    await trip();
-    expect(asked.trip[1].multipleAttackPenalty).toBe(1);
-    await adapter.rollCheck(hero, { purpose: "control", against: "reflex", dc: 22, action: { id: "pc1.trip" }, target: goblin });
-    expect(asked.trip[2]).not.toHaveProperty("multipleAttackPenalty");
-    game.combat.turn = 1;
-    await trip();
-    expect(asked.trip[3]).not.toHaveProperty("multipleAttackPenalty");
-    cards.clear();
-    await trip();
-    expect(asked.trip[4]).not.toHaveProperty("multipleAttackPenalty");
-    // (Outside a combat under way, nothing is counted.)
-    game.combat = null;
-    await trip();
-    await trip();
-    expect(asked.trip.slice(5).map(a => a.multipleAttackPenalty)).toEqual([undefined, undefined]);
-  });
-
-  test("an ability's check with the attack trait (Swallow Whole): PF2e's own penalty for that item, by its attack number", async () => {
+  test("an ability's check (Swallow Whole): PF2e's own penalty for that item, by its attack number", async () => {
     const gulp = item("sw1", "swallow-whole", ["attack"]);
     const toad = creature("toad1", { items: [gulp] });
     const hero = creature("pc1");
-    const swallow = () => adapter.rollCheck(toad, { purpose: "control", against: "reflex", dc: 21, action: { id: "toad1.sw1" }, target: hero });
-    await swallow();
-    await swallow();
+    for ( const attackNumber of [0, 2, null] ) {
+      await adapter.rollCheck(toad, { purpose: "control", against: "reflex", attackNumber, dc: 21, action: { id: "toad1.sw1" }, target: hero });
+    }
     const athletics = toad.actor.skills.athletics.asked;
-    expect(athletics.map(a => a.attackNumber)).toEqual([1, 2]);
-    expect(athletics[0]).toMatchObject({ dc: { value: 21, slug: "reflex" }, target: hero.actor, item: gulp, title: "swallow-whole", traits: ["attack"], extraRollOptions: ["action:swallow-whole"] });
-    await adapter.rollCheck(toad, { purpose: "control", against: "reflex", dc: 22, action: { id: "toad1.trip" }, target: hero });
-    expect(asked.trip[0].multipleAttackPenalty).toBe(2);
+    expect(athletics.map(a => a.attackNumber)).toEqual([1, 3, undefined]);
+    expect(athletics[0]).toEqual({
+      dc: { value: 21, slug: "reflex" }, skipDialog: true, target: hero.actor, item: gulp, title: "swallow-whole", traits: ["attack"], extraRollOptions: ["action:swallow-whole"], attackNumber: 1
+    });
+  });
+
+  test("a penalty with neither PF2e's action nor an item to take it by: the engine's roll, with its own", async () => {
+    const orc = creature("orc1");
+    expect(await adapter.rollCheck(orc, { purpose: "control", skill: "athletics", against: "reflex", attackNumber: 1, dc: 20, action: { id: "orc1.slam" } })).toBeNull();
+    expect(orc.actor.skills.athletics.asked).toEqual([]);
+    expect(await adapter.rollCheck(orc, { purpose: "control", skill: "athletics", against: "reflex", attackNumber: 0, dc: 20, action: { id: "orc1.slam" } })).toEqual({ degree: 2, natural: 11, total: 19 });
   });
 });
 
@@ -299,9 +255,7 @@ describe("a check, rolled as the skill", () => {
     const orc = creature("orc1");
     const out = await adapter.rollCheck(bard, { purpose: "control", against: "will", dc: 19, action: { id: "bard1.bon-mot" }, target: orc });
     expect(out).toEqual({ degree: 2, natural: 11, total: 19 });
-    const { callback, ...rest } = bard.actor.skills.diplomacy.asked[0];
-    expect(typeof callback).toBe("function");
-    expect(rest).toEqual({
+    expect(bard.actor.skills.diplomacy.asked[0]).toEqual({
       dc: { value: 19, slug: "will" }, skipDialog: true, target: orc.actor, item: bonMot, title: "Bon Mot", traits: bonMot.system.traits.value, extraRollOptions: ["action:bon-mot"]
     });
     await adapter.rollCheck(bard, { purpose: "heal", dc: 15, action: { id: "bard1.feat.battle-medicine" }, target: orc });

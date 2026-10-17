@@ -111,6 +111,16 @@ describe("an Escape", () => {
     expect(pf2eRules.breakFree(table(10), unit(), { key: "grabbed", dc: null })).toBeNull();
   });
 
+  test("in a live battle, the system's own roll where it makes checks (systemRolled), as the engine's Escape; else the engine's dice", () => {
+    const asked = [];
+    const live = answer => ({ playing: true, roll: (run, request) => { asked.push(request); return answer; } });
+    expect(pf2eRules.breakFree({ ...table(1), live: live({ degree: 3, natural: 18, total: 23 }) }, unit(), { key: "grabbed", byId: null, dc: 15 }))
+      .toEqual({ success: true, degree: 3, natural: 18, mod: 5, total: 23, dc: 15 });
+    expect(asked).toEqual([{ kind: "check", unitId: "u", targetId: null, purpose: "escape", skill: null, against: null, dc: 15, action: { id: null, name: "grabbed" } }]);
+    // (No roll of the system's: the engine's, a natural 1.)
+    expect(pf2eRules.breakFree({ ...table(1), live: live(null) }, unit(), { key: "grabbed", dc: 15 })).toMatchObject({ success: false, degree: 0, natural: 1 });
+  });
+
   test("free of what its sheet showed: the off-guard and immobilized it brought go too, unless another hold still brings them", () => {
     const run = fight([creature("hero", "friendly", 0, { conditions: { grabbed: 1, restrained: 1, offGuard: 1, immobilized: 1, frightened: 1 } }), creature("orc", "hostile", 40)]);
     const hero = run.byId.get("hero");
