@@ -619,7 +619,7 @@ export class Pf2eAdapter extends SystemAdapter {
    * Its Strikes, with what its class and archetypes add, read off the system's own damage formulas (rule elements
    * and all) rather than by name:
    *  - what's always on in a fight (a thaumaturge's Implement's Empowerment) is part of every Strike;
-   *  - what a flat-footed target adds (Sneak Attack, and the archetypes' and other classes' like it) is extra
+   *  - what an off-guard target adds (Sneak Attack, and the archetypes' and other classes' like it) is extra
    *    precision damage against an off-guard foe;
    *  - a Strike set up by a class action is an action of its own: an investigator's Devise a Stratagem (Strategic
    *    Strike), a swashbuckler's finisher with panache (Precise Strike).

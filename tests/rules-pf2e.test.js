@@ -31,6 +31,26 @@ describe("pf2e degrees of success", () => {
     const iwr = { immune: ["fire"], weak: { cold: 5 }, resist: { physical: 3 } };
     expect(pf2eRules.applyIwr(iwr, { fire: 10, cold: 2, slashing: 2, piercing: 10 })).toBe(7 + 0 + 7);
   });
+
+  test("holy and unholy, the remaster's: by what deals it (its traits), once a blow, whatever its damage", () => {
+    const fiend = { weak: { holy: 10 }, resist: { physical: 5 } };
+    expect(pf2eRules.applyIwr(fiend, { slashing: 8, spirit: 4 }, null, { traits: ["holy", "magical"] })).toBe(3 + 4 + 10);
+    expect(pf2eRules.applyIwr(fiend, { slashing: 8, spirit: 4 }, null, { traits: ["magical"] })).toBe(3 + 4);
+    expect(pf2eRules.applyIwr(fiend, { slashing: 8 })).toBe(3);
+    // (Resisted by trait too, and none of it to one immune.)
+    expect(pf2eRules.applyIwr({ resist: { unholy: 5 } }, { void: 8 }, null, { traits: ["unholy"] })).toBe(3);
+    expect(pf2eRules.applyIwr({ immune: ["holy"] }, { fire: 8 }, null, { traits: ["holy"] })).toBe(0);
+    // (An older item's alignment trait, as the remaster has it: good is holy, evil unholy.)
+    expect(pf2eRules.applyIwr(fiend, { slashing: 8 }, null, { traits: ["good"] })).toBe(13);
+    expect(pf2eRules.applyIwr({ weak: { unholy: 5 } }, { piercing: 6 }, null, { traits: ["evil"] })).toBe(11);
+    // (Nothing dealt, nothing for it.)
+    expect(pf2eRules.applyIwr(fiend, { slashing: 0 }, null, { traits: ["holy"] })).toBe(0);
+  });
+
+  test("the story: an older damage type as the remaster has it (alignment damage, spirit; good, holy light)", () => {
+    expect(["positive", "negative", "good", "evil", "lawful", "chaotic", "fire"].map(t => pf2eRules.storyDamageType(t)))
+      .toEqual(["vitality", "void", "radiant", "unholy", "spirit", "spirit", "fire"]);
+  });
 });
 
 describe("pf2e dying", () => {
@@ -77,6 +97,11 @@ describe("pf2e dying", () => {
     const b = { ...pc(), spec: { diesAtZero: false, dyingMax: 5 }, wounded: 2, doomed: 1 };
     pf2eRules.onDropped(b, { crit: true });
     expect(b.status).toBe(STATUS.DEAD);
+  });
+
+  test("Administer First Aid stabilizes against 5 + its recovery check's DC (the Player Core's): 15 + dying, 14 with Toughness", () => {
+    expect(pf2eRules.firstAidDC({ ...pc(), dying: 2 })).toBe(17);
+    expect(pf2eRules.firstAidDC({ ...pc(), spec: { recoveryDC: 9 }, dying: 2 })).toBe(16);
   });
 
   test("Toughness: recovery checks against 9 + dying (spec.recoveryDC)", () => {

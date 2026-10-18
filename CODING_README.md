@@ -58,8 +58,8 @@ Effect items are fetched once a session (`granted.js` `EFFECT_CACHE`); a summon 
 | Gullets | `conditionHarm`, `usable`, `canTarget`, `afterHarm` (Rupture), `letGo` |
 | Roll hooks | `onOutcome` (Take Cover), `afterRoll`, `afterAttack` (hidden), `disrupted` (stupefied spell loss), `adjustRoll` (flat checks), `startTurn` (drained) |
 | Doors | `door`, `doorCosts`, `doorDamage` (Hardness) |
-| Dying and healing | `avertDeath` (Heroic Recovery), `onDropped` (Ferocity), `dyingLimit`, `onHealed`, `recoveryCheck`, `firstAidCost`, `firstAidDC`, `firstAid` |
-| Immunity and conditions | `isImmune`, `controlShift` (incapacitation), `conditionMods`, `fearValued`, `conditionWishes`, `conditionWeight`, `applyIwr` |
+| Dying and healing | `avertDeath` (Heroic Recovery), `onDropped` (Ferocity), `dyingLimit`, `onHealed`, `recoveryCheck`, `firstAidCost`, `firstAidDC` (5 + the recovery check's DC, the Player Core's), `firstAid` |
+| Immunity and conditions | `isImmune`, `controlShift` (incapacitation), `conditionMods`, `fearValued`, `conditionWishes`, `conditionWeight`, `applyIwr` (by damage type, and by the action's traits for holy and unholy: `TRAIT_IWR`, an older item's good and evil read as those) |
 | Persistent damage and remedies | `persistentFlatCheck`, `persistentRemedyCost`, `persistentRemedy`, `remedies`, `retch` |
 | Story | `storyDamageType` |
 
