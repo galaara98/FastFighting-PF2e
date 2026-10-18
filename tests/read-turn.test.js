@@ -38,6 +38,59 @@ describe("a player's turn read from PF2e's cards", () => {
   });
 });
 
+describe("PF2e's social actions, words at whom the card says", () => {
+  /** PF2e's action card (its header as the card's title), a skill check by its action's roll option, at tokB, against Will. */
+  const action = (slug, skill, { outcome = "failure", target = "Scene.s.Token.tokB", dc = 17, name = slug } = {}) => card({
+    type: "skill-check", outcome, target, dc, natural: 9, total: 15,
+    options: [`action:${slug}`, "item:trait:auditory", "item:trait:mental", "self:type:character"],
+    domains: ["all", "skill-check", skill, "cha-based", "cha-skill-check"],
+    title: `<h4 class="action"><strong>${name}</strong><span class="action-glyph">1</span><span class="subtitle">(${skill})</span></h4>`
+  });
+
+  test("Demoralize: its maneuver (the frightened is the sheet's) and a threat at its target, both as the card went", () => {
+    const events = readPf2eTurn([action("demoralize", "intimidation")], context);
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "control", maneuver: "demoralize", targetId: "B", took: false, degree: 1, natural: 9, total: 15, sure: true });
+    expect(events[1]).toMatchObject({ type: "talk", kind: "intimidate", targetId: "B", degree: 1, natural: 9, total: 15, dc: 17, sure: true });
+  });
+
+  test("Request and Make an Impression persuade, Coerce threatens, Lie deceives: each one talk, sure", () => {
+    const events = readPf2eTurn([
+      action("request", "diplomacy", { outcome: "success" }), action("make-an-impression", "diplomacy", { outcome: "criticalSuccess" }),
+      action("coerce", "intimidation", { outcome: "criticalFailure" }), action("lie", "deception", { dc: 19 })
+    ], context);
+    expect(events.map(e => [e.type, e.kind, e.degree, e.targetId, e.sure])).toEqual([
+      ["talk", "persuade", 2, "B", true], ["talk", "persuade", 3, "B", true], ["talk", "intimidate", 0, "B", true], ["talk", "deceive", 1, "B", true]
+    ]);
+    expect(events[3].dc).toBe(19);
+  });
+
+  test("with no target or no DC it isn't sure (the GM looks, as for any words); Demoralize has no maneuver then", () => {
+    const [aimless] = readPf2eTurn([action("coerce", "intimidation", { target: null })], context);
+    expect(aimless).toMatchObject({ type: "talk", kind: "intimidate", targetId: null, degree: 1, sure: false });
+    const [open] = readPf2eTurn([action("request", "diplomacy", { outcome: null, dc: null })], context);
+    expect(open).toMatchObject({ type: "talk", kind: "persuade", targetId: "B", degree: null, dc: null, sure: false });
+    const scare = readPf2eTurn([action("demoralize", "intimidation", { target: null })], context);
+    expect(scare.map(e => [e.type, e.kind, e.sure])).toEqual([["talk", "intimidate", false]]);
+  });
+
+  test("a plain Intimidation or Deception roll at it, with its DC: words still, for the GM to look at", () => {
+    const plain = card({ type: "skill-check", outcome: "success", domains: ["all", "skill-check", "deception"], title: "Deception Check" });
+    expect(readPf2eTurn([plain], context)).toEqual([expect.objectContaining({ type: "talk", kind: "deceive", targetId: "B", degree: 2, skill: "Deception Check", sure: false })]);
+  });
+
+  test("named as PF2e names the action (its card's header is markup), else by the card's title", () => {
+    game.pf2e = { actions: new Map([["coerce", { name: "PF2E.Actions.Coerce.Title" }]]) };
+    const words = game.i18n;
+    game.i18n = { ...words, has: k => k === "PF2E.Actions.Coerce.Title" || words.has(k), localize: k => (k === "PF2E.Actions.Coerce.Title" ? "Coerce" : words.localize(k)) };
+    const [named] = readPf2eTurn([action("coerce", "intimidation")], context);
+    expect(named.skill).toBe("Coerce");
+    const [scare, words2] = readPf2eTurn([action("demoralize", "intimidation")], context);
+    expect(scare.action).toContain("demoralize");
+    expect(words2.skill).toBe(scare.action);
+  });
+});
+
 describe("a card that lowers the guard in a foe's reach (Reactive Strike)", () => {
   test("a ranged attack does; a melee one doesn't", () => {
     expect(pf2eOpening(card({ options: ["item:ranged"] }), "tokA")).toBe(true);

@@ -3,8 +3,10 @@
  * the engine's DC (whoever made it save its origin, the item it's against where the action's id names one; not an
  * incapacitation one's, which the engine shifts itself); a check as PF2e's own action (a maneuver, Aid, Hide, Escape,
  * Steal, Administer First Aid) or the skill (a feat's, a heal's, the spec's, talk's), with no dialog, the target with
- * it where it's rolled against that target's defense; the multiple attack penalty on a check with the attack trait,
- * for the attacks the engine counted before it; none where it can't tell (an Aid only a Strike would make).
+ * it where it's rolled against that target's defense; talk at a creature drawn here as PF2e's social action for its
+ * kind of pitch (Request, or Make an Impression in a standoff; Coerce; Lie), else the skill; the multiple attack penalty
+ * on a check with the attack trait, for the attacks the engine counted before it; none where it can't tell (an Aid only
+ * a Strike would make).
  */
 import { beforeEach, describe, expect, test } from "vitest";
 import { Pf2eAdapter } from "../scripts/adapter.js";
@@ -64,7 +66,10 @@ function creature(id, { tokenId = `t-${id}`, items = [], strikes = [], drawn = t
  */
 function pf2eActions({ degree = 2 } = {}) {
   const asked = {};
-  const slugs = ["trip", "grapple", "shove", "disarm", "reposition", "demoralize", "feint", "create-a-diversion", "hide", "aid", "escape", "steal", "administer-first-aid"];
+  const slugs = [
+    "trip", "grapple", "shove", "disarm", "reposition", "demoralize", "feint", "create-a-diversion", "hide", "aid", "escape", "steal", "administer-first-aid",
+    "request", "make-an-impression", "coerce", "lie"
+  ];
   game.pf2e = {
     actions: new Map(slugs.map(slug => [slug, {
       slug,
@@ -289,6 +294,65 @@ describe("a check, rolled as the skill", () => {
     expect(skills.intimidation.asked[0]).toMatchObject({ dc: { value: 18 }, skipDialog: true });
     expect(skills.intimidation.asked[0]).not.toHaveProperty("item");
     expect(skills["warfare-lore"].asked[0].messageMode).toBe("gm");
+  });
+
+  test("talk at a creature drawn here: PF2e's own action for its kind of pitch, at its Will DC (a lie, Perception), the target with it, no dialog", async () => {
+    const envoy = creature("env1");
+    const hero = creature("pc1");
+    const pitch = (kind, more = {}) => adapter.rollCheck(envoy, { purpose: "talk", skill: "Diplomacy", against: null, dc: 17, action: { id: null, name: kind }, target: hero, ...more });
+    expect(await pitch("persuade")).toEqual({ degree: 2, natural: 11, total: 19 });
+    await pitch("intimidate");
+    await pitch("deceive", { dc: 19 });
+    expect(asked.request).toEqual([{
+      actors: [envoy.actor], event: { shiftKey: true, ctrlKey: false, metaKey: false }, difficultyClass: { value: 17, slug: "will" }, target: hero.object
+    }]);
+    expect(asked.coerce[0]).toMatchObject({ difficultyClass: { value: 17, slug: "will" }, target: hero.object });
+    expect(asked.lie[0]).toMatchObject({ difficultyClass: { value: 19, slug: "perception" }, target: hero.object });
+    // (Never Demoralize: the engine sways, it doesn't frighten. The skill isn't rolled besides.)
+    expect(asked.demoralize).toBeUndefined();
+    expect(Object.values(envoy.actor.skills).map(s => s.asked.length)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    for ( const a of [asked.request[0], asked.coerce[0], asked.lie[0]] ) expect(a).not.toHaveProperty("multipleAttackPenalty");
+  });
+
+  test("talk while a standoff holds: persuading is Make an Impression; threats and lies as in a fight; secret, Ctrl down", async () => {
+    const envoy = creature("env1");
+    const hero = creature("pc1");
+    const pitch = (kind, more = {}) => adapter.rollCheck(envoy, { purpose: "talk", skill: kind, dc: 18, action: { id: null, name: kind }, target: hero, standoff: true, ...more });
+    await pitch("persuade");
+    await pitch("intimidate");
+    await pitch("deceive");
+    await pitch("persuade", { secret: true });
+    expect(asked["make-an-impression"].map(a => [a.difficultyClass, a.event.ctrlKey])).toEqual([[{ value: 18, slug: "will" }, false], [{ value: 18, slug: "will" }, true]]);
+    expect([asked.request, asked.coerce?.length, asked.lie?.length]).toEqual([undefined, 1, 1]);
+    // (A defense the core names goes with it as named.)
+    await pitch("persuade", { against: "perception" });
+    expect(asked["make-an-impression"][2].difficultyClass).toEqual({ value: 18, slug: "perception" });
+  });
+
+  test("talk falls back to the skill: without PF2e's action, the target's token here, or a target; a taunt (its own action id)", async () => {
+    const orc = creature("orc1");
+    const hero = creature("pc1");
+    game.pf2e.actions.delete("request");
+    await adapter.rollCheck(orc, { purpose: "talk", skill: "Diplomacy", dc: 16, action: { id: null, name: "persuade" }, target: hero });
+    await adapter.rollCheck(orc, { purpose: "talk", skill: "Intimidation", dc: 16, action: { id: null, name: "intimidate" }, target: creature("pc2", { drawn: false }) });
+    await adapter.rollCheck(orc, { purpose: "talk", skill: "Deception", dc: 16, action: { id: null, name: "deceive" }, target: null });
+    await adapter.rollCheck(orc, { purpose: "talk", skill: "Deception", dc: 16, action: { id: null, name: "deceive" }, target: orc });
+    await adapter.rollCheck(orc, { purpose: "talk", skill: "Intimidation", dc: 16, action: { id: "orc1.goad", name: "" }, target: hero });
+    const skills = orc.actor.skills;
+    expect([skills.diplomacy, skills.intimidation, skills.deception].map(s => s.asked.length)).toEqual([1, 2, 2]);
+    expect(skills.diplomacy.asked[0]).toEqual({ dc: { value: 16 }, skipDialog: true });
+    expect([asked.request, asked.coerce, asked.lie]).toEqual([undefined, undefined, undefined]);
+    // (No game.pf2e at all, an older one's or none: the skill.)
+    delete game.pf2e;
+    expect(await adapter.rollCheck(orc, { purpose: "talk", skill: "Diplomacy", dc: 16, action: { id: null, name: "persuade" }, target: hero })).toEqual({ degree: 2, natural: 11, total: 19 });
+  });
+
+  test("talk PF2e's action rolled nothing for (cancelled, no statistic): the engine's, not the skill as well", async () => {
+    asked = pf2eActions({ degree: null });
+    const orc = creature("orc1");
+    expect(await adapter.rollCheck(orc, { purpose: "talk", skill: "Intimidation", dc: 16, action: { id: null, name: "intimidate" }, target: creature("pc1") })).toBeNull();
+    expect(asked.coerce).toHaveLength(1);
+    expect(orc.actor.skills.intimidation.asked).toEqual([]);
   });
 
   test("none where it can't tell what to roll: a spell check (PF2e has none), no skill named or one it hasn't; a cancelled roll", async () => {

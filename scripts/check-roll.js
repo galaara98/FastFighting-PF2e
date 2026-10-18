@@ -13,6 +13,9 @@
  *    or an ability uses (Bon Mot, Battle Medicine, Swallow Whole: with that item), Medicine to heal, or the skill the
  *    spec names (by slug, or the label its sheet shows; talk by the core's kind of pitch). Against a target's defense
  *    (`against`), the target goes with it where its token is drawn, so the card says whose DC it was.
+ *  - Talk at a creature drawn here: PF2e's own action for the core's kind of pitch (TALK_ACTIONS), at its Will DC (a
+ *    lie, its Perception DC), the target with it, so its card says what was said, to whom and how it went. Without the
+ *    action (an older PF2e) or the target's token here, the skill alone, as before. A taunt isn't one: it's the skill.
  *  - The multiple attack penalty, on a check with the attack trait (a maneuver, Swallow Whole): for the core's
  *    `attackNumber`, the attacks before it as the engine counted them for its own penalty (none: null). An Escape takes
  *    none, as the engine's doesn't (PF2e's has the attack trait).
@@ -44,6 +47,23 @@ const ITEM_SKILLS = Object.freeze({ __proto__: null, "bon-mot": "diplomacy", "ba
 
 /** Talk, by the core's kind of pitch: its skill (adapter.js #social). */
 const TALK = Object.freeze({ __proto__: null, persuade: "diplomacy", intimidate: "intimidation", deceive: "deception" });
+
+/**
+ * Talk as PF2e's own action, by the core's kind of pitch, with the defense its DC is (adapter.js #social's resist). The
+ * engine's pitch moves its target along the persuasion track toward standing down (a step a success, two a critical
+ * success):
+ *  - persuade: Request in a fight (Diplomacy's one action: what a turn has room for); Make an Impression while a
+ *    standoff holds (no blows yet, time to talk: an attitude turned a step at a time, as the track goes);
+ *  - intimidate: Coerce, in a fight or a standoff. Never Demoralize: the engine sways, it doesn't frighten, and
+ *    Demoralize's card would promise the frightened condition;
+ *  - deceive: Lie, against Perception. Its secret trait has PF2e roll it for the GMs: PF2e's own rule.
+ */
+const TALK_ACTIONS = Object.freeze({
+  __proto__: null,
+  persuade: { fight: "request", standoff: "make-an-impression", against: "will" },
+  intimidate: { fight: "coerce", standoff: "coerce", against: "will" },
+  deceive: { fight: "lie", standoff: "lie", against: "perception" }
+});
 
 /** For the GMs only (`secret`), as PF2e rolls a GM's roll; else in the chat's own mode. */
 const mode = secret => (secret ? { messageMode: game.user?.isGM ? "gm" : "blind" } : {});
@@ -142,10 +162,31 @@ function checkFor(actor, { purpose, skill, action }) {
   return statistic ? { statistic, item } : null;
 }
 
+/** PF2e's own action by its slug (game.pf2e.actions), where it can be used; else null. */
+const pf2eAction = slug => {
+  const action = game.pf2e?.actions?.get?.(slug);
+  return typeof action?.use === "function" ? action : null;
+};
+
+/**
+ * Talk as PF2e's own action (TALK_ACTIONS): {action, against}, or null where it's the skill alone. Talk itself is the
+ * core's pitch, named by its kind with no action id of its own (a taunt has one, the core's goad: the skill); at
+ * someone else whose token is drawn here (PF2e takes a target only so, and with none takes the user's own targets); and
+ * PF2e has the action.
+ */
+function talkAction(token, { skill, action, target, standoff }) {
+  if ( typeof action?.id === "string" && action.id ) return null;
+  const kind = TALK_ACTIONS[action?.name] ? action.name : TALK_ACTIONS[skill] ? skill : null;
+  if ( !kind || !target?.object || target === token || (target.id && target.id === token.id) ) return null;
+  const how = TALK_ACTIONS[kind];
+  const slug = standoff ? how.standoff : how.fight;
+  return pf2eAction(slug) ? { action: slug, against: how.against } : null;
+}
+
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
 async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, attacks, secret }) {
-  const pf2e = game.pf2e?.actions?.get?.(slug);
-  if ( typeof pf2e?.use !== "function" ) return null;
+  const pf2e = pf2eAction(slug);
+  if ( !pf2e ) return null;
   const results = await pf2e.use({
     actors: [token.actor], event: click("showCheckDialogs", secret), difficultyClass: dc,
     ...(variant ? { variant } : {}), ...(statistic ? { statistic } : {}), ...(at ? { target: at.object } : {}),
@@ -189,14 +230,18 @@ async function rollFlat(token, { value, label, secret }) {
  * @param {TokenDocument} token   the one rolling it
  * @param {object} options        {purpose; skill: the spec's, if it names one; against: the target's defense;
  *                                 attackNumber: the attacks before it this turn, for one with the attack trait, else
- *                                 null; dc; action: {id, name}; target: a TokenDocument, or null; secret: for the GMs}
+ *                                 null; standoff: a standoff holds (API 20); dc; action: {id, name}; target: a
+ *                                 TokenDocument, or null; secret: for the GMs}
  * @returns {Promise<object|null>} {degree, natural, total}, or null (the engine rolls it)
  */
-export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, attackNumber = null, dc, action = null, target = null, secret = false } = {}) {
+export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, attackNumber = null, standoff = false, dc, action = null, target = null, secret = false } = {}) {
   const actor = token?.actor;
   const value = dcOf(dc);
   if ( !actor || value === null ) return null;
   if ( purpose === "flat" ) return rollFlat(token, { value, label: typeof action?.name === "string" ? action.name : "", secret });
+  // (Talk at someone drawn here: PF2e's own action, its card the target's and its DC's. Else the skill, below.)
+  const talk = purpose === "talk" ? talkAction(token, { skill, action, target, standoff: standoff === true }) : null;
+  if ( talk ) return useAction(token, talk, { dc: { value, slug: against ?? talk.against }, at: target, attacks: null, secret });
   const how = checkFor(actor, { purpose, skill, action });
   const attacks = Number.isInteger(attackNumber) && attackNumber >= 0 ? attackNumber : null;
   // (A penalty PF2e can't take without an action or an item to take it by: the engine rolls it, with its own.)

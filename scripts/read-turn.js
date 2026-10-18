@@ -2,14 +2,18 @@
  * A player's turn in a live battle, read from the chat cards PF2e made for it (flags.pf2e.context): what FastFighting's
  * engine would have logged, so the turn is told like any other and the creatures it plays feel it.
  *   - A Strike (attack-roll): who, with what, how it went; its damage roll, the damage (the sheets settle how much).
- *   - A skill action at a creature (skill-check): Demoralize, Trip, Grapple, Shove, Disarm, Feint as maneuvers; a
- *     Diplomacy, Intimidation or Deception roll at it as words (the GM looks: was it talk?).
+ *   - A skill action at a creature (skill-check): Demoralize, Trip, Grapple, Shove, Disarm, Feint as maneuvers. PF2e's
+ *     social actions as words: Request and Make an Impression persuade, Coerce threatens, Lie deceives, and Demoralize
+ *     threatens too (its frightened is the maneuver's, the sheet's to carry; its words sway, as any threat). Its card
+ *     says what it was, at whom and how it went, so it's sure; one with no target or no DC isn't. A plain Diplomacy,
+ *     Intimidation or Deception roll at it, words too (the GM looks: was it talk?).
  *   - Healing (a damage roll of healing): told as healing (the sheets say how much).
  * Each event says whether it's `sure`; what isn't, the GM looks at before the turn is told.
  * A damage roll's card is read here too as it's made (pf2eDamageCard), for the core to apply it or put it before a GM;
  * and a card that opened a character up to a foe's reaction, for whether a critical hit disrupts it (pf2eDisrupts).
  */
 import { asksSave } from "./abilities.js";
+import { actionNameOf } from "./words.js";
 
 /** A PF2e degree of success as the engine counts it (0 critical failure ... 3 critical success). */
 const DEGREE = { criticalFailure: 0, failure: 1, success: 2, criticalSuccess: 3 };
@@ -18,6 +22,8 @@ const DEGREE = { criticalFailure: 0, failure: 1, success: 2, criticalSuccess: 3 
 const MANEUVERS = { __proto__: null, demoralize: "demoralize", trip: "trip", grapple: "grapple", shove: "shove", disarm: "disarm", feint: "feint", "create-a-diversion": "distract", reposition: "reposition" };
 /** A skill rolled at a creature that is words, and which. */
 const TALK = { diplomacy: "persuade", intimidation: "intimidate", deception: "deceive" };
+/** PF2e's social actions, by slug: the core's kind of pitch each is (Demoralize besides its maneuver). */
+const SOCIAL = { __proto__: null, demoralize: "intimidate", request: "persuade", "make-an-impression": "persuade", coerce: "intimidate", lie: "deceive" };
 
 /** The token id at the end of a token's uuid ("Scene.x.Token.y"), or the id itself. */
 const tokenIdOf = ref => (typeof ref === "string" ? ref.split(".").pop() : null);
@@ -167,17 +173,26 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
       } else if ( c.type === "skill-check" ) {
         const slug = actionOf(c);
         const maneuver = MANEUVERS[slug];
+        const pitch = SOCIAL[slug];
+        // (An action's card is titled with PF2e's header, markup and all: its own name, where PF2e has the action.)
+        const name = actionNameOf(slug) ?? c.title;
+        const words = (kind, sure) => ({ type: "talk", targetId: target, kind, skill: name, degree, natural: naturalOf(roll), total: roll?.total ?? null, dc: c.dc?.value ?? null, sure });
         if ( maneuver && target && degree !== null ) {
           events.push({
-            type: "control", targetId: target, action: c.title ?? slug, maneuver, took: degree >= 2, degree, roll: "check", natural: naturalOf(roll), total: roll?.total ?? null, sure: true
+            type: "control", targetId: target, action: name ?? slug, maneuver, took: degree >= 2, degree, roll: "check", natural: naturalOf(roll), total: roll?.total ?? null, sure: true
           });
+          // (Demoralize's threat sways too, as the core's intimidate pitch does: its frightened is the sheet's.)
+          if ( pitch ) events.push(words(pitch, true));
+          continue;
+        }
+        // (A social action at someone, its DC met or missed: what it was, at whom and how it went, all on the card.)
+        if ( pitch && target && degree !== null ) {
+          events.push(words(pitch, true));
           continue;
         }
         // (Words: whether it was talk at all, at whom and how well, the GM says. A roll with no DC has no outcome yet.)
         const skill = listOf(c.domains).find(d => typeof d === "string" && Object.hasOwn(TALK, d));
-        if ( skill ) {
-          events.push({ type: "talk", targetId: target, kind: TALK[skill], skill: c.title ?? skill, degree, natural: naturalOf(roll), total: roll?.total ?? null, dc: c.dc?.value ?? null, sure: false });
-        }
+        if ( skill ) events.push({ ...words(TALK[skill], false), skill: name ?? skill });
       }
     } catch ( err ) {
       console.warn("FastFighting PF2e | a card of the turn couldn't be read", err);

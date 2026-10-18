@@ -27,6 +27,12 @@ const sys = (key, otherwise) => (hasWords(key) ? localize(key) : otherwise);
 /** A PF2e action's name ("Demoralize"), as the system calls it (its title, or its short title: this module's word without them). */
 export const actionName = key => sys(`PF2E.Actions.${key}.Title`, sys(`PF2E.Actions.${key}.ShortTitle`, t(`Action.${key}`)));
 
+/** A PF2e action's name by its slug ("make-an-impression"), as its own action (game.pf2e.actions) calls it; null without one. */
+export function actionNameOf(slug) {
+  const key = typeof slug === "string" && slug ? globalThis.game?.pf2e?.actions?.get?.(slug)?.name : null;
+  return typeof key === "string" && hasWords(key) ? localize(key) : null;
+}
+
 /** A PF2e trait's name ("fire", "finisher"), as the system calls it. */
 export function traitName(slug) {
   if ( !slug ) return "";
