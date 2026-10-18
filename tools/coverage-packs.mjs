@@ -93,7 +93,8 @@ export async function readPack(pf2eDir, path, ClassicLevel) {
 
 /**
  * A pack's actors, each with its own items ({actor, items}), from the pack's documents (items embedded in an actor are
- * keys of their own: "!actors.items!<actor id>.<item id>").
+ * keys of their own: "!actors.items!<actor id>.<item id>"). Its items in the actor's own order (its `items` list, as
+ * Foundry makes them), whatever order the pack keeps them in, so every source reads the same.
  */
 export function actorsOf(docs) {
   const actors = new Map();
@@ -106,7 +107,12 @@ export function actorsOf(docs) {
       items.get(actorId).push(value);
     }
   }
-  return [...actors].map(([id, actor]) => ({ actor, items: items.get(id) ?? [] }));
+  return [...actors].map(([id, actor]) => {
+    const order = new Map((Array.isArray(actor.items) ? actor.items : []).map((itemId, i) => [itemId, i]));
+    const at = item => order.get(item?._id) ?? Infinity;
+    const own = [...(items.get(id) ?? [])].sort((a, b) => at(a) - at(b) || String(a?._id).localeCompare(String(b?._id)));
+    return { actor, items: own };
+  });
 }
 
 /** A pack's own items ("!items!<id>"). */
@@ -221,20 +227,22 @@ export function openPacks({ pf2e, foundry = DEFAULT_FOUNDRY }) {
   const folder = p => basename(p.path);
   const words = systemWords(pf2e, kind === "source" ? join(pf2e, "static", "lang") : join(pf2e, "lang"));
   let ClassicLevel = null;
-  let sourceDocs = null;
+  let namesToIds = null;
+  const sourceFiles = p => jsonFiles(join(pf2e, "packs", "pf2e", folder(p)));
 
-  /** A source checkout's documents, every pack at once (a link may name a document in any of them). */
-  const loadSource = () => {
-    if ( sourceDocs ) return sourceDocs;
-    const raw = new Map();
-    const namesToIds = { Actor: new Map(), Item: new Map(), JournalEntry: new Map(), Macro: new Map(), RollTable: new Map() };
+  /** A source checkout's documents' ids by name, every pack's (a link may name a document in any of them). */
+  const names = () => {
+    if ( namesToIds ) return namesToIds;
+    namesToIds = { Actor: new Map(), Item: new Map(), JournalEntry: new Map(), Macro: new Map(), RollTable: new Map() };
     for ( const p of packs ) {
-      const docs = jsonFiles(join(pf2e, "packs", "pf2e", folder(p))).map(f => JSON.parse(readFileSync(f, "utf8")));
-      raw.set(p.name, docs);
-      namesToIds[p.type]?.set(p.name, new Map(docs.map(d => [d.name, d._id ?? ""])));
+      const map = new Map();
+      for ( const f of sourceFiles(p) ) {
+        const { name, _id } = JSON.parse(readFileSync(f, "utf8"));
+        map.set(name, _id ?? "");
+      }
+      namesToIds[p.type]?.set(p.name, map);
     }
-    sourceDocs = new Map([...raw].map(([name, docs]) => [name, finalizeSource(docs, packs.find(p => p.name === name).type, namesToIds)]));
-    return sourceDocs;
+    return namesToIds;
   };
 
   const readOne = async p => {
@@ -246,7 +254,8 @@ export function openPacks({ pf2e, foundry = DEFAULT_FOUNDRY }) {
       const file = join(pf2e, "packs", `${folder(p)}.json`);
       return existsSync(file) ? asEntries(JSON.parse(readFileSync(file, "utf8")), p.type) : [];
     }
-    return asEntries(loadSource().get(p.name), p.type);
+    const docs = sourceFiles(p).map(f => JSON.parse(readFileSync(f, "utf8")));
+    return asEntries(finalizeSource(docs, p.type, names()), p.type);
   };
 
   return {

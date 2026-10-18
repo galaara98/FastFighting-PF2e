@@ -1,0 +1,109 @@
+name: System watch
+
+# Weekly: is there a PF2e release newer than the one review/ledger.json was last checked against? Then check what it
+# changed for FastFighting (tools/review.mjs, against that release's own packs: its json-assets.zip, the packs as the
+# release built them) and open one issue for that version. For the coders only: nothing here is in the module.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "A PF2e version to check (8.7.0); empty for the latest release"
+        required: false
+        default: ""
+      dry_run:
+        description: "Report only, no issue"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: system-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # The check imports the helper's scripts and FastFighting Core's (its scripts and tools/review) from a checkout
+      # beside this one, as the tests do.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: FastFighting-PF2e
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: galaara98/FastFighting
+          path: FastFighting
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Which PF2e release
+        id: which
+        working-directory: FastFighting-PF2e
+        env:
+          WANTED: ${{ inputs.version }}
+        run: |
+          CHECKED=$(node -p 'require("./review/ledger.json").checked ?? ""')
+          if [ -n "$WANTED" ]; then
+            VERSION="${WANTED#pf2e-}"
+          else
+            VERSION=$(gh api "repos/foundryvtt/pf2e/releases?per_page=100" --jq '.[] | select(.draft | not) | select(.prerelease | not) | .tag_name' \
+              | sed -n 's/^pf2e-\([0-9][0-9.]*\)$/\1/p' | sort -V | tail -1)
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)+$'; then
+            echo "No PF2e version to check: '$VERSION'" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          NEWER=no
+          if [ "$VERSION" != "$CHECKED" ] && [ "$(printf '%s\n%s\n' "$CHECKED" "$VERSION" | sort -V | tail -1)" = "$VERSION" ]; then NEWER=yes; fi
+          RUN=no
+          if [ -n "$WANTED" ] || [ "$NEWER" = yes ]; then RUN=yes; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "PF2e $VERSION; the ledger was last checked against ${CHECKED:-nothing}; newer: $NEWER; checking: $RUN" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Fetch its packs
+        if: steps.which.outputs.run == 'yes'
+        env:
+          VERSION: ${{ steps.which.outputs.version }}
+        run: |
+          mkdir pf2e-packs
+          gh release download "pf2e-$VERSION" -R foundryvtt/pf2e -p json-assets.zip -p system.json -D pf2e-packs
+          unzip -q pf2e-packs/json-assets.zip -d pf2e-packs
+          rm pf2e-packs/json-assets.zip
+          ls pf2e-packs pf2e-packs/packs | head -20
+
+      - name: Check what it changed
+        if: steps.which.outputs.run == 'yes'
+        working-directory: FastFighting-PF2e
+        run: |
+          node tools/review.mjs --pf2e ../pf2e-packs --out ../review-out/report.md --issue ../review-out/issue.md
+          cat ../review-out/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the full report
+        if: steps.which.outputs.run == 'yes'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: review-pf2e-${{ steps.which.outputs.version }}
+          path: review-out/
+
+      # One issue a version: none if one of that title is there already, open or closed.
+      - name: Open the issue
+        if: steps.which.outputs.run == 'yes' && !inputs.dry_run
+        run: |
+          TITLE=$(head -n 1 review-out/issue.md | sed 's/^# //')
+          if gh issue list -R "$GITHUB_REPOSITORY" --state all --limit 200 --search "\"$TITLE\" in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
+            echo "Already there: $TITLE" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body-file review-out/issue.md | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
