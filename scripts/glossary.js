@@ -156,7 +156,9 @@ export function rendAction({ actorId, ability, strikes, words = currentReading()
   if ( !strike ) return null;
   return {
     id: `${actorId}.${ability.id}`, name: ability.name, kind: "auto", cost: Math.max(1, Math.min(3, Number(ability.actions) || 1)), traits: [], ability: true,
-    melee: true, reach: Number(strike.reach) || 5, damage: strike.damage, requires: { hits: { n: 2, with: ids } }, itemId: ability.id, glossary: "rend"
+    melee: true, reach: Number(strike.reach) || 5, damage: strike.damage, requires: { hits: { n: 2, with: ids } }, itemId: ability.id, glossary: "rend",
+    // (Its damage that Strike's, rolled with PF2e's own damage roller in a live battle: action-roll.js.)
+    strikeOf: strike.id
   };
 }
 

@@ -2,7 +2,7 @@
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
 import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies, systemRolled, rollCheck } from "./core.js";
-import { t, conditionLabel, traitName } from "./words.js";
+import { t, conditionLabel, traitName, actionName } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
 import { ASSISTED, APPROPRIATE_DC, SICK_ANNOYANCE, sickDC, bleedDC, lower } from "./remedies.js";
@@ -155,12 +155,15 @@ function flatCheck(attacker, target, action) {
 /**
  * A flat check (a d20 against the DC, nothing added), u's: in a live battle the system's own where it makes checks (the
  * core's systemRolled, purpose "flat": PF2e's flat check, its card in the chat, titled with `label()`, what it's for);
- * else the engine's d20, as ever (`rng`, the run's unless given). {natural, success}.
+ * else the engine's d20, as ever (`rng`, the run's unless given), shown in a live battle as the flat check it is (the
+ * core's table rolls: rng.mark and rng.record, nothing where nothing records). {natural, success}.
  */
 function flatRoll(run, u, dc, label, { target = null, rng = run?.rng } = {}) {
   const rolled = run?.live?.playing && u ? systemRolled(run, u, "check", { dc, target, purpose: "flat", label: label() }) : null;
   if ( !rolled ) {
+    const at = rng.mark?.();
     const natural = rng.d20();
+    if ( at !== undefined ) rng.record(at, { by: u, target, kind: "flat", label: label(), total: natural, natural, dc });
     return { natural, success: natural >= dc };
   }
   const { natural, total, degree } = rollCheck(pf2eRules, rng, 0, dc, { kind: "check", roller: u, rolled });
@@ -227,7 +230,12 @@ export const pf2eRules = {
     const hidden = sneaking.filter(u => {
       const foes = run.units.filter(o => o !== u && areEnemies(run, u, o));
       const dc = Math.max(0, ...foes.map(o => 10 + (Number(o.spec.perception ?? o.spec.initiative?.mod) || 0)));
-      return run.rng.die(20) + (Number(u.spec.initiative?.stealth) || 0) >= dc;
+      const mod = Number(u.spec.initiative?.stealth) || 0;
+      // (Its Stealth against their Perception DCs: in a live battle a roll the table sees, the GMs' while it's unseen.)
+      const at = run.rng.mark?.();
+      const natural = run.rng.die(20);
+      if ( at !== undefined ) run.rng.record(at, { by: u, kind: "check", what: "stealth", mod, total: natural + mod, natural, dc });
+      return natural + mod >= dc;
     }).map(u => u.id);
     return { stealthSides: [...new Set(sneaking.map(u => u.side))], hidden };
   },
@@ -288,7 +296,7 @@ export const pf2eRules = {
     const mod = tumbleMod(u);
     const dc = reflexDC(o);
     const rolled = systemRolled(run, u, "check", { dc, target: o, purpose: "tumble", against: "reflex" });
-    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: u, rolled });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: u, rolled, label: actionName("TumbleThrough"), target: o });
     return { success: degree >= 2, degree, natural, mod, total, dc };
   },
 
@@ -354,7 +362,7 @@ export const pf2eRules = {
     const mod = work.mod - statusPenalty(who);
     // (A live battle's, the system's own roll where it makes checks, as the engine's own Escape: systemRolled.)
     const rolled = systemRolled(run, who, "check", { dc, purpose: "escape", label: hold.key });
-    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: who, rolled });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "check", roller: who, rolled, label: actionName("Escape") });
     if ( degree === 0 ) who.escapeBarred = who.turnsTaken ?? 0;
     // (Out of a grab, out of all that grabber's Grapple laid on it; the core lets go of the grab itself, and of a spell's
     // hold with what it laid with it, Impaling Spike's off-guard.)
@@ -378,9 +386,14 @@ export const pf2eRules = {
     const odds = degreeDistribution(this, mod, ac, { kind: "attack" });
     const chance = odds[2] * chanceAtLeast(cut.parts, rupture) + odds[3] * chanceAtLeast(cut.parts, rupture, 2);
     if ( chance <= escape ) return null;
+    // (The Strike and its damage, the engine's dice: in a live battle, rolls the table sees: rng.mark and rng.record.)
+    let at = run.rng.mark?.();
     const { natural, total, degree } = this.roll(run.rng, mod, ac);
+    if ( at !== undefined ) run.rng.record(at, { by: who, target: by, kind: "attack", label: cut.strike.name ?? "", mod, total, natural, dc: ac, degree });
+    at = run.rng.mark?.();
     const byType = {};
     if ( degree >= 2 ) for ( const p of cut.parts ) byType[p.type] = (byType[p.type] ?? 0) + Math.max(0, samplePart(p, run.rng)) * (degree === 3 ? 2 : 1);
+    if ( at !== undefined && degree >= 2 ) run.rng.record(at, { by: who, target: by, kind: "damage", label: cut.strike.name ?? "", parts: cut.parts, multiplier: degree === 3 ? 2 : 1, crit: degree === 3 });
     const dealt = Object.values(byType).reduce((s, n) => s + n, 0);
     return { success: dealt >= rupture, degree, natural, mod, total, dc: ac, said: { text: t("Gullet.Cut", { strike: cut.strike.name, damage: dealt, rupture }) }, ...(dealt > 0 ? { harm: { byType } } : {}) };
   },
@@ -829,8 +842,11 @@ export const pf2eRules = {
   recoveryCheck(c, rng) {
     if ( c.status !== STATUS.DOWN || c.stable || c.dying <= 0 ) return null;
     const dc = (c.spec?.recoveryDC ?? 10) + c.dying;
+    const at = rng.mark?.();
     const natural = rng.d20();
     const degree = this.degreeOfSuccess(natural, natural, dc);
+    // (A flat check the table sees, in a live battle: the core's table rolls.)
+    if ( at !== undefined ) rng.record(at, { by: c, kind: "flat", what: "recovery", total: natural, natural, dc, degree });
     c.dying += [2, 1, -1, -2][degree];
     if ( c.dying >= this.dyingLimit(c) ) {
       c.status = STATUS.DEAD;
@@ -910,7 +926,7 @@ export const pf2eRules = {
     // (A live battle's, the system's own roll: its Administer First Aid, the variant its id ends in; and the bleeder's
     // flat check after it, its own too: flatRoll.)
     const rolled = systemRolled(run, who, "check", { dc: hold.dc, target: held, purpose: "firstAid", action: { id: `${who.id}.stop-bleeding` }, label: hold.key });
-    const { natural, total, degree } = rollCheck(this, run.rng, mod, hold.dc, { kind: "check", roller: who, rolled });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, hold.dc, { kind: "check", roller: who, rolled, what: "firstAid", target: held });
     const flat = degree >= 2 ? flatRoll(run, held, APPROPRIATE_DC, persistentLabel("bleed")) : null;
     const success = !!flat?.success;
     if ( success ) held.persistent = (held.persistent ?? []).filter(e => e.part?.type !== "bleed");
@@ -933,7 +949,7 @@ export const pf2eRules = {
     const mod = (Number(u.spec?.defenses?.fortitude) || 0) + this.modifiers.save({ unit: u, type: "fortitude" }).bonus + (Number(u.mods?.saves) || 0);
     // (A live battle's, the system's own save: systemRolled.)
     const rolled = systemRolled(run, u, "save", { dc, save: "fortitude", label: t("Remedy.Retch") });
-    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "save", roller: u, rolled });
+    const { natural, total, degree } = rollCheck(this, run.rng, mod, dc, { kind: "save", roller: u, rolled, label: t("Remedy.Retch") });
     if ( degree >= 2 ) lower(u, "sickened", degree === 3 ? 2 : 1);
     return { success: degree >= 2, said: { text: t("Remedy.RetchRoll", { natural, total, dc }) } };
   },

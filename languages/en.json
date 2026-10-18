@@ -73,7 +73,9 @@
       "Reposition": "Reposition",
       "ReactiveStrike": "Reactive Strike",
       "Hide": "Hide",
-      "TakeCover": "Take Cover"
+      "TakeCover": "Take Cover",
+      "TumbleThrough": "Tumble Through",
+      "Escape": "Escape"
     },
     "Feature": {
       "devise-a-stratagem": "Devise a Stratagem",
