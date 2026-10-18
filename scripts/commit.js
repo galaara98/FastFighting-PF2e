@@ -12,6 +12,7 @@ import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
 import { grantedResistance } from "./granted.js";
+import { spendRounds } from "./ammo.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
 const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
@@ -37,9 +38,16 @@ export function describePf2eOutcome(spec, final) {
   for ( const e of final.effects ?? [] ) lines.push(stillLine(e));
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceName(key, { one: true }) ?? spec.actions.find(a => a.resource === key)?.name ?? key }));
+    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceName(key, { one: true }) ?? ammoName(key, spec) ?? spec.actions.find(a => a.resource === key)?.name ?? key }));
   }
   return lines;
+}
+
+/** A weapon's rounds (a key the core's action.ammo names): its ammunition's name, else its own; null for another key. */
+export function ammoName(key, spec) {
+  if ( !String(key).startsWith("ammo:") ) return null;
+  const shot = (spec?.actions ?? []).find(a => a.ammo === key);
+  return shot ? shot.ammoName ?? shot.name ?? null : null;
 }
 
 /**
@@ -128,7 +136,8 @@ function afflictionItem(a) {
 /**
  * A live battle: one turn's changes (the core's engine/changes.js) written onto a token, and only those, so writing
  * them twice changes nothing more. Hit points, Hero Points and Focus as they now stand; the slots and items used this
- * turn (`spec` is read afresh each turn, so what it says is what was there at the turn's start); conditions set and
+ * turn (`spec` is read afresh each turn, so what it says is what was there at the turn's start), and the rounds its
+ * shots spent that PF2e's own Strike didn't (ammo.js spendRounds); conditions set and
  * taken off; new persistent damage and afflictions; a death (and its loot), running, surrendering, a change of side.
  * @returns {Promise<object>} an undo record (make-it-so.js revertRecord takes it back)
  */
@@ -319,6 +328,9 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
         undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
         await item.update({ "system.quantity": quantity });
       }
+    } else if ( kind === "ammo" ) {
+      // (A weapon's rounds: PF2e's Strike spends its own as it rolls; only what the engine's own dice shot, beyond that.)
+      await spendRounds(actor, a, { start, spent: used }, undo);
     }
   }
   for ( const [entryId, slots] of entryUpdates ) {

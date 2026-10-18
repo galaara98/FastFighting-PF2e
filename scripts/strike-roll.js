@@ -6,9 +6,12 @@
  * (as PF2e's own Damage button passes it), so the user's own targets are never touched.
  * A spell attack (a spell with the attack trait and damage) the same way, as its card's buttons roll it (rollSpell).
  * The damage card is marked as FastFighting's (cards.js), its Apply buttons gone: FastFighting applies it.
+ * A weapon that takes ammunition has it readied first, as its player would (ammo.js readyAmmo: a bow's stack picked, a
+ * crossbow loaded); PF2e's Strike then spends it, and the undo record of both goes back with the roll (`records`).
  */
 import { listOf, naturalOf } from "./read-turn.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
+import { ammoOf, ammoState, ammoUndo, readyAmmo } from "./ammo.js";
 
 /** A character's or creature's weapon Strikes, as the system lists them (the ones it shows). */
 export const strikesOf = actor => (actor.system?.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
@@ -106,27 +109,35 @@ async function damageOf(actor, roll, times = 1) {
 /**
  * A Strike rolled with PF2e's own roller: the attack at `target` (its AC and the degree PF2e's), the variant for the
  * attacks made before it (no more than the third: MAP -10, or -8 agile), and on a hit the damage, critical damage on a
- * critical hit, as that variant's (PF2e's map:increases). A spell attack: rollSpell.
+ * critical hit, as that variant's (PF2e's map:increases). A spell attack: rollSpell. A weapon that takes ammunition:
+ * readied first where it has too little ready (ammo.js), the sheet's Strikes read again after.
  * @param {TokenDocument} token   the one striking
  * @param {object} options        {action: the engine's strike, {id, name}; target: the TokenDocument it strikes;
  *                                 attackNumber: the attacks before it this turn; secret: for the GMs only}
  * @returns {Promise<object|null>} {attack: {degree, natural, total}, damage: {byType} | null, card: the damage card's
- *                                 id, where it's found}, or null (the engine rolls it)
+ *                                 id, where it's found, records: the undo record of its ammunition, readied and spent,
+ *                                 where it took any}; or null (the engine rolls it), {records} where it readied some
  */
 export async function rollPf2eStrike(token, { action, target, attackNumber = 0, secret = false } = {}) {
   const actor = token?.actor;
   const map = Math.max(0, Math.min(2, Math.floor(Number(attackNumber) || 0)));
   const spell = spellAttackFor(actor, action?.id);
   if ( spell ) return rollSpell(spell, actor, target, map, secret);
-  const strike = strikeFor(actor, action?.id);
-  const variant = strike?.variants?.[map] ?? strike?.variants?.[0];
-  if ( !strike || !target || typeof variant?.roll !== "function" ) return null;
-  const attack = attackOf(await variant.roll({ event: click("showCheckDialogs", secret), target: asTarget(target) }));
-  if ( !attack ) return null;
+  let strike = strikeFor(actor, action?.id);
+  const variantOf = s => s?.variants?.[map] ?? s?.variants?.[0];
+  if ( !strike || !target || typeof variantOf(strike)?.roll !== "function" ) return null;
+  // (Its ammunition, as the sheet had it: readied as a player would, and spent by PF2e's Strike as it rolls.)
+  const before = ammoOf(actor, strike.item) ? ammoState(actor, strike.item) : null;
+  if ( before && await readyAmmo(actor, strike.item) ) strike = strikeFor(actor, action?.id) ?? strike;
+  const rolled = await variantOf(strike)?.roll?.({ event: click("showCheckDialogs", secret), target: asTarget(target) });
+  const undo = before ? ammoUndo(token, actor, before) : null;
+  const records = undo ? { records: [undo] } : {};
+  const attack = attackOf(rolled);
+  if ( !attack ) return undo ? records : null;
   const kind = attack.degree === 3 ? "critical" : "damage";
-  if ( attack.degree < 2 || typeof strike[kind] !== "function" ) return { attack, damage: null };
+  if ( attack.degree < 2 || typeof strike[kind] !== "function" ) return { attack, damage: null, ...records };
   const checkContext = attackContext(actor, target);
-  return { attack, ...(await damageOf(actor, () => strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext }))) };
+  return { attack, ...(await damageOf(actor, () => strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext }))), ...records };
 }
 
 /**

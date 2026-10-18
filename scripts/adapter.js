@@ -10,7 +10,7 @@ import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf, animalisticOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, IMPLIES } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName, IMPLIES } from "./commit.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
@@ -33,6 +33,7 @@ import { saveVsFrom } from "./save-vs.js";
 import { reading } from "./reading.js";
 import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./glossary.js";
 import { itemReactions } from "./reactions-item.js";
+import { reloadOf, ammoOf, roundsOf, nextAmmo } from "./ammo.js";
 
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion", "harm"]);
@@ -465,8 +466,15 @@ export class Pf2eAdapter extends SystemAdapter {
     const iwr = iwrOf(actor.attributes);
 
     const resources = {};
-    for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
-    for ( const a of actions ) delete a.pool;
+    for ( const a of actions ) {
+      if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
+      // (A weapon's rounds: the pool its shots come from, the core's action.ammo.)
+      if ( a.ammo && a.rounds !== undefined ) resources[a.ammo] = a.rounds;
+    }
+    for ( const a of actions ) {
+      delete a.pool;
+      delete a.rounds;
+    }
     // Hero Points: spent to keep someone from dying (all of them, for one's own Heroic Recovery).
     const heroPoints = actor.type === "character" ? Number(sys.resources?.heroPoints?.value) || 0 : 0;
     if ( heroPoints > 0 ) resources.fate = heroPoints;
@@ -689,7 +697,10 @@ export class Pf2eAdapter extends SystemAdapter {
    *    precision damage against an off-guard foe;
    *  - a Strike set up by a class action is an action of its own: an investigator's Devise a Stratagem (Strategic
    *    Strike), a swashbuckler's finisher with panache (Precise Strike).
-   * A bomb or other consumable weapon can be thrown only as many times as it has.
+   * A bomb or other consumable weapon can be thrown only as many times as it has. A shot costs its reload too (ammo.js
+   * reloadOf: a weapon's own, a creature's attack's trait), each shot of a weapon that takes ammunition spends its
+   * rounds (the core's action.ammo: what's loaded and carried, ammo.js roundsOf; with none, no shot), and one no turn has
+   * room to reload (a minute) has only the shot it's loaded with.
    * @returns {Promise<{strikes: object[], variants: object[], listed: object[]}>}  `listed`: each Strike's attack effects
    *   that try a maneuver (effectFollowUps)
    */
@@ -730,7 +741,15 @@ export class Pf2eAdapter extends SystemAdapter {
       const ranged = !!item?.isRanged;
       const range = item?.range ?? item?.system?.range ?? null;
       const reach = reachOf(item);
-      const reload = Number(traits.find(t => t.startsWith("reload-"))?.split("-")[1]) || 0;
+      // (Each shot costs 1 + its reload, the honest approximation: not even the first, as if the weapon weren't loaded
+      // as the fight began, and no Reload split over turns. A reload no turn has room for, a minute's: the shot it's
+      // loaded with alone.)
+      const reload = reloadOf(item);
+      const loadedOnly = 1 + reload > (pf2eRules.actionsPerTurn ?? 3);
+      // (A character's weapon whose Strike spends ammunition: the rounds it has, loaded and carried; a shot, expend;
+      // what it shoots next, by name: Bolts.)
+      const ammo = ammoOf(actor, item);
+      const next = ammo ? nextAmmo(actor, item) : null;
       const primaryType = damage[0]?.type ?? "untyped";
       // (A bomb, a dart of alchemist's fire: one throw each.)
       const consumable = traits.includes("consumable") || traits.includes("bomb");
@@ -751,7 +770,10 @@ export class Pf2eAdapter extends SystemAdapter {
         name: s.label,
         slug: s.slug ?? undefined, // (its item's, for a requirement or a multiattack that names it: glossary.js)
         kind: "strike",
-        cost: 1 + reload,
+        cost: loadedOnly ? 1 : 1 + reload,
+        ...(loadedOnly ? { uses: 1 } : {}),
+        ...(ammo ? { ammo: `ammo:${item.id}`, rounds: roundsOf(actor, item), ...(ammo.expend > 1 ? { ammoCost: ammo.expend } : {}) } : {}),
+        ...(next?.name ? { ammoName: next.name } : {}),
         bonus: s.totalModifier ?? 0,
         maps: traits.includes("agile") ? [0, -4, -8] : [0, -5, -10],
         melee: !ranged,
@@ -1639,6 +1661,8 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( key === "focus" ) return sys.resources?.focus?.value ?? 0;
     const [kind, id, more] = key.split(":");
     const item = actor.items.get(id);
+    // (A weapon's rounds, loaded and carried: ammo.js.)
+    if ( kind === "ammo" ) return item ? roundsOf(actor, item) ?? 0 : 0;
     if ( kind === "item" ) {
       if ( !item ) return 0;
       // (A healing potion counts each of its uses, as #consumables does; a bomb, its quantity.)
@@ -1790,8 +1814,8 @@ export class Pf2eAdapter extends SystemAdapter {
     return game.i18n.localize("FFPF2E.HeroPoints");
   }
 
-  resourceLabel(key) {
-    return resourceName(key);
+  resourceLabel(key, spec) {
+    return resourceName(key) ?? ammoName(key, spec);
   }
 
   describeOutcome(spec, final) {
@@ -1839,10 +1863,13 @@ export function coverActions({ actorId, hazard = false, stealth = null }) {
 /** The damage types an injury poison gets in by. */
 const INJURES = new Set(["piercing", "slashing"]);
 
-/** Its best Strike to carry an injury poison: a weapon's (not a bomb), dealing piercing or slashing damage. */
+/**
+ * Its best Strike to carry an injury poison: a weapon's (not a bomb; one that takes ammunition, with rounds to shoot),
+ * dealing piercing or slashing damage.
+ */
 export function injuryWeapon(strikes) {
   const mean = a => (a.damage ?? []).reduce((s, p) => s + meanPart(p), 0) + (a.bonus ?? 0);
-  return (strikes ?? []).filter(a => a.kind === "strike" && !a.resource && (a.damage ?? []).some(p => INJURES.has(p.type) && !p.persistent))
+  return (strikes ?? []).filter(a => a.kind === "strike" && !a.resource && (!a.ammo || a.rounds > 0) && (a.damage ?? []).some(p => INJURES.has(p.type) && !p.persistent))
     .sort((a, b) => mean(b) - mean(a))[0] ?? null;
 }
 
