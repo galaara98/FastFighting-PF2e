@@ -15,6 +15,7 @@ import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
 import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
+import { showPf2eTableRoll } from "./table-cards.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
 import { classActions, extraParts } from "./class-actions.js";
@@ -1768,6 +1769,18 @@ export class Pf2eAdapter extends SystemAdapter {
    */
   async rollCheck(token, options) {
     return rollPf2eCheck(token, options);
+  }
+
+  /**
+   * API 20. A roll FastFighting made with its own dice, shown as PF2e's own card (table-cards.js): an attack, a save, a
+   * skill check or a flat check as its check card (the target, the DC as PF2e shows it, the outcome); damage and healing
+   * as its damage card (typed, at its target, the item as its origin, a Strike's materials), marked so its Apply
+   * buttons are gone (FastFighting applies it: applyDamageCard). Styling only: the engine's dice and result stand.
+   * Its message's id, or null (the core's plain roll).
+   */
+  async showTableRoll(roll, options) {
+    const materialKeys = Object.keys(CONFIG.PF2E?.materialDamageEffects ?? {});
+    return showPf2eTableRoll(roll, { ...options, materialsOf: item => strikeMaterials(item, { materialKeys, adjustments: item.actor?.synthetics?.strikeAdjustments }) });
   }
 
   /** API 19. Does a critical Reactive Strike disrupt what this card did: a manipulate action (read-turn.js)? */

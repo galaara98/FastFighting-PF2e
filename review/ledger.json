@@ -289,6 +289,8 @@
     "held-in-one-or-two-hands",
     "held-in-one-plus-hands",
     "held-in-two-hands",
+    "keep-higher",
+    "keep-lower",
     "keep-stone",
     "land-speed",
     "melee-attack-roll",
@@ -307,6 +309,8 @@
     "stop-bleeding",
     "strike-attack-roll",
     "strike-damage",
+    "target-dc",
+    "target-dc-result",
     "turn-start"
   ],
   "ignore": {
