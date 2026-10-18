@@ -1368,7 +1368,10 @@ export class Pf2eAdapter extends SystemAdapter {
         // one drunk, the next got out again. The core's gear.)
         gear: gearKey(actor, item),
         drawCost: retrieveActions(actor, item),
-        drawEach: true
+        drawEach: true,
+        // (One may give it to a friend within reach instead: the core's administer, a Medic's.)
+        administer: true,
+        reach: 5
       });
     }
     return out;
@@ -1426,7 +1429,8 @@ export class Pf2eAdapter extends SystemAdapter {
       traits: [...(actor.system?.traits?.value ?? [])].map(String),
       shield: !!actor.system?.attributes?.shield?.ac,
       heavy: armor?.system?.category === "heavy",
-      feats: (actor.itemTypes?.feat ?? []).map(slugOf).filter(Boolean)
+      feats: (actor.itemTypes?.feat ?? []).map(slugOf).filter(Boolean),
+      spells: (actor.itemTypes?.spell ?? []).map(slugOf).filter(Boolean)
     };
   }
 

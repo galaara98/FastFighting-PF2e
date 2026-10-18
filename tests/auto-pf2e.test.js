@@ -19,6 +19,16 @@ describe("the playstyles PF2e says fit", () => {
     expect(pf2eHints({ cls: "commander" }).leader).toBe(0.7);
   });
 
+  test("a healer is a Medic, a striker a DPS, a bard's buffs an Enabler's; Speed Runner is no longer hinted (a monk: DPS)", () => {
+    expect(pf2eHints({ cls: "cleric" }).medic).toBeCloseTo(0.6);
+    expect(pf2eHints({ cls: "cleric" }).enabler).toBeUndefined();
+    expect(pf2eHints({ cls: "fighter", feats: ["sneak-attack"] }).dps).toBeCloseTo(0.6);
+    expect(pf2eHints({ cls: "champion", spells: ["lay-on-hands"], feats: ["battle-medicine"] }).medic).toBeCloseTo(0.7);
+    expect(pf2eHints({ cls: "bard", spells: ["courageous-anthem"] }).enabler).toBeCloseTo(0.8);
+    expect(pf2eHints({ cls: "alchemist", feats: ["bomber"] }).dps).toBeCloseTo(0.4);
+    expect(pf2eHints({ cls: "monk" })).toEqual({ dps: 0.3 });
+  });
+
   test("feats that make a Kiter likelier: Mobility, Skirmish Strike, Running Reload (each once)", () => {
     expect(pf2eHints({ cls: "ranger", feats: ["skirmish-strike", "running-reload"] }).kiter).toBeCloseTo(0.7);
     expect(pf2eHints({ feats: ["mobility", "mobility"] }).kiter).toBeCloseTo(0.4);

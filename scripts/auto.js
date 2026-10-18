@@ -10,13 +10,13 @@ import { t, traitName, modifier } from "./words.js";
 
 /** What each class leans toward. */
 const CLASSES = Object.freeze({
-  alchemist: { puzzleManiac: 0.5 }, animist: { unmundane: 0.4, enabler: 0.2 }, barbarian: { brawler: 0.5, impatient: 0.3 },
-  bard: { peoplePleaser: 0.3, diplomat: 0.3, enabler: 0.2 }, champion: { tank: 0.5, martyr: 0.3 }, cleric: { enabler: 0.5, moralist: 0.2 },
-  commander: { leader: 0.7 }, druid: { unmundane: 0.3, loreCollector: 0.2 }, exemplar: { brawler: 0.3, instigator: 0.2 },
-  fighter: { brawler: 0.3, tank: 0.2 }, guardian: { tank: 0.7 }, gunslinger: { wallflower: 0.4 }, inventor: { puzzleManiac: 0.6 },
-  investigator: { loreCollector: 0.5, puzzleManiac: 0.3 }, kineticist: { unmundane: 0.5 }, magus: { unmundane: 0.4 },
-  monk: { speedRunner: 0.4 }, oracle: { unmundane: 0.4 }, psychic: { unmundane: 0.5 }, ranger: { wallflower: 0.4, relentless: 0.2 },
-  rogue: { thief: 0.5, wallflower: 0.2 }, sorcerer: { unmundane: 0.6 }, summoner: { unmundane: 0.4 }, swashbuckler: { instigator: 0.5 },
+  alchemist: { puzzleManiac: 0.5 }, animist: { unmundane: 0.4, enabler: 0.2 }, barbarian: { brawler: 0.5, impatient: 0.3, dps: 0.3 },
+  bard: { enabler: 0.5, peoplePleaser: 0.3, diplomat: 0.3 }, champion: { tank: 0.5, martyr: 0.3 }, cleric: { medic: 0.6, moralist: 0.2 },
+  commander: { leader: 0.7 }, druid: { unmundane: 0.3, loreCollector: 0.2, medic: 0.2 }, exemplar: { brawler: 0.3, instigator: 0.2 },
+  fighter: { brawler: 0.3, tank: 0.2, dps: 0.3 }, guardian: { tank: 0.7 }, gunslinger: { wallflower: 0.4, dps: 0.3 }, inventor: { puzzleManiac: 0.6 },
+  investigator: { loreCollector: 0.5, puzzleManiac: 0.3 }, kineticist: { unmundane: 0.5 }, magus: { unmundane: 0.4, dps: 0.3 },
+  monk: { dps: 0.3 }, oracle: { unmundane: 0.4 }, psychic: { unmundane: 0.5 }, ranger: { wallflower: 0.4, relentless: 0.2 },
+  rogue: { thief: 0.5, wallflower: 0.2, dps: 0.2 }, sorcerer: { unmundane: 0.6 }, summoner: { unmundane: 0.4 }, swashbuckler: { instigator: 0.5 },
   thaumaturge: { puzzleManiac: 0.4, loreCollector: 0.3 }, witch: { unmundane: 0.5 }, wizard: { unmundane: 0.4, loreCollector: 0.4 }
 });
 
@@ -34,17 +34,31 @@ const TRAITS = Object.freeze({
 });
 
 /**
- * Feats that lean somewhere, by slug: moving without drawing a foe's reaction, striking on the move, reloading as it
- * goes (a Kiter's: Player Core's Mobility and Skirmish Strike, Guns & Gears' Running Reload).
+ * Feats and class features that lean somewhere, by slug: moving without drawing a foe's reaction, striking on the
+ * move, reloading as it goes (a Kiter's: Player Core's Mobility and Skirmish Strike, Guns & Gears' Running Reload); a
+ * healer's (a Medic's: Battle Medicine, Healing Hands, Ward Medic, Continual Recovery, the Medic Dedication, an
+ * alchemist's Chirurgeon field); a striker's (a DPS's: Sneak Attack, an alchemist's Bomber field).
  */
-const FEATS = Object.freeze({ mobility: { kiter: 0.4 }, "skirmish-strike": { kiter: 0.4 }, "running-reload": { kiter: 0.3 } });
+const FEATS = Object.freeze({
+  mobility: { kiter: 0.4 }, "skirmish-strike": { kiter: 0.4 }, "running-reload": { kiter: 0.3 },
+  "battle-medicine": { medic: 0.4 }, "healing-hands": { medic: 0.3 }, "ward-medic": { medic: 0.3 }, "continual-recovery": { medic: 0.2 },
+  "medic-dedication": { medic: 0.5 }, chirurgeon: { medic: 0.5 },
+  "sneak-attack": { dps: 0.3 }, bomber: { dps: 0.4 }
+});
+
+/**
+ * Spells that lean somewhere, by slug: a champion's Lay on Hands (a Medic's); a buff for friends (an Enabler's:
+ * Bless, Heroism, Courageous Anthem).
+ */
+const SPELLS = Object.freeze({ "lay-on-hands": { medic: 0.3 }, bless: { enabler: 0.3 }, heroism: { enabler: 0.3 }, "courageous-anthem": { enabler: 0.3 } });
 
 /** The playstyles that fit: {id: -1 to 1}. */
-export function pf2eHints({ cls = null, ancestry = null, traits = [], shield = false, heavy = false, feats = [] } = {}) {
+export function pf2eHints({ cls = null, ancestry = null, traits = [], shield = false, heavy = false, feats = [], spells = [] } = {}) {
   const out = {};
   const add = map => { for ( const [k, v] of Object.entries(map ?? {}) ) out[k] = (out[k] ?? 0) + v; };
   add(CLASSES[cls]);
   for ( const f of new Set(feats) ) add(FEATS[f]);
+  for ( const s of new Set(spells) ) add(SPELLS[s]);
   add(ANCESTRIES[ancestry]);
   for ( const t of new Set(traits) ) add(TRAITS[t] ?? (t !== ancestry ? ANCESTRIES[t] : null));
   if ( shield ) add({ tank: 0.2 });
