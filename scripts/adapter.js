@@ -28,6 +28,7 @@ import { skillManeuvers, strikeMove } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
 import { linkedEffect, theirsToOpen } from "./granted.js";
 import { AURA_REACTIONS, championReaction } from "./champion.js";
+import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./glossary.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -307,6 +308,12 @@ export class Pf2eAdapter extends SystemAdapter {
       ...this.#skillActions(actor, traits, martial.strikes)
     ];
     actions.push(...own(await this.#abilities(actor, actions)));
+    // Its standard abilities, by slug (glossary.js): Draconic Frenzy, Rend and Pounce from its Strikes; Constrict only
+    // on a creature it holds; Draconic Momentum's breath back on a critical hit; and its passives, on the spec.
+    const glossed = await this.#glossary(actor);
+    actions.push(...own(glossaryActions({ actorId: actor.id, abilities: glossed, strikes: martial.strikes })));
+    markGlossary(actions, glossed, actor.items.map(i => ({ id: i.id, slug: slugOf(i) })));
+    const passives = glossarySpec({ abilities: glossed, bright: !!tokenDoc.parent?.isBright, constant: constantSpells(actor) });
     // The free hands each needs (hands.js): what hasn't said already (a Strike by its weapon's grip), by its traits.
     for ( const a of actions ) a.hands ??= traitHands(a.traits);
 
@@ -338,6 +345,8 @@ export class Pf2eAdapter extends SystemAdapter {
       .filter(([slug]) => actor.items.some(i => slugOf(i) === slug)).map(([, save]) => save);
     return {
       ...mending,
+      ...(passives.swarmMind ? { swarmMind: true } : {}),
+      ...(passives.camouflage ? { camouflage: true } : {}),
       saveUpgrades: upgrades.length ? upgrades : undefined,
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
@@ -377,7 +386,7 @@ export class Pf2eAdapter extends SystemAdapter {
       // Ferocity, Orc Ferocity: a reaction that keeps it up at 1 Hit Point (rules.onDropped).
       ferocity: ferocityOf(actor.items, level),
       // A fight resumed mid-way starts from where things stand.
-      conditions: this.#conditions(actor),
+      conditions: withConditions(this.#conditions(actor), passives.conditions),
       persistent: this.#persistent(actor),
       perception: actor.perception?.mod ?? actor.initiative?.mod ?? 0,
       senses: this.#senses(actor),
@@ -407,7 +416,7 @@ export class Pf2eAdapter extends SystemAdapter {
       animalistic: !hazard && actor.type !== "character" && animalisticOf({ traits, int: actor.system.abilities?.int?.mod ?? 0, languages: [...(actor.system.details?.languages?.value ?? [])] }),
       creatureKind: creatureKindOf(traits, Object.keys(CONFIG.PF2E?.ancestryTraits ?? {})), // (the planner groups neutrals by it)
       size: sizeOf(actor.size ?? sys.traits?.size?.value),
-      social: hazard ? { mindless: true, languages: [], pitches: {}, resist: {} } : this.#social(actor, level, traits),
+      social: hazard ? { mindless: true, languages: [], pitches: {}, resist: {} } : { ...this.#social(actor, level, traits), ...(passives.anyLanguage ? { anyLanguage: true } : {}) },
       valuables: this.#valuables(actor),
       leadership: hazard ? null : this.#leadershipEntry(actor, tokenDoc.id),
       // A hazard: a simple one fires once (its trigger), a complex one each round; nobody attacks it.
@@ -590,6 +599,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const strike = {
         id: strikeId(actor, s, index),
         name: s.label,
+        slug: s.slug ?? undefined, // (its item's, for a requirement or a multiattack that names it: glossary.js)
         kind: "strike",
         cost: 1 + reload,
         bonus: s.totalModifier ?? 0,
@@ -603,7 +613,8 @@ export class Pf2eAdapter extends SystemAdapter {
         critDamage: crit ? parseTypedFormula(crit) : null,
         effects,
         bonusDamage,
-        drawCost: s.ready === false && character ? 1 : 0,
+        // (Quick Draw: drawing it is part of the Strike.)
+        drawCost: s.ready === false && character && !has("quick-draw") ? 1 : 0,
         traits,
         storyType: storyLook(traits, item?.system?.group ?? null, damage),
         // (A weapon in hand, one that can be knocked away: a character's weapon, or a creature's that has one.)
@@ -970,12 +981,24 @@ export class Pf2eAdapter extends SystemAdapter {
     return out;
   }
 
+  /** Its abilities of the standard ones glossary.js knows, by slug: {id, slug, name, html (worked out), actions}. */
+  async #glossary(actor) {
+    const out = [];
+    for ( const item of actor.items ) {
+      if ( !["action", "feat"].includes(item.type) || !GLOSSARY_SLUGS.has(slugOf(item)) ) continue;
+      out.push({ id: item.id, slug: slugOf(item), name: item.name, html: await resolvedText(item), actions: item.system.actions?.value });
+    }
+    return out;
+  }
+
   /**
    * Its own abilities that ask for a save and hurt or hinder (Breath Weapon, Trample, a Drain): read from their text
-   * (abilities.js), with a cooldown ("can't use it again for 1d4 rounds") or a frequency (once per day) as uses.
+   * (abilities.js), with a cooldown ("can't use it again for 1d4 rounds") or a frequency (once per day) as uses. One
+   * with a Requirements line it can express carries it (requirements.js), its Strikes named there by their ids.
    */
   async #abilities(actor, actions) {
-    const strikes = actions.filter(a => a.kind === "strike" && a.damage?.length).map(a => ({ name: a.name, damage: a.damage }));
+    const strikes = actions.filter(a => a.kind === "strike" && a.damage?.length)
+      .map(a => ({ id: a.id, name: a.name, slug: a.slug, damage: a.damage, reach: a.reach, melee: a.melee }));
     const out = [];
     for ( const item of actor.items ) {
       // Its actions, and feats that are actions of their own (a kineticist's impulses, Dragon's Rage Breath).
@@ -1636,6 +1659,30 @@ export function poisonedStrike(strike, { item, poison, quantity, apply = 2 }) {
     ...strike, id: `${strike.id}.poison.${item.id}`, name: t("Poisoned", { strike: strike.name, poison: item.name }), cost: (strike.cost ?? 1) + apply, oncePerTurn: true,
     effects: [...(strike.effects ?? []), poison], resource: `item:${item.id}`, pool: quantity, itemId: item.id
   };
+}
+
+/** Conditions on top of others, the higher value of each (a passive's slowed over a sheet's). */
+export function withConditions(base, more) {
+  if ( !more ) return base;
+  const out = { ...(base ?? {}) };
+  for ( const [k, v] of Object.entries(more) ) out[k] = Math.max(Number(out[k]) || 0, Number(v) || 0);
+  return out;
+}
+
+/**
+ * Its constant spells' slugs: innate spells PF2e marks "constant" in brackets in their names (the words FFPF2E.Innate's,
+ * in the reader's language and in English, as #spells reads them).
+ */
+export function constantSpells(actor) {
+  const out = [];
+  for ( const entry of actor?.spellcasting?.regular ?? actor?.spellcasting?.contents ?? [] ) {
+    if ( entry.system?.prepared?.value !== "innate" ) continue;
+    for ( const spell of entry.spells?.contents ?? [] ) {
+      const tags = new Set([...`${englishName(spell)} ${spell.name}`.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim().toLowerCase().replace(/\s+/g, " ")));
+      if ( wordList("Innate.Constant").some(w => tags.has(w)) ) out.push(slugOf(spell));
+    }
+  }
+  return out;
 }
 
 /** Its gullets (spec.gullet), by the core's condition each lays: {swallowed: {damage, rupture, most}}; undefined with none. */

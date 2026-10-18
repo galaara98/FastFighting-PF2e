@@ -420,6 +420,8 @@ export const pf2eRules = {
     if ( action?.takeCover ) return !!u.prone || foeCovers(run, u).includes("some");
     // Hide: concealed, or with cover from every foe that can see it (and one at least).
     if ( action?.hide ) {
+      // (Camouflage: it needs no cover to Hide.)
+      if ( u.spec?.camouflage ) return true;
       if ( Number(u.conds?.concealed) > 0 ) return true;
       const seen = foeCovers(run, u).filter(c => c !== "total");
       return seen.length > 0 && !seen.includes("none");
@@ -590,6 +592,8 @@ export const pf2eRules = {
     const traits = action.traits ?? [];
     if ( traits.some(t => immune.has(TRAIT_IMMUNITY[t] ?? t)) ) return true;
     if ( traits.includes("mental") && target.spec.creatureTraits?.includes("mindless") ) return true;
+    // Swarm Mind: no single mind for a mental effect that picks out so many creatures (one over an area still works).
+    if ( traits.includes("mental") && target.spec.swarmMind && !action.area ) return true;
     // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count).
     const outcomes = [...(action.onSave ?? []), ...(action.onHit ?? []), action.outcome].filter(o => o && !o.self);
     const keys = [...new Set(outcomes.flatMap(o => Object.keys(o.conditions ?? {})))];
