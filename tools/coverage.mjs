@@ -2,64 +2,72 @@
 /**
  * Coverage scan: how much of what PF2e's creatures and characters can do this helper understands, sorted by how often
  * each thing turns up, so the team knows what to teach it next. A developer tool: it isn't part of the module (the
- * release zips only module.json, scripts, languages, hardcoded-toEN.json, README.md and LICENSE).
+ * release zips only module.json, scripts, languages, reading, hardcoded-toEN.json, README.md and LICENSE).
  *
  *   node tools/coverage.mjs [--out docs/coverage.md] [--pf2e <folder>] [--foundry <folder>] [--core <folder>]
  *
  *   --out      write the report there (else it goes to stdout)
- *   --pf2e     the PF2e system folder (default %LOCALAPPDATA%/FoundryVTT/Data/systems/pf2e; env PF2E_SYSTEM)
- *   --foundry  Foundry's app folder, for its classic-level (default %LOCALAPPDATA%/Programs/FoundryVirtualTabletop/
- *              Foundry Virtual Tabletop/resources/app; env FOUNDRY_APP)
+ *   --pf2e     PF2e's packs: the installed system folder (default %LOCALAPPDATA%/FoundryVTT/Data/systems/pf2e; env
+ *              PF2E_SYSTEM), a GitHub release's json-assets.zip unpacked with its system.json, or a checkout of the
+ *              system's repository at a release tag (coverage-packs.mjs)
+ *   --foundry  Foundry's app folder, for its classic-level (an install only; default %LOCALAPPDATA%/Programs/
+ *              FoundryVirtualTabletop/Foundry Virtual Tabletop/resources/app; env FOUNDRY_APP)
  *   --core     FastFighting Core's scripts folder (default ../FastFighting/scripts beside this repository; env
  *              FASTFIGHTING_CORE, as the tests take it)
  *
- * How it reads: PF2e's own packs (coverage-packs.mjs: each copied to a temporary folder and opened with Foundry's
- * classic-level, the copy deleted once read). Creatures: every npc in the system's Actor packs (not the pregenerated
- * characters, hazards or vehicles), each of its actions and feats once per creature. Characters: the feats, class
- * features, actions and ancestry features compendiums, each item once, weighed by how many pregenerated characters
- * (iconics and adventure pregens) carry it. Strikes, spells and gear are left out: the helper reads every Strike and
- * spell as such, and this scan is about abilities.
+ * How it reads: PF2e's own packs (coverage-packs.mjs). Creatures: every npc in the system's Actor packs (not the
+ * pregenerated characters, hazards or vehicles), each of its actions and feats once per creature. Characters: the
+ * feats, class features, actions and ancestry features compendiums, each item once, weighed by how many pregenerated
+ * characters (iconics and adventure pregens) carry it. Strikes, spells and gear are left out: the helper reads every
+ * Strike and spell as such, and this scan is about abilities.
  *
  * How it classifies, by slug (an item's own, else made from its name, as the helper's slugOf makes it):
- *  - Fully understood: the helper builds an engine action, reaction or flag from it. Where the helper's own pure
- *    functions can be called, they are, on the item's data: abilityAction and gulletAction (abilities.js, gullet.js),
- *    attackEffects and ferocityOf (adapter.js), classActions (class-actions.js), derivePf2eTraits' flags (traits.js),
- *    modsFromRules on a self-effect's rules (effects.js), champion.js's AURA_REACTIONS. What adapter.js recognizes
- *    inside its class (its reactions, save upgrades, Battle Medicine ...) is mirrored in KNOWN below, and the engine's
- *    own moves in ENGINE_ACTIONS; keep them in step with the helper (the report lists any mirrored slug the scripts no
- *    longer mention, and any slug the scripts mention that these tables don't know). A passive whose every rule
- *    element is one PF2e works into the numbers the helper reads (its AC, saves, speeds, senses, resistances, Strikes
- *    and their damage: no predicate, or for a Strike's rule one about the weapon alone), with nothing else to it,
- *    counts too ("PF2e's numbers").
+ *  - Fully understood: the helper builds an engine action, reaction, aura or flag from it. Its own pure functions run
+ *    on the item's data, with reading/en.json's words (reading.js setReading): abilityAction (abilities.js, a
+ *    Requirements line by requirements.js), gulletAction (gullet.js), attackEffects and ferocityOf (adapter.js),
+ *    classActions (class-actions.js), derivePf2eTraits' flags (traits.js), modsFromRules on a self-effect's rules
+ *    (effects.js), auraOf (auras.js), saveVsOf on each rule element (save-vs.js), glossaryActions, markGlossary's
+ *    marks and glossarySpec (glossary.js, its GLOSSARY_SLUGS), readReaction on a reaction or triggered free action it
+ *    doesn't know by slug (reactions-read.js, adapter.js OWN_READING), and champion.js's AURA_REACTIONS. A slug in
+ *    glossary.js PLAYED_ELSEWHERE is understood (the engine plays it another way). What adapter.js recognizes inside
+ *    its class (its reactions, save upgrades, Battle Medicine ...) is mirrored in KNOWN below, and the engine's own
+ *    moves in ENGINE_ACTIONS; keep them in step with the helper (the report lists any mirrored slug the scripts no
+ *    longer mention, and any slug the scripts mention that the scan never counts). A passive whose every rule element
+ *    is one PF2e works into the numbers the helper reads (its AC, saves, speeds, senses, resistances, Strikes and their
+ *    damage: no predicate, or for a Strike's rule one about the weapon alone), with nothing else to it, counts too
+ *    ("PF2e's numbers").
+ *  - Known: nothing to play in a fight (glossary.js NO_FIGHT_EFFECT: telepathy, a shape for travel ...). Reported on
+ *    its own, never as a gap.
  *  - Partly: none of that, but it has structure the helper could read: inline @Damage, @Check or @Template, an inline
  *    roll or action link, other rule elements, a frequency, a trigger, an effect or condition link.
  *  - Not at all: none of that.
  *  - Plumbing only: its only rules grant or choose other items (they're scanned in their own right).
  * Reactions (and free actions with a trigger) also have their Trigger line filed under the core's master triggers by
- * the grammar in coverage-triggers.mjs.
+ * the grammar in coverage-triggers.mjs; a reaction the helper builds (by slug, or reactions-read.js) "plays".
  *
  * What it writes: slugs, item types, traits, counts, categories, master trigger ids, pattern shapes with every noun
  * replaced, and which source each comes from (the free remaster core, Monster Core and Player Core, or other). Never
- * an item's description or rules text: the text is read to classify, in memory only.
+ * an item's description or rules text: the text is read to classify, in memory only. tools/review.mjs reuses the scan
+ * (`scan`'s visit, `built`: what the helper builds from each item).
  */
 import { register } from "node:module";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_FOUNDRY, DEFAULT_PF2E, actorsOf, classicLevel, itemsOf, readPack, systemManifest, systemWords } from "./coverage-packs.mjs";
+import { DEFAULT_FOUNDRY, DEFAULT_PF2E, actorsOf, itemsOf, openPacks, sluggify } from "./coverage-packs.mjs";
 import { classifyTrigger, normalizeTrigger, refineTrigger, shapeOf } from "./coverage-triggers.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, "..");
+export const REPO = resolve(HERE, "..");
 
 /* -------------------------------------------- */
 /*  Options                                     */
 /* -------------------------------------------- */
 
-export function options(argv) {
+export function options(argv, extra = {}) {
   const out = { out: null, pf2e: process.env.PF2E_SYSTEM ?? DEFAULT_PF2E, foundry: process.env.FOUNDRY_APP ?? DEFAULT_FOUNDRY,
-    core: process.env.FASTFIGHTING_CORE ?? join(REPO, "..", "FastFighting", "scripts") };
+    core: process.env.FASTFIGHTING_CORE ?? join(REPO, "..", "FastFighting", "scripts"), ...extra };
   for ( let i = 0; i < argv.length; i++ ) {
     const key = argv[i].replace(/^--/, "");
     if ( !(key in out) || argv[i + 1] === undefined ) throw new Error(`unknown option or missing value: ${argv[i]}`);
@@ -75,9 +83,12 @@ export function options(argv) {
 /**
  * The helper's modules, imported as the tests import them: scripts/core.js points at the core one folder over in
  * Foundry, so the same path is sent to the core repository here (vitest.config.js's alias), and game.i18n is a
- * stand-in that has no words (the helper's labels are never looked at).
+ * stand-in that has no words (the helper's labels are never looked at). The reading words are reading/en.json's, set
+ * before anything reads (reading.js setReading), as the module loads them at startup.
  */
-async function helperModules(coreScripts) {
+let modules = null;
+export async function helperModules(coreScripts) {
+  if ( modules ) return modules;
   const core = pathToFileURL(/[\\/]$/.test(coreScripts) ? coreScripts : `${coreScripts}/`).href;
   const hook = `export async function resolve(specifier, context, next) {
     const m = /^(?:\\.\\.\\/)+(?:fast-fighting|FastFighting)\\/scripts\\/(.*)$/.exec(specifier);
@@ -85,14 +96,16 @@ async function helperModules(coreScripts) {
   }`;
   register(`data:text/javascript,${encodeURIComponent(hook)}`);
   globalThis.game = { i18n: { lang: "en", has: () => false, localize: key => key, format: key => key } };
-  const s = name => pathToFileURL(join(REPO, "scripts", name)).href;
-  const [abilities, gullet, adapter, classActions, traits, effects, holds, coreApi, master] = await Promise.all([
-    import(s("abilities.js")), import(s("gullet.js")), import(s("adapter.js")), import(s("class-actions.js")), import(s("traits.js")),
-    import(s("effects.js")), import(s("holds.js")), import(`${core}core-api.js`), import(`${core}story/master.js`)
+  const s = name => import(pathToFileURL(join(REPO, "scripts", name)).href);
+  const [abilities, gullet, adapter, classActions, traits, effects, holds, glossary, auras, saveVs, reactions, reading, champion, coreApi, master] = await Promise.all([
+    s("abilities.js"), s("gullet.js"), s("adapter.js"), s("class-actions.js"), s("traits.js"), s("effects.js"), s("holds.js"), s("glossary.js"),
+    s("auras.js"), s("save-vs.js"), s("reactions-read.js"), s("reading.js"), s("champion.js"), import(`${core}core-api.js`), import(`${core}story/master.js`)
   ]);
-  // (A champion's reactions by slug, where the helper has them in a module of their own.)
-  const champion = existsSync(join(REPO, "scripts", "champion.js")) ? await import(s("champion.js")) : {};
-  return { abilities, gullet, adapter, classActions, traits, effects, holds, coreApi, master, champion };
+  const words = JSON.parse(readFileSync(join(REPO, "reading", "en.json"), "utf8"));
+  reading.setReading(words);
+  modules = { abilities, gullet, adapter, classActions, traits, effects, holds, glossary, auras, saveVs, reactions, reading, champion, coreApi, master,
+    words: reading.currentReading() };
+  return modules;
 }
 
 /* -------------------------------------------- */
@@ -105,7 +118,7 @@ async function helperModules(coreScripts) {
  * #elementalBlasts, #spells, ALWAYS_ON, #sneakAttackDice, #bonusDice) and champion.js (whose AURA_REACTIONS the scan
  * imports).
  */
-const KNOWN = Object.freeze({
+export const KNOWN = Object.freeze({
   "shield-block": "reaction", "reactive-shield": "reaction", "nimble-dodge": "reaction", "intercept-attack": "reaction",
   "nimble-reprisal": "reaction option", "champions-aura": "reaction range",
   evasion: "save upgrade", juggernaut: "save upgrade", resolve: "save upgrade",
@@ -116,18 +129,21 @@ const KNOWN = Object.freeze({
   "at-will-spells": "spells"
 });
 
+/** The reactions KNOWN builds (adapter.js #reactions), as against what it only reads beside one. */
+const KNOWN_REACTIONS = new Set(["shield-block", "reactive-shield", "nimble-dodge", "intercept-attack"]);
+
 /**
  * Slugs the scripts mention that aren't abilities to understand (so the drift check passes them by): spells (heal
  * spells' two-action bonus), senses left out on purpose (NOT_SENSES), a bonus's own id.
  */
-const NOT_ABILITIES = new Set(["heal-animal", "heal-companion", "low-light-vision", "see-invisibility", "hunters-precision"]);
+export const NOT_ABILITIES = new Set(["heal-animal", "heal-companion", "low-light-vision", "see-invisibility", "hunters-precision"]);
 
 /**
  * PF2e's basic actions the engine plays itself, by slug (the core's moves, and the helper's maneuvers.js, edges.js,
  * coverActions, check-roll.js ACTIONS and PURPOSES, read-turn.js MANEUVERS): a character's or creature's own copy of
  * one is understood.
  */
-const ENGINE_ACTIONS = Object.freeze(new Set([
+export const ENGINE_ACTIONS = Object.freeze(new Set([
   "strike", "stride", "step", "stand", "raise-a-shield", "take-cover", "hide", "aid", "demoralize", "trip", "grapple", "shove", "disarm",
   "feint", "reposition", "escape", "administer-first-aid", "tumble-through", "steal", "force-open", "pick-a-lock", "recall-knowledge",
   "create-a-diversion", "sustain", "interact"
@@ -140,7 +156,7 @@ const NOT_SENSES = new Set(["vision", "low-light-vision", "see-invisibility"]);
  * Slugs read only for setting a character up (auto.js GUARD_SLUGS, SELF_GUARD_SLUGS, RESCUE_SLUGS, CONSUMABLE_FEATS,
  * SUBCLASS_STYLE and its other slugs; traits.js ITEM_LEANS): a hint, not something it plays. Noted, not counted.
  */
-const HINTS = Object.freeze(new Set([
+export const HINTS = Object.freeze(new Set([
   "intercept-attack", "retributive-strike", "glimpse-of-redemption", "liberating-step", "flash-of-grandeur", "guardians-deflection-fighter",
   "shield-from-arrows", "shield-of-reckoning", "defensive-swap", "standard-bearers-sacrifice", "iron-command", "selfish-shield",
   "destructive-vengeance", "rapid-response", "alchemist-dedication", "talisman-dabbler-dedication", "scroll-trickster-dedication",
@@ -166,11 +182,11 @@ const CORE_TITLES = new Set(["Pathfinder Monster Core", "Pathfinder Player Core"
 const CORE_CREATURE_PACKS = new Set(["pathfinder-monster-core"]);
 
 /** Actor packs that aren't creatures to scan. */
-const NOT_CREATURE_PACKS = new Set(["iconics", "paizo-pregens", "hazards", "vehicles"]);
+export const NOT_CREATURE_PACKS = new Set(["iconics", "paizo-pregens", "hazards", "vehicles"]);
 const PREGEN_PACKS = ["iconics", "paizo-pregens"];
 /** Character options, by pack name, and what each is. */
-const CHARACTER_PACKS = Object.freeze({ "feats-srd": "feat", classfeatures: "class feature", actionspf2e: "action", ancestryfeatures: "ancestry feature" });
-/** Effect packs, for self-effects. */
+export const CHARACTER_PACKS = Object.freeze({ "feats-srd": "feat", classfeatures: "class feature", actionspf2e: "action", ancestryfeatures: "ancestry feature" });
+/** Effect packs, for self-effects and the effects a reaction links. */
 const EFFECT_PACKS = ["feat-effects", "bestiary-effects", "spell-effects", "equipment-effects", "other-effects", "campaign-effects"];
 
 /* -------------------------------------------- */
@@ -184,7 +200,7 @@ export function slugOf(item) {
   return item?.name ? item.name.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : null;
 }
 
-const descriptionOf = item => String(item?.system?.description?.value ?? "");
+export const descriptionOf = item => String(item?.system?.description?.value ?? "");
 const hasPredicate = r => (Array.isArray(r?.predicate) ? r.predicate.length > 0 : !!r?.predicate);
 const SAVES = new Set(["fortitude", "reflex", "will", "fort", "ref"]);
 
@@ -192,9 +208,11 @@ const SAVES = new Set(["fortitude", "reflex", "will", "fort", "ref"]);
  * Its text as the helper would read it after PF2e worked its formulas out (adapter.js resolvedText), approximated
  * without Foundry: an @Check with no number for its DC gets the GM Core's DC for the level; an @Damage formula with
  * @-values (@actor.level ...) has them filled in (the level; an attribute modifier +4) and its arithmetic worked out.
+ * Its links become their labels, unless `keepLinks` (as reactions-read.js reads them).
  */
-function approxResolved(html, level, ruleValue, levelDC) {
-  const raw = String(html ?? "").replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ").replace(/@(?:UUID|Compendium)\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? " ");
+function approxResolved(html, level, ruleValue, levelDC, { keepLinks = false } = {}) {
+  const embedless = String(html ?? "").replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ");
+  const raw = keepLinks ? embedless : embedless.replace(/@(?:UUID|Compendium)\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? " ");
   const dc = levelDC(level);
   const formula = inside => {
     let f = inside.replace(/@[\w.]+/g, ref => (/level|rank/.test(ref) ? String(level) : /\.mod\b/.test(ref) ? "4" : "1"));
@@ -250,24 +268,52 @@ const strikeRule = r => (/damage|attack|strike/.test([].concat(r.selector ?? r.s
 /**
  * How its rule elements stand: `folded` (every one PF2e works into the sheet's numbers, or plumbing, and at least one
  * of the former), `plumbing` (only plumbing), and the others as signals ("rules: Aura", "rules: FlatModifier (when)").
+ * `read`: rules a reader takes (a situational save's), left out of the signals.
  */
-function rulesOf(item, { character }) {
+function rulesOf(item, { character, read = new Set() }) {
   const rules = (item.system?.rules ?? []).filter(r => r && typeof r === "object");
   const signals = new Set();
+  const keys = [];
   let folded = 0;
   let plumbing = 0;
   let mending = false;
   for ( const r of rules ) {
+    if ( read.has(r) ) continue;
     // (A character's extra damage against an off-guard foe: #strikes reads it with that roll option.)
     const offGuard = character && r.key === "DamageDice" && leaves(r.predicate).every(t => t === "target:condition:off-guard" || /^(?:item|feature):/.test(t));
     if ( r.key === "FastHealing" ) mending = true;
     else if ( PLUMBING.has(r.key) ) plumbing++;
-    else if ( FOLDED.has(r.key) && (!hasPredicate(r) || offGuard || strikeRule(r)) && !(r.key === "ActiveEffectLike" && !/^system\./.test(String(r.path ?? ""))) ) folded++;
-    else if ( r.key === "ActiveEffectLike" && !hasPredicate(r) ) plumbing++;
+    else if ( FOLDED.has(r.key) && (!hasPredicate(r) || offGuard || strikeRule(r)) && !(r.key === "ActiveEffectLike" && !/^system\./.test(String(r.path ?? ""))) ) {
+      folded++;
+      keys.push(r.key);
+    } else if ( r.key === "ActiveEffectLike" && !hasPredicate(r) ) plumbing++;
     else signals.add(`rules: ${r.key}${hasPredicate(r) && FOLDED.has(r.key) ? " (when)" : ""}`);
   }
-  return { count: rules.length, folded, plumbing, mending, signals, allFolded: rules.length > 0 && !signals.size && folded > 0, onlyPlumbing: rules.length > 0 && !signals.size && !folded && !mending };
+  return { count: rules.length, folded, plumbing, mending, signals, keys: keys.sort(), allFolded: rules.length > 0 && !signals.size && folded > 0,
+    onlyPlumbing: rules.length > 0 && !signals.size && !folded && !mending };
 }
+
+/**
+ * A creature's Strikes as the adapter makes them (#strikes), near enough for the readers that need them (glossary.js's
+ * multiattacks, an ability's requirement or Trample, a reaction that names one): its melee items.
+ */
+export function strikesOf(items, parseTypedFormula) {
+  return (items ?? []).filter(i => i.type === "melee").map((i, n) => {
+    const traits = [...(i.system?.traits?.value ?? [])];
+    const reachTrait = traits.find(t => /^reach(-\d+)?$/.test(t));
+    return {
+      id: `a.strike${n}`, name: i.name, slug: slugOf(i), kind: "strike", melee: !i.system?.range, bonus: Number(i.system?.bonus?.value) || 0, traits,
+      maps: traits.includes("agile") ? [0, -4, -8] : [0, -5, -10], reach: reachTrait ? Number(reachTrait.split("-")[1]) || 10 : 5,
+      damage: parseTypedFormula(Object.values(i.system?.damageRolls ?? {}).map(d => `(${d.damage})[${d.damageType}]`).join(" + "))
+    };
+  });
+}
+
+/**
+ * PF2e's trait ids, from its language file's trait labels ("PF2E.TraitColdIron": cold-iron), for a bare trait in a
+ * situational save's predicate (the adapter's knownTraits reads CONFIG.PF2E's lists, which these hold).
+ */
+const traitIds = words => new Set(Object.keys(words).map(k => /^PF2E\.Trait([A-Z]\w*)$/.exec(k)?.[1]).filter(Boolean).map(sluggify));
 
 /* -------------------------------------------- */
 /*  Classifying                                 */
@@ -276,88 +322,234 @@ function rulesOf(item, { character }) {
 /**
  * The classifier, with the helper's functions and the scan's caches.
  * @param {object} h   helperModules()
- * @param {Map<string, object>} effects   effect items by uuid
+ * @param {object} d
+ * @param {Map<string, object>} d.effects     effect items by uuid
+ * @param {Map<string, string>} d.conditions  PF2e's condition items' slugs by uuid
+ * @param {object} d.words                    PF2e's language files (systemWords)
  */
-function classifier(h, effects) {
+export function classifier(h, { effects, conditions, words }) {
   const { abilityAction } = h.abilities;
   const { GULLETS, gulletAction } = h.gullet;
-  const { attackEffects, ferocityOf } = h.adapter;
+  const { attackEffects, ferocityOf, OWN_READING } = h.adapter;
   const { modsFromRules, ruleValue } = h.effects;
   const { levelDC } = h.holds;
+  const { GLOSSARY_SLUGS, NO_FIGHT_EFFECT, PLAYED_ELSEWHERE, glossaryActions, markGlossary, glossarySpec } = h.glossary;
+  const { auraOf } = h.auras;
+  const { saveVsOf } = h.saveVs;
+  const { readReaction } = h.reactions;
   const { parseTypedFormula } = h.coreApi;
+  const reading = h.words;
+  const traits = traitIds(words);
   const flagCache = new Map();
   const classCache = new Map();
-  const strikes = [
+  const fakeStrikes = [
     { id: "a.fist", name: "fist", kind: "strike", melee: true, bonus: 10, maps: [0, -4, -8], traits: ["unarmed", "agile"], damage: parseTypedFormula("1d4[bludgeoning]"), reach: 5 },
     { id: "a.sword", name: "sword", kind: "strike", melee: true, bonus: 10, maps: [0, -5, -10], traits: [], damage: parseTypedFormula("1d8+4[slashing]"), reach: 5 },
     { id: "a.axe", name: "axe", kind: "strike", melee: true, bonus: 10, maps: [0, -4, -8], traits: ["agile"], damage: parseTypedFormula("1d6+4[slashing]"), reach: 5 }
   ];
-  /** Flags derivePf2eTraits sets for one slug (Reactive Strike, Pack Attack ...). */
+  /** Flags derivePf2eTraits sets for one slug (Reactive Strike, Pack Attack ...): their names. */
   const flagOf = slug => {
     if ( !flagCache.has(slug) ) {
       const { flags } = h.traits.derivePf2eTraits({ type: "npc", level: 1, traits: [], int: 0, wis: 0, will: 6, abilities: [slug], items: [], hasMaster: false });
-      flagCache.set(slug, Object.keys(flags ?? {}).length > 0);
+      flagCache.set(slug, Object.keys(flags ?? {}).sort());
     }
     return flagCache.get(slug);
   };
   /** Does classActions do something with it (alone, or with Hunt Prey or Flurry, as a ranger's edge needs)? */
   const classActionOf = slug => {
     if ( !classCache.has(slug) ) {
-      const run = set => h.classActions.classActions({ actorId: "a", slugs: new Set(set), level: 10, strikes, names: {} });
+      const run = set => h.classActions.classActions({ actorId: "a", slugs: new Set(set), level: 10, strikes: fakeStrikes, names: {} });
       const said = r => `${r.actions.length}|${JSON.stringify(r.strikes)}`;
       classCache.set(slug, [[], ["hunt-prey"], ["flurry"]].some(rest => said(run([slug, ...rest])) !== said(run(rest))));
     }
     return classCache.get(slug);
   };
 
+  /** An action or a feat that is one, as abilityAction reads it (its strikes for a requirement or Trample), once. */
+  const abilityOf = (item, ctx) => {
+    ctx.memo ??= new Map();
+    if ( ctx.memo.has(item) ) return ctx.memo.get(item);
+    let action = null;
+    const type = item.system?.actionType?.value ?? "passive";
+    const html = descriptionOf(item);
+    const isAction = item.type === "action" || (item.type === "feat" && type === "action");
+    if ( isAction && !GULLETS[slugOf(item)] && !(item.type === "feat" && !/@Check\[/i.test(html)) ) {
+      try {
+        action = abilityAction({ id: `a.${item._id ?? "item"}`, name: item.name, html: approxResolved(html, ctx.lvl, ruleValue, levelDC), actions: item.system?.actions?.value,
+          traits: item.system?.traits?.value ?? [], strikes: ctx.strikes ?? [], actionType: type, words: reading });
+        if ( action ) {
+          const often = Number(item.system?.frequency?.max);
+          if ( !action.cooldown && often > 0 ) action.uses = often;
+          action.itemId = item._id ?? "item";
+        }
+      } catch ( err ) {
+        // (Text it can't read is no action.)
+        action = null;
+      }
+    }
+    ctx.memo.set(item, action);
+    return action;
+  };
+
   /**
-   * One item, in its context: {level: "full"|"part"|"none"|"plumbing", how, signals, notes}.
+   * One item, in its context: {slug, level: "full"|"known"|"part"|"none"|"plumbing", how, signals, notes, type, reacts,
+   * built}. `built`: what the helper makes of it ([{kind: value}]), for tools/review.mjs; `reacts`: it's played as a
+   * reaction.
    * @param {object} item
-   * @param {object} ctx  {character, level, abilities, skills, senses, items, melee, referenced, expanded}
+   * @param {object} ctx  {character, level, abilities, skills, senses, items, strikes, referenced, expanded, actor, memo}
    */
   return function classify(item, ctx) {
     const slug = slugOf(item);
     const how = new Set();
+    const built = [];
     const type = item.system?.actionType?.value ?? "passive";
     const html = descriptionOf(item);
     const level = Math.max(1, Number(ctx.level) || Number(item.system?.level?.value) || 1);
+    ctx.lvl = level;
     const actorData = { level, abilities: ctx.abilities ?? Object.fromEntries(["str", "dex", "con", "int", "wis", "cha"].map(k => [k, { mod: 4 }])) };
+    const itemTraits = [...(item.system?.traits?.value ?? [])];
+    const allRules = (item.system?.rules ?? []).filter(r => r && typeof r === "object");
+    const isReaction = type === "reaction" || (type === "free" && /<strong>\s*Trigger\s*<\/strong>/i.test(ctx.expanded ?? html));
+    let reacts = false;
 
     // (Shield Block and Reactive Shield need a shield to raise: a creature with none has nothing to block with.)
     const shieldless = ["shield-block", "reactive-shield"].includes(slug) && !ctx.character && !ctx.shield;
-    if ( (KNOWN[slug] && !shieldless) || h.champion.AURA_REACTIONS?.has(slug) ) how.add("slug");
-    if ( ENGINE_ACTIONS.has(slug) ) how.add("engine action");
-    if ( flagOf(slug) ) how.add("slug");
-    if ( classActionOf(slug) ) how.add("class action");
+    if ( KNOWN[slug] && !shieldless ) {
+      how.add("slug");
+      built.push({ known: KNOWN[slug] });
+      if ( KNOWN_REACTIONS.has(slug) ) reacts = true;
+    }
+    if ( h.champion.AURA_REACTIONS?.has(slug) ) {
+      how.add("slug");
+      built.push({ champion: slug });
+      reacts = true;
+    }
+    if ( ENGINE_ACTIONS.has(slug) ) {
+      how.add("engine action");
+      built.push({ engine: slug });
+    }
+    const flags = flagOf(slug);
+    if ( flags.length ) {
+      how.add("slug");
+      built.push({ flags });
+      if ( isReaction ) reacts = true;
+    }
+    if ( classActionOf(slug) ) {
+      how.add("class action");
+      built.push({ classAction: slug });
+    }
     const ferocity = ferocityOf([{ slug, name: item.name, system: { slug, frequency: item.system?.frequency } }, ...(slug === "undying-ferocity" ? [{ slug: "ferocity", name: "", system: { slug: "ferocity" } }] : [])], 5);
-    if ( ferocity && (slug !== "undying-ferocity" || ferocity.temp > 0) ) how.add("slug");
+    if ( ferocity && (slug !== "undying-ferocity" || ferocity.temp > 0) ) {
+      how.add("slug");
+      built.push({ ferocity: { ...ferocity, label: "" } });
+      reacts = true;
+    }
+    if ( PLAYED_ELSEWHERE.has(slug) ) {
+      how.add("played elsewhere");
+      built.push({ elsewhere: slug });
+    }
 
     // A rider on a Strike that lists it (adapter.js attackEffects: prone, grab, push or pull, an affliction).
     const referenced = ctx.referenced?.has(slug);
     if ( referenced ) {
       const fake = { id: "a", items: ctx.items ?? [item] };
       try {
-        if ( attackEffects(fake, { system: { attackEffects: { value: [slug] } } }).length ) how.add("Strike rider");
+        const riders = attackEffects(fake, { system: { attackEffects: { value: [slug] } } });
+        if ( riders.length ) {
+          how.add("Strike rider");
+          built.push({ rider: riders });
+        }
       } catch ( err ) {
         // (An effect it can't read is no rider.)
       }
     }
 
-    // Its own abilities (adapter.js #abilities): an action (or a feat that is one) with a save, or a gullet.
+    // Its own abilities (adapter.js #abilities): an action (or a feat that is one) with a save, or a gullet; one with a
+    // Requirements line the reading can express carries it (requirements.js).
     const isAction = item.type === "action" || (item.type === "feat" && type === "action");
     if ( isAction && GULLETS[slug] ) {
       const athletics = Number(ctx.skills?.athletics);
-      const gulp = gulletAction({ id: "a", name: item.name, slug, html: approxResolved(html, level, ruleValue, levelDC), traits: item.system?.traits?.value ?? [],
+      const gulp = gulletAction({ id: "a", name: item.name, slug, html: approxResolved(html, level, ruleValue, levelDC), traits: itemTraits,
         actions: item.system?.actions?.value, athletics: Number.isFinite(athletics) ? athletics : null, athleticsDC: Number.isFinite(athletics) ? 10 + athletics : null,
         size: 2, speed: 25, reach: 5 });
-      if ( gulp ) how.add("ability reader");
-    } else if ( isAction && !(item.type === "feat" && !/@Check\[/i.test(html)) ) {
+      if ( gulp ) {
+        how.add("ability reader");
+        built.push({ gullet: gulp });
+      }
+    } else {
+      const action = abilityOf(item, ctx);
+      if ( action ) {
+        how.add(action.requires ? "requirements" : "ability reader");
+        built.push({ action });
+      }
+    }
+
+    // Its standard abilities by slug (glossary.js): Draconic Frenzy, Rend and Pounce from its Strikes; Constrict and
+    // Draconic Momentum on actions read already (Constrict's own, its breath's); its passives on the spec.
+    if ( GLOSSARY_SLUGS.has(slug) ) {
+      const ability = { id: item._id ?? "item", slug, name: item.name, html: approxResolved(html, level, ruleValue, levelDC), actions: item.system?.actions?.value };
+      const strikes = ctx.strikes ?? [];
+      const made = glossaryActions({ actorId: "a", abilities: [ability], strikes, words: reading });
+      const own = (ctx.items ?? [item]).map(i => ({ i, action: ["action", "feat"].includes(i.type) ? abilityOf(i, ctx) : null })).filter(x => x.action);
+      const marked = markGlossary(own.map(x => ({ ...x.action })), [ability], own.map(x => ({ id: x.action.itemId, slug: slugOf(x.i) })))
+        .filter(a => a.requires?.holding && a.itemId === ability.id || a.rechargeOnCrit);
+      // (A character's Surprise Attack isn't played: its initiative's skill isn't known.)
+      const spec = slug === "surprise-attack" && ctx.character ? {} : glossarySpec({ abilities: [ability], bright: true });
+      const said = [...made, ...marked.map(a => ({ marked: { holding: !!a.requires?.holding, rechargeOnCrit: !!a.rechargeOnCrit } })), ...(Object.keys(spec).length ? [{ spec }] : [])];
+      if ( said.length ) {
+        how.add("glossary");
+        built.push({ glossary: said });
+      }
+    }
+
+    // Its auras that make foes save (adapter.js #auras, auras.js).
+    if ( ["action", "feat"].includes(item.type) && (itemTraits.includes("aura") || allRules.some(r => r.key === "Aura")) ) {
       try {
-        const action = abilityAction({ id: "a", name: item.name, html: approxResolved(html, level, ruleValue, levelDC), actions: item.system?.actions?.value,
-          traits: item.system?.traits?.value ?? [], strikes: ctx.melee ?? [], actionType: type });
-        if ( action ) how.add("ability reader");
+        const aura = auraOf({ id: "a.aura", slug, name: item.name, html: approxResolved(html, level, ruleValue, levelDC), source: html, traits: itemTraits,
+          rules: allRules, actionType: type, actor: actorData, words: reading.auras ?? {} });
+        if ( aura ) {
+          how.add("aura");
+          built.push({ aura: { ...aura, label: "" } });
+        }
       } catch ( err ) {
-        // (Text it can't read is no action.)
+        // (Text it can't read is no aura.)
+      }
+    }
+
+    // Its situational saves (save-vs.js, the core's spec.saveVs): a FlatModifier on saves about the effect saved against.
+    const readRules = new Set();
+    if ( ["action", "feat"].includes(item.type) ) {
+      const entries = [];
+      for ( const r of allRules ) {
+        const entry = saveVsOf(r, { traits, actor: actorData });
+        if ( entry ) {
+          readRules.add(r);
+          entries.push(entry);
+        }
+      }
+      if ( entries.length ) {
+        how.add("situational save");
+        built.push({ saveVs: entries });
+      }
+    }
+
+    // A reaction or a triggered free action it doesn't know by slug (adapter.js #reactions, reactions-read.js): not one
+    // read its own way, not a Strike's rider.
+    if ( isReaction && !OWN_READING.has(slug) && !referenced && !ctx.hazard ) {
+      try {
+        const own = (ctx.items ?? []).filter(i => ["action", "feat"].includes(i.type)).map(i => abilityOf(i, ctx)).filter(a => a && Number.isFinite(a.uses))
+          .map(a => ({ id: a.id, name: a.name }));
+        const r = readReaction({ id: "a.reaction", label: "", html: approxResolved(html, level, ruleValue, levelDC, { keepLinks: true }), actionType: type,
+          frequency: item.system?.frequency ?? null, traits: itemTraits }, { reading, name: ctx.actor?.name ?? "", kinds: ctx.kinds ?? [], level,
+          strikes: (ctx.strikes ?? []).map(s => ({ id: s.id, name: s.name, slug: s.slug })), actions: own,
+          conditionOf: uuid => conditions.get(uuid) ?? null, effectOf: uuid => effects.get(uuid) ?? null });
+        if ( r ) {
+          how.add("reaction reader");
+          built.push({ reaction: r });
+          reacts = true;
+        }
+      } catch ( err ) {
+        // (Text it can't read is no reaction.)
       }
     }
 
@@ -371,18 +563,30 @@ function classifier(h, effects) {
         const opts = new Set(["item:melee", "item:type:weapon", `self:effect:${short}`, `self:effect:${eslug}`, short]);
         const own = modsFromRules(effect.system?.rules ?? [], { rank: level, actor: actorData, options: opts });
         const whileOn = modsFromRules(item.system?.rules ?? [], { rank: level, actor: actorData, options: opts, only: `self:effect:${short}` });
-        if ( Object.keys(own.mods).length || Object.keys(whileOn.mods).length || own.tempHp || whileOn.tempHp || own.fastHealing || own.regen ) how.add("self-effect");
+        if ( Object.keys(own.mods).length || Object.keys(whileOn.mods).length || own.tempHp || whileOn.tempHp || own.fastHealing || own.regen ) {
+          how.add("self-effect");
+          built.push({ selfEffect: { own, whileOn } });
+        }
       }
     }
 
     // Its rules: fast healing and regeneration (adapter.js #mending); numbers PF2e works into the sheet.
-    const rules = rulesOf(item, { character: ctx.character });
-    if ( rules.mending && (item.system?.rules ?? []).some(r => r?.key === "FastHealing" && Number(ruleValue(r.value, { actor: actorData })) > 0) ) how.add("mending");
+    const rules = rulesOf(item, { character: ctx.character, read: readRules });
+    if ( rules.mending ) {
+      const mending = allRules.filter(r => r.key === "FastHealing" && Number(ruleValue(r.value, { actor: actorData })) > 0).map(r => r.type ?? "fast-healing");
+      if ( mending.length ) {
+        how.add("mending");
+        built.push({ mending });
+      }
+    }
 
     // A sense its sheet lists (adapter.js #senses), by the sense's own slug in the ability's.
     for ( const s of ctx.senses ?? [] ) {
       const t = String(s?.type ?? "");
-      if ( t && !NOT_SENSES.has(t) && new RegExp(`(?:^|-)${t}(?:-|$)`).test(slug) ) how.add("sense");
+      if ( t && !NOT_SENSES.has(t) && new RegExp(`(?:^|-)${t}(?:-|$)`).test(slug) ) {
+        how.add("sense");
+        built.push({ sense: t });
+      }
     }
 
     const { signals, notes } = structureOf(item, { expanded: ctx.expanded ?? html, attackEffect: referenced && !how.has("Strike rider") });
@@ -390,14 +594,20 @@ function classifier(h, effects) {
     for ( const s of rules.signals ) signals.add(s);
     if ( HINTS.has(slug) ) notes.add("setup hint");
     const textual = ["@Damage", "@Check save", "@Check", "@Template", "inline roll", "action link", "frequency", "trigger", "effect link"].some(k => signals.has(k));
-    if ( !how.size && rules.allFolded && !textual && type === "passive" ) how.add("PF2e's numbers");
+    if ( !how.size && rules.allFolded && !textual && type === "passive" ) {
+      how.add("PF2e's numbers");
+      built.push({ numbers: rules.keys });
+    }
 
     let result;
     if ( how.size ) result = "full";
-    else if ( signals.size ) result = "part";
+    else if ( NO_FIGHT_EFFECT.has(slug) ) {
+      result = "known";
+      built.push({ noFight: slug });
+    } else if ( signals.size ) result = "part";
     else if ( rules.onlyPlumbing ) result = "plumbing";
     else result = "none";
-    return { slug, level: result, how, signals, notes, type };
+    return { slug, level: result, how, signals, notes, type, reacts: reacts && isReaction, built };
   };
 }
 
@@ -405,14 +615,15 @@ function classifier(h, effects) {
 /*  Tallying                                    */
 /* -------------------------------------------- */
 
-const LEVELS = ["full", "part", "none", "plumbing"];
+/** The levels, best first (a tie between two goes to the earlier). */
+const LEVELS = ["full", "known", "part", "none", "plumbing"];
 /** Each level as the report names it. */
-const SAID = Object.freeze({ full: "fully", part: "partly", none: "not", plumbing: "plumbing" });
+const SAID = Object.freeze({ full: "fully", known: "known", part: "partly", none: "not", plumbing: "plumbing" });
+const zero = () => Object.fromEntries(LEVELS.map(k => [k, 0]));
 
 /** A tally of one slug's instances. */
 function entry(slug) {
-  return { slug, count: 0, core: 0, weight: 0, levels: { full: 0, part: 0, none: 0, plumbing: 0 }, coreLevels: { full: 0, part: 0, none: 0, plumbing: 0 },
-    how: {}, signals: {}, notes: {}, types: {}, kinds: {}, traits: {} };
+  return { slug, count: 0, core: 0, weight: 0, levels: zero(), coreLevels: zero(), how: {}, signals: {}, notes: {}, types: {}, kinds: {}, traits: {} };
 }
 const bump = (o, k, n = 1) => { o[k] = (o[k] ?? 0) + n; };
 
@@ -440,27 +651,44 @@ const top = (o, n = 3, min = 0) => Object.entries(o).filter(([, v]) => v > min).
 const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : "-");
 
 /* -------------------------------------------- */
+/*  What the scripts name                       */
+/* -------------------------------------------- */
+
+/** The helper's scripts, as one text (what the drift check and tools/review.mjs look for slugs in). */
+export const scriptsText = () => readdirSync(join(REPO, "scripts")).filter(f => f.endsWith(".js")).sort()
+  .map(f => readFileSync(join(REPO, "scripts", f), "utf8")).join("\n");
+
+/** The kebab-case words the scripts quote ("shield-block"): the drift check's, and the slugs they may name. */
+export const quotedSlugs = source => new Set([...String(source).matchAll(/["']([a-z0-9]+(?:-[a-z0-9]+)+)["']/g)].map(m => m[1]));
+
+/* -------------------------------------------- */
 /*  The scan                                    */
 /* -------------------------------------------- */
 
-export async function scan(o) {
+/**
+ * The scan. `visit(r, where)`, if given, sees every instance classified: r (classify's), where {side: "creature" |
+ * "character", item, actor, pack, core}.
+ */
+export async function scan(o, { visit = null } = {}) {
   const h = await helperModules(o.core);
-  const manifest = systemManifest(o.pf2e);
-  const ClassicLevel = classicLevel(o.foundry);
-  const words = systemWords(o.pf2e);
+  const source = openPacks({ pf2e: o.pf2e, foundry: o.foundry });
+  const { manifest, words } = source;
   const expand = html => String(html ?? "").replace(/@Localize\[([^\]]+)\]/g, (m, key) => words[key] ?? "");
   const packs = manifest.packs ?? [];
-  const read = async name => {
-    const p = packs.find(x => x.name === name);
-    return p ? readPack(o.pf2e, p.path, ClassicLevel) : [];
-  };
+  const read = name => source.read(name);
 
-  // Effects, for self-effects (by uuid, as items link them).
+  // Effects, for self-effects and what a reaction links (by uuid, as items link them); conditions by uuid, as slugs.
   const effects = new Map();
   for ( const name of EFFECT_PACKS ) {
     for ( const item of itemsOf(await read(name)) ) effects.set(`Compendium.pf2e.${name}.Item.${item._id}`, item);
   }
-  const classify = classifier(h, effects);
+  const conditions = new Map();
+  for ( const item of itemsOf(await read("conditionitems")) ) {
+    const slug = item.system?.slug ?? slugOf(item);
+    conditions.set(`Compendium.pf2e.conditionitems.Item.${item._id}`, slug);
+    conditions.set(`Compendium.pf2e.conditionitems.${item._id}`, slug);
+  }
+  const classify = classifier(h, { effects, conditions, words });
 
   // Words for the trigger shapes: PF2e's traits, its actions, skills and saves.
   const traitWords = new Set(Object.entries(words).filter(([k, v]) => /^PF2E\.Trait[A-Z]/.test(k) && !/\s/.test(v)).map(([, v]) => v.toLowerCase()));
@@ -481,13 +709,13 @@ export async function scan(o) {
     const text = m ? h.coreApi.plainText(m[1].replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (x, label) => label ?? "")) : "";
     const norm = text ? normalizeTrigger(text, { name, kinds }) : "";
     const filed = norm ? refineTrigger(classifyTrigger(norm), h.coreApi.plainText(expanded)) : null;
-    reactions.push({ side, slug: r.slug, full: r.level === "full", core, trigger: filed?.trigger ?? null, pattern: filed?.pattern ?? null, also: filed?.also ?? [],
+    reactions.push({ side, slug: r.slug, full: r.level === "full", plays: r.reacts, core, trigger: filed?.trigger ?? null, pattern: filed?.pattern ?? null, also: filed?.also ?? [],
       shape: filed || !norm ? null : shapeOf(norm, shapeWords), none: !norm });
   };
 
   // Creatures.
   for ( const p of packs.filter(x => x.type === "Actor" && !NOT_CREATURE_PACKS.has(x.name)) ) {
-    const docs = await readPack(o.pf2e, p.path, ClassicLevel);
+    const docs = await read(p.name);
     let any = false;
     const core = CORE_CREATURE_PACKS.has(p.name);
     for ( const { actor, items } of actorsOf(docs) ) {
@@ -496,12 +724,11 @@ export async function scan(o) {
       stats.creatureActors++;
       if ( core ) stats.coreActors++;
       const sys = actor.system ?? {};
-      const melee = items.filter(i => i.type === "melee").map(i => ({ name: i.name,
-        damage: h.coreApi.parseTypedFormula(Object.values(i.system?.damageRolls ?? {}).map(d => `(${d.damage})[${d.damageType}]`).join(" + ")) }));
+      const strikes = strikesOf(items, h.coreApi.parseTypedFormula);
       const referenced = new Set(items.filter(i => i.type === "melee").flatMap(i => i.system?.attackEffects?.value ?? []));
       const skills = Object.fromEntries(Object.entries(sys.skills ?? {}).map(([k, v]) => [k, Number(v?.base ?? v?.value)]));
-      const ctx = { character: false, level: Number(sys.details?.level?.value) || 0, abilities: sys.abilities, skills, senses: sys.perception?.senses ?? [], items, melee, referenced,
-        shield: items.some(i => i.type === "shield") };
+      const ctx = { character: false, level: Number(sys.details?.level?.value) || 0, abilities: sys.abilities, skills, senses: sys.perception?.senses ?? [], items, strikes, referenced,
+        shield: items.some(i => i.type === "shield"), actor, kinds: sys.traits?.value ?? [], memo: new Map() };
       const seen = new Set();
       for ( const item of items ) {
         if ( !["action", "feat"].includes(item.type) ) continue;
@@ -511,6 +738,7 @@ export async function scan(o) {
         seen.add(r.slug);
         record(creatures, r, { core, kind: item.system?.category ?? item.type, traits: item.system?.traits?.value });
         fileTrigger("creature", r, expanded, { name: actor.name, kinds: sys.traits?.value ?? [], core });
+        visit?.(r, { side: "creature", item, actor, pack: p.name, core });
       }
     }
     if ( any ) stats.creaturePacks++;
@@ -531,7 +759,7 @@ export async function scan(o) {
       if ( !["feat", "action"].includes(item.type) ) continue;
       const core = CORE_TITLES.has(item.system?.publication?.title ?? "");
       const expanded = expand(descriptionOf(item));
-      const r = classify(item, { character: true, level: Number(item.system?.level?.value) || 1, expanded });
+      const r = classify(item, { character: true, level: Number(item.system?.level?.value) || 1, expanded, memo: new Map() });
       if ( !r.slug ) continue;
       stats.characterItems++;
       if ( core ) stats.coreCharacterItems++;
@@ -541,19 +769,20 @@ export async function scan(o) {
       e.rank = Math.min(e.rank ?? 99, Number(item.system?.level?.value) || 0);
       e.weight = counted(r.slug);
       fileTrigger("character", r, expanded, { core });
+      visit?.(r, { side: "character", item, actor: null, pack: name, core });
     }
   }
   for ( const slug of Object.keys(pregenCount) ) if ( !characters.has(slug) ) stats.pregenOnly.add(slug);
 
   // What the scripts mention and the tables mirror (the drift check).
-  const source = readdirSync(join(REPO, "scripts")).filter(f => f.endsWith(".js")).map(f => readFileSync(join(REPO, "scripts", f), "utf8")).join("\n");
-  const literals = new Set([...source.matchAll(/["']([a-z0-9]+(?:-[a-z0-9]+)+)["']/g)].map(m => m[1]));
+  const text = scriptsText();
+  const literals = quotedSlugs(text);
   const mirrored = [...Object.keys(KNOWN).filter(slug => KNOWN[slug] !== "spells"), ...HINTS];
-  const stale = mirrored.filter(slug => !source.includes(`"${slug}"`) && !source.includes(`${slug}:`));
-  const fullSomewhere = new Set([...creatures.values(), ...characters.values()].filter(e => e.levels.full).map(e => e.slug));
-  const unmirrored = [...literals].filter(s => (creatures.has(s) || characters.has(s)) && !fullSomewhere.has(s) && !HINTS.has(s) && !NOT_ABILITIES.has(s)).sort();
+  const stale = mirrored.filter(slug => !text.includes(`"${slug}"`) && !text.includes(`${slug}:`));
+  const understood = new Set([...creatures.values(), ...characters.values()].filter(e => e.levels.full || e.levels.known).map(e => e.slug));
+  const unmirrored = [...literals].filter(s => (creatures.has(s) || characters.has(s)) && !understood.has(s) && !HINTS.has(s) && !NOT_ABILITIES.has(s)).sort();
 
-  return { manifest, creatures, characters, reactions, stats, stale, unmirrored, master: h.master, coreDir: o.core };
+  return { manifest, source: source.kind, creatures, characters, reactions, stats, stale, unmirrored, master: h.master, coreDir: o.core };
 }
 
 /* -------------------------------------------- */
@@ -585,8 +814,8 @@ const row = cells => `| ${cells.map(esc).join(" | ")} |`;
  * @param {boolean} core   only the free remaster core's instances
  */
 function totalsRow(label, list, weightOf, core = false) {
-  const d = { full: 0, part: 0, none: 0, plumbing: 0 };
-  const w = { full: 0, part: 0, none: 0, plumbing: 0 };
+  const d = zero();
+  const w = zero();
   let n = 0;
   for ( const e of list ) {
     d[levelOf(e, core)]++;
@@ -594,7 +823,8 @@ function totalsRow(label, list, weightOf, core = false) {
     for ( const k of LEVELS ) w[k] += weightOf(e, k);
   }
   const wn = LEVELS.reduce((s, k) => s + w[k], 0);
-  return row([label, n, pct(d.full, n), pct(d.part, n), pct(d.none, n), pct(d.plumbing, n), Math.round(wn), pct(w.full, wn), pct(w.part, wn), pct(w.none, wn), pct(w.plumbing, wn)]);
+  return row([label, n, pct(d.full, n), pct(d.part, n), pct(d.none, n), pct(d.known, n), pct(d.plumbing, n), Math.round(wn), pct(w.full, wn), pct(w.part, wn),
+    pct(w.none, wn), pct(w.known, wn), pct(w.plumbing, wn)]);
 }
 
 /** A slug's structure, for the gap tables: its signals and notes in at least a third of its instances. */
@@ -604,6 +834,9 @@ const structure = e => {
   return sig.length ? sig.join(", ") : "none";
 };
 const typeOf = e => top(e.types, 2).join("/");
+
+/** Where the packs came from, as the report says it (coverage-packs.mjs packKind). */
+const SOURCES = Object.freeze({ install: "its installed packs", json: "its release's json-assets", source: "its source at the release tag" });
 
 export function render(scan, { version, moduleVersion, commit, date }) {
   const { creatures, characters, reactions, stats } = scan;
@@ -621,10 +854,11 @@ export function render(scan, { version, moduleVersion, commit, date }) {
   const carriedCore = (e, k) => (e.core ? (e.coreLevels[k] * e.weight) / e.count : 0);
 
   say("# PF2e coverage", "",
-    `Generated by \`node tools/coverage.mjs --out docs/coverage.md\` on ${date}: PF2e ${version}, FastFighting PF2e ${moduleVersion} (its scripts at ${commit}). The tool's header says how it reads the packs and what it approximates.`, "",
+    `Generated by \`node tools/coverage.mjs --out docs/coverage.md\` on ${date}: PF2e ${version} (${SOURCES[scan.source] ?? scan.source}), FastFighting PF2e ${moduleVersion} (its scripts at ${commit}). The tool's header says how it reads the packs and what it approximates.`, "",
     "How much of what PF2e's creatures and characters can do the helper understands, by slug, sorted by how often each turns up.",
     "",
-    "- **Fully:** the helper builds an engine action, reaction or flag from it: a slug it knows, a reader that handles it (save abilities, gullets, Strike riders, self-effects, fast healing, senses), or rule elements PF2e works into the numbers the helper reads off the sheet.",
+    "- **Fully:** the helper builds an engine action, reaction, aura or flag from it: a slug it knows, a reader that handles it (save abilities and their requirements, gullets, Strike riders, self-effects, fast healing, senses, auras, situational saves, standard abilities, reactions), something the engine plays another way, or rule elements PF2e works into the numbers the helper reads off the sheet.",
+    "- **Known:** nothing to play in a fight (`glossary.js` `NO_FIGHT_EFFECT`); never a gap.",
     "- **Partly:** it has structure the helper could read but doesn't: inline `@Damage`, `@Check` or `@Template`, an inline roll or action link, other rule elements, a frequency, a trigger, an effect or condition link.",
     "- **Not at all:** none of that.",
     "- **Plumbing:** its only rules grant or choose other items (each scanned in its own right).",
@@ -635,8 +869,8 @@ export function render(scan, { version, moduleVersion, commit, date }) {
   // Totals.
   say("## Totals", "",
     `Creatures: ${stats.creatureActors} npc actors in ${stats.creaturePacks} packs (${stats.coreActors} in Monster Core); left out: ${Object.entries(stats.skippedActors).map(([k, v]) => `${v} ${k}`).join(", ")}, and the pregenerated characters. Characters: ${stats.characterItems} feats, class features, actions and ancestry features (${stats.coreCharacterItems} from Player Core), weighed by ${stats.pregens} pregenerated characters.`, "",
-    "| scope | slugs | fully | partly | not | plumbing | weighed | fully | partly | not | plumbing |",
-    "|---|---|---|---|---|---|---|---|---|---|---|",
+    "| scope | slugs | fully | partly | not | known | plumbing | weighed | fully | partly | not | known | plumbing |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     totalsRow("Creature abilities, all (weighed per creature)", C, instances),
     totalsRow("Creature abilities, Monster Core", C.filter(e => e.core), coreInstances, true),
     totalsRow("Character options, all (weighed per pregen carrying it)", P, carried),
@@ -680,7 +914,7 @@ export function render(scan, { version, moduleVersion, commit, date }) {
 
   // Reaction triggers.
   const byTrigger = {};
-  const slot = id => (byTrigger[id] ??= { creature: 0, creatureFull: 0, creatureCore: 0, slugs: new Set(), character: 0, characterFull: 0, patterns: {} });
+  const slot = id => (byTrigger[id] ??= { creature: 0, creaturePlays: 0, creatureCore: 0, slugs: new Set(), character: 0, characterPlays: 0, patterns: {} });
   let filed = 0;
   let total = 0;
   for ( const r of reactions ) {
@@ -690,30 +924,30 @@ export function render(scan, { version, moduleVersion, commit, date }) {
     const s = slot(r.trigger);
     if ( r.side === "creature" ) {
       s.creature++;
-      if ( r.full ) s.creatureFull++;
+      if ( r.plays ) s.creaturePlays++;
       if ( r.core ) s.creatureCore++;
       s.slugs.add(r.slug);
     } else {
       s.character++;
-      if ( r.full ) s.characterFull++;
+      if ( r.plays ) s.characterPlays++;
     }
     bump(s.patterns, r.pattern);
   }
   const creatureTotal = reactions.filter(r => r.side === "creature").length;
   const characterTotal = reactions.length - creatureTotal;
   say("## Reaction triggers", "",
-    `${total} reactions and free actions with a trigger (${creatureTotal} on creatures, counted per creature; ${characterTotal} character options, each once). The grammar in \`tools/coverage-triggers.mjs\` files ${filed} of them (${pct(filed, total)}) under the core's master triggers (\`REACTION_TRIGGERS\`). "Engine" marks the triggers the engine checks today (the core's docs/reaction-triggers.md); "plays" counts the reactions the helper fully understands.`, "",
+    `${total} reactions and free actions with a trigger (${creatureTotal} on creatures, counted per creature; ${characterTotal} character options, each once). The grammar in \`tools/coverage-triggers.mjs\` files ${filed} of them (${pct(filed, total)}) under the core's master triggers (\`REACTION_TRIGGERS\`). "Engine" marks the triggers the engine checks today (the core's docs/reaction-triggers.md); "plays" counts the reactions the helper builds and plays as reactions (by slug, or read by \`reactions-read.js\`).`, "",
     "### Coverage by trigger", "",
     "| trigger | group | engine | creature reactions | distinct slugs | in core | plays | character options | plays | main pattern |", "|---|---|---|---|---|---|---|---|---|---|");
   const ids = Object.keys(byTrigger).sort((a, b) => (byTrigger[b].creature + byTrigger[b].character) - (byTrigger[a].creature + byTrigger[a].character) || a.localeCompare(b));
   for ( const id of ids ) {
     const s = byTrigger[id];
-    say(row([`\`${id}\``, groupOf[id] ?? "?", moments.has(id) ? "yes" : "", s.creature, s.slugs.size, s.creatureCore, s.creatureFull, s.character, s.characterFull, top(s.patterns, 1).join("")]));
+    say(row([`\`${id}\``, groupOf[id] ?? "?", moments.has(id) ? "yes" : "", s.creature, s.slugs.size, s.creatureCore, s.creaturePlays, s.character, s.characterPlays, top(s.patterns, 1).join("")]));
   }
   const unfiled = reactions.filter(r => !r.trigger);
   say(row(["(unfiled)", "", "", unfiled.filter(r => r.side === "creature").length, new Set(unfiled.filter(r => r.side === "creature").map(r => r.slug)).size,
-    unfiled.filter(r => r.side === "creature" && r.core).length, unfiled.filter(r => r.side === "creature" && r.full).length, unfiled.filter(r => r.side === "character").length,
-    unfiled.filter(r => r.side === "character" && r.full).length, ""]), "");
+    unfiled.filter(r => r.side === "creature" && r.core).length, unfiled.filter(r => r.side === "creature" && r.plays).length, unfiled.filter(r => r.side === "character").length,
+    unfiled.filter(r => r.side === "character" && r.plays).length, ""]), "");
   const quiet = Object.keys(groupOf).filter(id => !byTrigger[id] && /^(?:atSelf|atAlly|foeAction|movement|magic|social|turnRound|other)$/.test(groupOf[id]));
   if ( quiet.length ) say(`No PF2e reaction filed under: ${quiet.map(id => `\`${id}\``).join(", ")}.`, "");
 
@@ -740,7 +974,8 @@ export function render(scan, { version, moduleVersion, commit, date }) {
 
   // Notes.
   say("## Notes and approximations", "", ...[
-    "- The helper's own pure functions run on each item's data where they can (see the tool's header). What can't be called is mirrored in the tool (`KNOWN`, `ENGINE_ACTIONS`, `HINTS`, `NOT_SENSES`); `PATTERNS` is the tool's own.",
+    "- The helper's own pure functions run on each item's data where they can (see the tool's header), with `reading/en.json`'s words. What can't be called is mirrored in the tool (`KNOWN`, `ENGINE_ACTIONS`, `HINTS`, `NOT_SENSES`).",
+    "- Situational saves: a bare trait in a predicate is read against PF2e's trait labels in its language file (the adapter reads `CONFIG.PF2E`'s lists). Reactions: a condition link is resolved from the conditions pack, an effect link from the effect packs, as if every player could open them (the helper checks the pack's permission). Light Blindness counts as if the scene were bright.",
     "- Formulas: PF2e works out an item's `@Check` DCs and `@Damage` formulas for its actor before the helper reads them. The tool fills an `@Check` with no DC with the GM Core DC for the level, and an `@Damage` formula's `@actor.level` with the level and an attribute modifier with +4, then works out the arithmetic. Character options are read at their own level.",
     "- Self-effects are read from the effect packs, as if every player could open them (the helper checks the pack's permission).",
     "- \"PF2e's numbers\" assumes PF2e applies a rule element with no predicate to the sheet, and a Strike's attack or damage rule whose predicate names only the weapon or the character's features to that Strike (the helper reads each Strike's modifier and damage formula from PF2e). Any other predicate is counted as structure (`(when)`). A sense counts when the creature's sheet lists it and the helper maps it; Shield Block and Reactive Shield count on a creature that has a shield.",
@@ -749,7 +984,7 @@ export function render(scan, { version, moduleVersion, commit, date }) {
     `- Setup hints: ${C.concat(P).filter(e => e.notes["setup hint"] && levelOf(e) !== "full").length} slugs the helper reads only to set a character up (auto.js, traits.js) are noted as \`setup hint\`, not counted as understood.`,
     stats.pregenOnly.size ? `- ${stats.pregenOnly.size} slugs the pregenerated characters carry aren't in the character compendiums (renamed or older copies): weighed nowhere.` : "",
     scan.stale.length ? `- Drift: mirrored slugs the scripts no longer mention: ${scan.stale.map(s => `\`${s}\``).join(", ")}. Update the tool's tables.` : "- Drift: every mirrored slug is still in the scripts.",
-    scan.unmirrored.length ? `- Drift: slugs the scripts mention that the scan finds but never counts as understood (check whether the tool should know them): ${scan.unmirrored.slice(0, 30).map(s => `\`${s}\``).join(", ")}.` : ""
+    scan.unmirrored.length ? `- Drift: slugs the scripts mention that the scan finds but never counts as understood or known (check whether the tool should know them): ${scan.unmirrored.slice(0, 30).map(s => `\`${s}\``).join(", ")}.` : "- Drift: every slug the scripts mention that the scan finds is understood or known somewhere."
   ].filter(Boolean));
   return `${out.filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n").trim()}\n`;
 }
@@ -775,13 +1010,13 @@ function teachNext(scan, byTrigger, moments) {
   const auras = C.filter(e => open(e) && has(e, "rules: Aura") && has(e, "@Check save"));
   if ( auras.length ) lines.push(`2. **Auras with a save** (an \`Aura\` rule element and an \`@Check\` save, passive, so the save reader skips them): ${auras.length} slugs, ${sum(auras, gap)} creatures, led by ${lead(auras)}.`);
   const reqs = C.filter(e => open(e) && has(e, "requirements") && (has(e, "@Check save") || has(e, "@Damage")) && typed(e, "action"));
-  if ( reqs.length ) lines.push(`3. **Save or damage abilities with requirements** (the reader refuses any action with a Requirements line): ${reqs.length} slugs, ${sum(reqs, gap)} creatures, led by ${lead(reqs)}.`);
+  if ( reqs.length ) lines.push(`3. **Save or damage abilities with requirements** (a Requirements line \`reading/en.json\`'s "requirements" can't express, so the ability isn't used): ${reqs.length} slugs, ${sum(reqs, gap)} creatures, led by ${lead(reqs)}.`);
   const dmgOnly = C.filter(e => open(e) && has(e, "@Damage") && !has(e, "@Check save") && typed(e, "action"));
   if ( dmgOnly.length ) lines.push(`4. **Damage with no save** (an \`@Damage\` and no save: automatic damage or a Strike's extra): ${dmgOnly.length} slugs, ${sum(dmgOnly, gap)} creatures, led by ${lead(dmgOnly)}.`);
   const when = C.filter(e => open(e) && Object.keys(e.signals).some(k => / \(when\)$/.test(k) && has(e, k)) && typed(e, "passive"));
   if ( when.length ) lines.push(`5. **Situational bonuses** (a rule element PF2e applies only when its predicate holds, such as a bonus to saves against magic): ${when.length} slugs, ${sum(when, gap)} creatures, led by ${lead(when)}.`);
-  const live = Object.entries(byTrigger).filter(([id]) => moments.has(id)).map(([id, s]) => [id, s.creature - s.creatureFull]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  if ( live.length ) lines.push(`6. **Reactions on a trigger the engine already checks** but the helper doesn't map: ${live.map(([id, n]) => `\`${id}\` (${n})`).join(", ")} creature reactions; each needs only its effect read.`);
+  const live = Object.entries(byTrigger).filter(([id]) => moments.has(id)).map(([id, s]) => [id, s.creature - s.creaturePlays]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  if ( live.length ) lines.push(`6. **Reactions on a trigger the engine already checks** that the helper doesn't build: ${live.map(([id, n]) => `\`${id}\` (${n})`).join(", ")} creature reactions; each needs its trigger line or its effect read whole (\`reading/en.json\`).`);
   const next = Object.entries(byTrigger).filter(([id]) => !moments.has(id)).map(([id, s]) => [id, s.creature + s.character]).sort((a, b) => b[1] - a[1]).slice(0, 5);
   if ( next.length ) lines.push(`7. **Busiest triggers with no engine moment yet:** ${next.map(([id, n]) => `\`${id}\` (${n})`).join(", ")}: a core hook each.`);
   const core = [...scan.characters.values()].filter(e => open(e) && e.core && !typed(e, "passive"))
