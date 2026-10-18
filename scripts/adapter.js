@@ -1047,8 +1047,8 @@ export class Pf2eAdapter extends SystemAdapter {
    * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
    * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
    * against one attack), a guardian's Intercept Attack and a champion's reaction for an ally (champion.js). By slug, on
-   * characters and monsters alike. Any other reaction or triggered free action, and Draconic Momentum, as
-   * reactions-read.js reads it (reactions-item.js), where it reads it whole; not a Strike's rider (attackEffects: Grab,
+   * characters and monsters alike. Any other reaction or triggered free action as reactions-read.js reads it
+   * (reactions-item.js), where it reads it whole; not a Strike's rider (attackEffects: Grab,
    * Knockdown), Reactive Strike or Ferocity, nor a hazard's (its reaction is its action). Null when it has none.
    */
   async #reactions(actor, actions = []) {
@@ -1078,7 +1078,7 @@ export class Pf2eAdapter extends SystemAdapter {
         // A champion's reaction: a friend hit in its aura, the foe in it too, resists the blow (and the foe, in reach of
         // a Retributive Strike, gets struck).
         out.push(await championReaction(actor, item, { slug, slugs }));
-      } else if ( slug === "draconic-momentum" || (["reaction", "free"].includes(item.system.actionType?.value) && !OWN_READING.has(slug) && !riders.has(slug) && actor.type !== "hazard") ) {
+      } else if ( ["reaction", "free"].includes(item.system.actionType?.value) && !OWN_READING.has(slug) && !riders.has(slug) && actor.type !== "hazard" ) {
         toRead.push(item);
       }
     }

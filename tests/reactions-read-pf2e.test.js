@@ -1,12 +1,12 @@
 /**
  * PF2e reactions read by their structure (reactions-read.js): the moment from the Trigger line by reading/en.json's
  * grammar, what it does from the Effect's @Damage, @Check, condition and effect links, and its Strike, AC or recharge
- * by the "effects" patterns; Draconic Momentum by slug; and what isn't built. The texts here are written for the tests
+ * by the "effects" patterns; and what isn't built. The texts here are written for the tests
  * in the shape PF2e's take, not copied from a book.
  */
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
-import { readReaction, readTrigger, readEffects, effectPart, triggerText, momentumReaction } from "../scripts/reactions-read.js";
+import { readReaction, readTrigger, readEffects, effectPart, triggerText, READ_TRIGGERS } from "../scripts/reactions-read.js";
 import { normalizeLine, classifyLine, selfWords } from "../scripts/trigger-lines.js";
 import { setReading } from "../scripts/reading.js";
 import { PATTERNS, classifyTrigger, normalizeTrigger } from "../tools/coverage-triggers.mjs";
@@ -42,7 +42,7 @@ describe("reading/en.json: one grammar for the helper and the coverage scan", ()
     const whole = english.triggers.filter(e => e.whole);
     expect(whole.length).toBeGreaterThan(10);
     for ( const e of whole ) {
-      expect(["attacked", "hit", "missed", "damaged", "slain", "ownHit", "foeCasts", "foeApproaches"]).toContain(e.trigger);
+      expect(READ_TRIGGERS).toContain(e.trigger);
       expect(e.pattern.startsWith("^") && e.pattern.endsWith("$")).toBe(true);
     }
     expect(english.effects.map(e => e.effect)).toEqual(expect.arrayContaining(["strike", "ac", "around", "recharge", "unless", "unclear", "foe"]));
@@ -83,6 +83,15 @@ describe("the moment, whole, with its filters", () => {
     expect(when("The bog strider critically hits a creature with its tail")).toEqual({ trigger: "ownHit", crit: true, strike: "tail" });
     expect(when("The bog strider rolls a critical hit against a creature")).toEqual({ trigger: "ownHit", crit: true });
     expect(when("The bog strider hits a creature with a melee Strike")).toEqual({ trigger: "ownHit", melee: true });
+  });
+
+  test("a foe moving in its reach, or out of it: a strike of its own, nothing else", () => {
+    expect(when("A creature within reach of the bog strider's tail uses a move action or leaves a square during a move action it's using"))
+      .toEqual({ trigger: "foeMovesInReach", alsoOn: ["foeLeavesReach"] });
+    expect(when("A foe within reach of the bog strider attempts to move away")).toEqual({ trigger: "foeLeavesReach" });
+    const lash = read("A creature within the bog strider's reach uses a move action", "The bog strider makes a tail Strike at the creature with a -2 penalty. If it hits, it disrupts the creature's action.");
+    expect(lash).toEqual({ id: "a.r", label: "Answer", on: ["foeMovesInReach", "foeLeavesReach"], strike: "a.tail" });
+    expect(read("A creature within the bog strider's reach uses a move action", "The bog strider spits @Damage[2d6[acid]] damage at the creature.")).toBe(null);
   });
 
   test("a foe casts, a foe comes close; and a line it can't read whole: nothing", () => {
@@ -188,17 +197,6 @@ describe("what isn't built: never half a reaction", () => {
     expect(triggerText(html)).toBe("A creature casts a spell");
     expect(effectPart(html)).toContain("Something happens.");
     expect(readEffects("<p>Nothing it can play.</p>", { trigger: "hit", reading })).toBe(null);
-  });
-});
-
-describe("Draconic Momentum (by slug)", () => {
-  const own = [{ id: "d.gust", name: "Gust", cooldown: { n: 1, faces: 4 }, slug: "gust" }, { id: "d.breath", name: "Cinder Breath", cooldown: { n: 1, faces: 4 }, slug: "cinder-breath" }];
-  test("its critical hit with a Strike readies the breath its text names; else a breath by slug; else any that recharges", () => {
-    const named = momentumReaction({ id: "d.dm", label: "Draconic Momentum", html: "<p>The dragon recharges their Cinder Breath whenever they score a critical hit with a Strike.</p>", actions: own, strikes: [{ id: "d.jaws" }], reading, name: "Ember Dragon", kinds: ["dragon"] });
-    expect(named).toEqual({ id: "d.dm", label: "Draconic Momentum", on: "ownHit", crit: true, free: true, passive: true, recharge: ["d.breath"], actions: ["d.jaws"] });
-    expect(momentumReaction({ id: "d.dm", label: "x", html: "<p>A critical hit brings it back.</p>", actions: own, reading }).recharge).toEqual(["d.breath"]);
-    expect(momentumReaction({ id: "d.dm", label: "x", html: "", actions: [own[0]], reading }).recharge).toEqual(["d.gust"]);
-    expect(momentumReaction({ id: "d.dm", label: "x", html: "", actions: [], reading })).toBe(null);
   });
 });
 

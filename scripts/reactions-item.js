@@ -1,9 +1,9 @@
 /**
  * The Foundry side of reactions-read.js: an actor's reactions and triggered free actions, their text with its formulas
  * worked out and its links kept, each link resolved (a condition's slug, an effect item), read into the core's
- * reactions. And Draconic Momentum, by slug. adapter.js #reactions hands over what it doesn't know by slug.
+ * reactions. adapter.js #reactions hands over what it doesn't know by slug.
  */
-import { readReaction, momentumReaction } from "./reactions-read.js";
+import { readReaction } from "./reactions-read.js";
 import { reading } from "./reading.js";
 import { linkedEffect, theirsToOpen, linksIn } from "./granted.js";
 
@@ -58,15 +58,9 @@ export async function itemReactions(actor, items, { actions = [], resolve, slugO
   const out = [];
   for ( const item of items ) {
     const html = await resolve(item, { keepLinks: true });
-    const slug = slugOf(item);
-    let r = null;
-    if ( slug === "draconic-momentum" ) {
-      r = momentumReaction({ id: `${actor.id}.${item.id}`, label: item.name, html, actions: own, strikes, reading: words, name: actor.name, kinds });
-    } else {
-      const { conditionOf, effectOf } = await linksOf(actor, html);
-      r = readReaction({ id: `${actor.id}.${item.id}`, label: item.name, html, actionType: item.system?.actionType?.value, frequency: item.system?.frequency ?? null,
-        traits: [...(item.system?.traits?.value ?? [])] }, { reading: words, name: actor.name, kinds, level, strikes, actions: own, conditionOf, effectOf });
-    }
+    const { conditionOf, effectOf } = await linksOf(actor, html);
+    const r = readReaction({ id: `${actor.id}.${item.id}`, label: item.name, html, actionType: item.system?.actionType?.value, frequency: item.system?.frequency ?? null,
+      traits: [...(item.system?.traits?.value ?? [])] }, { reading: words, name: actor.name, kinds, level, strikes, actions: own, conditionOf, effectOf });
     if ( r ) out.push(r);
   }
   return out;

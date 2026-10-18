@@ -10,6 +10,7 @@
  * those build reactions. Its filters: `crit`, `melee`, `ranged`, `range` (feet), as fields, or as the pattern's named
  * groups that matched (crit, melee, ranged, range: the feet, adjacent: 5 feet, reach: in its reach, so melee, strike:
  * the name of one of its own strikes, types: damage types; a name may end in a number, for its second place: crit2).
+ * `alsoOn`: the other moments it answers (a foe moving in its reach, or out of it).
  * Pure: no Foundry globals, no imports (the coverage scan loads it outside Foundry).
  */
 
@@ -118,6 +119,7 @@ export function wholeLine(filed) {
   if ( range > 0 ) out.range = range;
   if ( has("strike") ) out.strike = g.strike.trim();
   if ( has("types") ) out.types = g.types.trim();
+  if ( Array.isArray(e.alsoOn) && e.alsoOn.length ) out.alsoOn = [...e.alsoOn];
   if ( out.melee && out.ranged ) {
     delete out.melee;
     delete out.ranged;

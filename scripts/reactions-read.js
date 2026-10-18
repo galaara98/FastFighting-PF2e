@@ -4,7 +4,8 @@
  *
  *  - The moment: the Trigger line, read by the grammar in reading/en.json (trigger-lines.js): only a line a "whole"
  *    entry matches builds a reaction, with that entry's filters (a critical hit, melee or ranged, how near, the
- *    damage types, which of its own strikes).
+ *    damage types, which of its own strikes). A foe moving in its reach, or out of it, takes only a strike: the core's
+ *    opportunity strike of its own (its behavior/reactions.js).
  *  - What it does, from the Effect: @Damage at whoever set it off (harm; a basic @Check its save, or a plain one: a
  *    save that spares it all), or around itself (areaBurst: those beside it, those within so many feet, an
  *    emanation); healing @Damage, hit points for itself (heal); conditions its text links (@UUID to PF2e's
@@ -25,7 +26,9 @@ import { plain, durationRounds, conditionsLabel } from "./control.js";
 import { modsFromRules, ruleValue, effectRounds, helps } from "./effects.js";
 
 /** The core's moments this reader builds for. */
-export const READ_TRIGGERS = Object.freeze(["attacked", "hit", "missed", "damaged", "slain", "ownHit", "foeCasts", "foeApproaches"]);
+export const READ_TRIGGERS = Object.freeze(["attacked", "hit", "missed", "damaged", "slain", "ownHit", "foeCasts", "foeApproaches", "foeMovesInReach", "foeLeavesReach"]);
+/** Moments the core answers only with a strike (an opportunity strike of its own: its behavior/reactions.js). */
+const STRIKE_ONLY = new Set(["foeMovesInReach", "foeLeavesReach"]);
 
 /** PF2e's damage types (its identifiers), and "physical" for bludgeoning, piercing and slashing. */
 const DAMAGE_TYPES = new Set(["acid", "bludgeoning", "cold", "electricity", "fire", "force", "mental", "piercing", "poison", "slashing", "sonic",
@@ -230,9 +233,10 @@ export function readTrigger(line, { name = "", kinds = [], reading = {} } = {}) 
 export function readEffects(html, { trigger, reading = {}, name = "", kinds = [], level = 1, strikes = [], actions = [], conditionOf = null, effectOf = null } = {}) {
   const words = selfWords(reading);
   const norm = s => normalizeLine(plain(s), { name, kinds, words });
-  const whole = norm(html);
-  if ( firstMatch(effectsSaying(reading, "unclear"), whole) ) return null;
+  const unclear = text => !!firstMatch(effectsSaying(reading, "unclear"), norm(text));
   const { degrees, before } = degreeParts(html);
+  // (A degree that holds something it can't play: none of it is built.)
+  if ( degrees.some(d => d && unclear(d)) ) return null;
   const out = {};
   const harmDamage = [];
   let harmSave = null;
@@ -265,6 +269,7 @@ export function readEffects(html, { trigger, reading = {}, name = "", kinds = []
   for ( const s of sentences(before) ) {
     const n = norm(s);
     if ( firstMatch(effectsSaying(reading, "unless"), n) ) continue;
+    if ( unclear(s) ) return null;
     const near = firstMatch(effectsSaying(reading, "around"), n);
     if ( near ) around = Number(near.groups.range) || Number(near.entry.range) || around || 5;
     // A strike back, by its name where it gives one.
@@ -376,7 +381,10 @@ export function readReaction({ id, label, html, actionType, frequency = null, tr
   if ( !when ) return null;
   const effects = readEffects(effectPart(text), { ...o, trigger: when.trigger });
   if ( !effects ) return null;
-  const r = { id, label, on: when.trigger, ...effects };
+  // (A foe moving in or out of its reach: only a strike, as an opportunity strike of its own.)
+  if ( STRIKE_ONLY.has(when.trigger) && Object.keys(effects).some(k => k !== "strike") ) return null;
+  if ( STRIKE_ONLY.has(when.trigger) && !effects.strike ) return null;
+  const r = { id, label, on: when.alsoOn?.length ? [when.trigger, ...when.alsoOn] : when.trigger, ...effects };
   if ( actionType === "free" ) r.free = true;
   if ( traits.length ) r.traits = [...traits];
   if ( r.afflict && traits.length ) r.afflict.traits = [...traits];
@@ -402,22 +410,4 @@ export function readReaction({ id, label, html, actionType, frequency = null, tr
   if ( cooldownIn(text) ) r.uses = 1;
   else if ( often > 0 ) r.uses = often;
   return r;
-}
-
-/**
- * Draconic Momentum (by slug: a passive, no Trigger line): its critical hit with a Strike readies its breath weapon
- * again (ownHit, crit, free, recharge). Which action: the one its text names, among its own; else those that recharge
- * (a cooldown) whose slug says breath; else every one that recharges.
- * @param {object} d   {id, label, html, actions: its own [{id, name, slug, cooldown}], strikes: [{id}], reading}
- */
-export function momentumReaction({ id, label, html, actions = [], strikes = [], reading = {}, name = "", kinds = [] }) {
-  const words = selfWords(reading);
-  const n = normalizeLine(plain(html), { name, kinds, words });
-  const said = firstMatch(effectsSaying(reading, "recharge"), n);
-  const cooling = actions.filter(a => a.cooldown || a.recharge);
-  let ids = said ? actionsNamed(said.groups.action, cooling) : [];
-  if ( !ids.length ) ids = cooling.filter(a => /(?:^|-)breath(?:-|$)/.test(String(a.slug ?? ""))).map(a => a.id);
-  if ( !ids.length ) ids = cooling.map(a => a.id);
-  if ( !ids.length ) return null;
-  return { id, label, on: "ownHit", crit: true, free: true, passive: true, recharge: ids, ...(strikes.length ? { actions: strikes.map(s => s.id) } : {}) };
 }
