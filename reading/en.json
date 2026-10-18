@@ -528,6 +528,11 @@
       "pattern": "\\bstage \\d\\b|\\bmaximum duration\\b"
     },
     {
+      "name": "a lingering area, another form",
+      "effect": "unclear",
+      "pattern": "\\b(?:ending|ends|starting|starts) (?:its|their) turn (?:there|in|within)\\b|\\bwhile in (?:this|that|its) form\\b"
+    },
+    {
       "name": "the foe",
       "effect": "foe",
       "pattern": "\\b(?:the |that |this |each |any )?(?:triggering |attacking |damaged |struck |adjacent )?(?:creature|target|attacker|enemy|foe|opponent|victim)s?\\b"
@@ -540,7 +545,7 @@
     {
       "name": "not laid",
       "effect": "notLaid",
-      "pattern": "\\b(?:not|isn't|aren't|no longer|already|while)\\s*$"
+      "pattern": "\\b(?:not|isn't|aren't|no longer|already|while|has|have|had)(?: [a-z-]+(?: \\d+)?(?:,| or| and))*\\s*$"
     },
     {
       "name": "harm to itself",
