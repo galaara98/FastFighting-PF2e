@@ -1,7 +1,26 @@
 {
   "$comment": "How FastFighting PF2e reads PF2e's own English text where an item's data says nothing. Patterns are regular expressions over the line, lower case. A translation is a copy of this file named for its language (de.json), read before this one. See CODING_README.md.",
   "triggers": [],
-  "requirements": [],
+  "requirements": [
+    { "means": "line", "pattern": "<strong>\\s*requirements?\\s*</strong>(?<line>[\\s\\S]*?)(?:<strong>|<hr|</p>|$)" },
+    { "means": "word", "word": "dying", "is": "unconscious" },
+    { "means": "rolled", "pattern": "\\b(?:makes?|attempts?) (?:an?|its|their) (?:[\\w'’-]+ ){0,3}?strikes?\\b|\\bstrike has an? [+-]?\\d+|\\b(?:attempts?|requires) an? [\\w-]+ check\\b|\\battempts? to (?:grapple|shove|trip|reposition|disarm)\\b" },
+    { "means": "holding", "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:has|must have) (?:a|an|one) (?:living )?(?:\\w+ or smaller )?(?:creature|foe|target|enemy) (?:grabbed|restrained)(?: or (?:grabbed|restrained))?(?: (?:with|in|by) (?:one or both of )?(?:its|their|his|her|one or both) [\\w -]{1,30})?$" },
+    { "means": "holding", "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:is grabbing|has grabbed) (?:a|an) (?:creature|foe|target)$" },
+    { "means": "holding", "pattern": "^(?:a|an) creature is (?:grabbed|restrained)(?: or (?:grabbed|restrained))? (?:by|in) (?:[\\w'’-]+ ?){1,4}$" },
+    { "means": "lastHit", "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:last|previous|most recent) action was (?:a|an) (?:successful )?(?:(?<strike>[\\w'’ -]{1,30}?) )?strike(?: (?:against (?:a|an|the) (?:target |living )?(?:creature|foe|enemy|opponent)|that (?:hit|damaged) (?:a|an|the) (?:creature|foe|target|opponent|enemy)|that dealt damage))?$" },
+    { "means": "lastHit", "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:damaged|hit) (?:(?:a|an) (?:living )?(?:creature|foe|enemy) )?with (?:a|an|its|their) (?<strike>[\\w'’ -]{1,30}?) strike (?:on|with) (?:its|his|her|their) (?:last|previous|most recent) action(?: this turn)?$" },
+    { "means": "target", "pattern": "^an? (?<conditions>[\\w-]+(?:, [\\w-]+)*(?:,? or [\\w-]+)?) creature is within (?:[\\w'’-]+ ){0,4}?(?:melee )?reach(?: of (?:[\\w'’-]+ ?){1,6})?$" },
+    { "means": "target", "pattern": "^(?:[\\w'’-]+ ){1,4}?is (?:adjacent to|within reach of) an? (?:living creature that is )?(?<conditions>[\\w-]+(?:, [\\w-]+)*(?:,? or [\\w-]+)?)(?: creature)?$" },
+    { "means": "target", "is": ["prone"], "pattern": "^an? (?:adjacent )?creature is prone(?: within (?:[\\w'’-]+ ){0,4}?reach)?$" },
+    { "means": "target", "is": ["frightened", "unconscious"], "pattern": "^an? enemy is (?:under|affected by) a fear effect(?: or dying)? within \\d+ feet of (?:[\\w'’-]+ ?){1,4}$" },
+    { "means": "self", "is": ["hidden"], "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:is|must be|remains) (?:hidden|undetected|unnoticed|invisible)(?: or (?:hidden|undetected|unnoticed|invisible))?(?: (?:by|to) (?:its|their|his|her) target)?$" },
+    { "means": "self", "is": ["prone"], "pattern": "^(?:[\\w'’-]+ ){1,4}?is prone$" },
+    { "means": "shieldRaised", "pattern": "^(?:[\\w'’-]+ ){1,4}?(?:has|have) (?:a|their|its|his|her) shield raised$" }
+  ],
+  "multiattack": [
+    { "pattern": "\\b(?<n>one|two|three|four|a|an|\\d) (?<strike>[\\w'’-]+(?: [\\w'’-]+)?) strikes?\\b", "numbers": {"one": 1, "two": 2, "three": 3, "four": 4, "a": 1, "an": 1} }
+  ],
   "auras": {
     "radius": { "pattern": "^\\s*(\\d+) (?:feet|foot)\\b" },
     "enter": { "pattern": "\\b(?:enters?|entering)\\b" },

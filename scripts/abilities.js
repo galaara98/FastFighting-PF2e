@@ -7,6 +7,8 @@
  */
 import { parseTypedFormula } from "./core.js";
 import { parseControl, plain, conditionsIn, conditionsLabel, durationRounds, escapeAt, escapeIn, failureRiders } from "./control.js";
+import { requirementOf, withoutRequirement, rollsItself } from "./requirements.js";
+import { currentReading } from "./reading.js";
 
 const SAVES = { fortitude: "fortitude", fort: "fortitude", reflex: "reflex", ref: "reflex", will: "will" };
 
@@ -97,9 +99,28 @@ export function cooldownIn(html) {
   return fixed ? { n: Number(fixed[1]), faces: 1 } : null;
 }
 
+/** Healing in an ability's damage is what it does for itself (a drain), not harm to its target. */
+const harmIn = html => damageIn(html).filter(p => p.type !== "healing");
+
+/** Its first @Damage alone (several are often alternatives: thrown at a wall, or at a foe). */
+const firstDamage = html => /@Damage\[(?:[^\[\]]|\[[^\]]*\])*\]/i.exec(String(html ?? ""))?.[0] ?? "";
+
+/**
+ * How far an ability that needs something of its Strikes reaches: the reach of the Strikes its requirement names (a
+ * bite after a bite), else of its longest melee Strike (a squeeze on whoever it holds), else 5 feet.
+ */
+function reachFor(requires, strikes) {
+  const named = [].concat(requires ?? []).flatMap(r => [...(r.lastHit?.with ?? []), ...(r.hits?.with ?? [])]);
+  const melee = strikes.filter(s => s.melee !== false && Number(s.reach) > 0 && (!named.length || named.includes(s.id)));
+  return melee.length ? Math.max(...melee.map(s => Number(s.reach))) : 5;
+}
+
 /**
  * An action for the engine from one ability, or null when it isn't something to use on a turn (a reaction, a
- * passive) or doesn't ask for a save that hurts or hinders.
+ * passive) or doesn't ask for a save that hurts or hinders. One with a Requirements line it can express (a foe it holds,
+ * its last action a hit, a condition on its target or itself: requirements.js) carries it as the core's `requires`,
+ * and may then simply deal its damage, with no save (a drain on a foe it holds); one whose line it can't express
+ * ("adjacent to their hoard") isn't used at all.
  * @param {object} d
  * @param {string} d.id
  * @param {string} d.name
@@ -107,15 +128,27 @@ export function cooldownIn(html) {
  * @param {number} [d.actions]     what it costs (1-3)
  * @param {string} [d.actionType]  "action", "reaction", "free" or "passive"
  * @param {string[]} [d.traits]
- * @param {{name: string, damage: object[]}[]} [d.strikes]  its Strikes, for an ability that uses one's damage (Trample)
+ * @param {{id?: string, name: string, slug?: string, damage: object[], reach?: number, melee?: boolean}[]} [d.strikes]
+ *   its Strikes, for an ability that uses one's damage (Trample) or names one in its requirement
+ * @param {object} [d.words]       the reading (reading.js), for its requirement
  */
-export function abilityAction({ id, name, html, actions = 1, actionType = "action", traits = [], strikes = [] }) {
+export function abilityAction({ id, name, html: whole, actions = 1, actionType = "action", traits = [], strikes = [], words = currentReading() }) {
   if ( actionType !== "action" ) return null;
-  // (One that needs something first, "adjacent to their hoard", "hit a foe earlier this turn", can't be judged here.)
-  if ( /<strong>\s*Requirements?\s*<\/strong>/i.test(String(html ?? "")) ) return null;
+  // (What it needs first: undefined, nothing; null, something it can't express, "adjacent to their hoard".)
+  const requires = requirementOf(whole, { strikes, words });
+  if ( requires === null ) return null;
+  const html = requires ? withoutRequirement(whole, words) : whole;
+  const needs = requires ? { requires } : {};
   const save = saveIn(html);
-  if ( !save ) return null;
-  const damage = damageIn(html);
+  const damage = harmIn(html);
+  // No save: with what it needs met (a foe it holds, a hit just landed), its damage simply lands; not where it rolls
+  // for it (a check of its own, an action's link, a Strike: reading/en.json's "rolled").
+  if ( !save ) {
+    if ( !requires || !damage.length || /@Check\[|\[\[\/act\b/i.test(html) || rollsItself(html, words) ) return null;
+    const cooldown = cooldownIn(html);
+    return { id, name, kind: "auto", cost: Math.max(1, Math.min(3, Number(actions) || 1)), traits, ability: true, damage: harmIn(firstDamage(html)), melee: true,
+      reach: reachFor(requires, strikes), ...needs, ...(cooldown ? { uses: 1, cooldown } : {}) };
+  }
   // Trample: "Large or smaller, foot, DC 24": the named Strike's damage to each creature it moves through.
   const trample = /^\s*(?:tiny|small|medium|large|huge|gargantuan) or smaller,\s*([^,]+?)\s*,/i.exec(plain(html));
   if ( !damage.length && trample ) {
@@ -123,7 +156,7 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
     const strike = strikes.find(s => s.name.toLowerCase() === wanted) ?? strikes.find(s => s.name.toLowerCase().includes(wanted));
     if ( !strike?.damage?.length ) return null;
     return { id, name, kind: "save", cost: Math.max(1, Math.min(3, Number(actions) || 3)), traits, save: { ...save, basic: true }, ability: true,
-      damage: strike.damage, melee: true, reach: 5, area: { targets: 2 } };
+      damage: strike.damage, melee: true, reach: 5, area: { targets: 2 }, ...needs };
   }
   const text = plain(html);
   // (A hold it lays that an Escape breaks: against the DC its words name, else the ability's own.)
@@ -146,8 +179,8 @@ export function abilityAction({ id, name, html, actions = 1, actionType = "actio
   const cooldown = cooldownIn(html);
   const action = {
     id, name, kind: damage.length ? "save" : "control", cost: Math.max(1, Math.min(3, Number(actions) || 1)), traits,
-    save, ability: true,
-    ...(feet ? { range: { increment: feet, max: feet, noPenalty: true }, melee: false } : { melee: true, reach: 5 }),
+    save, ability: true, ...needs,
+    ...(feet ? { range: { increment: feet, max: feet, noPenalty: true }, melee: false } : { melee: true, reach: requires ? reachFor(requires, strikes) : 5 }),
     ...(area ? { area: { targets: areaFoes(area), shape: area.shape, feet: area.feet } } : {}),
     ...(cooldown ? { uses: 1, cooldown } : {})
   };

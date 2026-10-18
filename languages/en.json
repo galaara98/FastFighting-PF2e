@@ -25,6 +25,7 @@
       "Constant": "constant"
     },
     "TwoActions": "{name}, two actions",
+    "WithStrike": "{action} ({strike})",
     "Exploited": "exploited (+{n})",
     "Flustered": "flustered",
     "Helpless": "helpless",
