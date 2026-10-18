@@ -2,8 +2,9 @@
  * Reloading and ammunition, as PF2e 8.6 keeps them on a weapon. No Foundry globals: the items' own data, and the
  * methods PF2e gives its items (isAmmoFor, attach, update, delete, toObject) where it has them.
  *  - reloadOf: a Strike's reload, in actions: a weapon's `system.reload.value` ("-": none, a weapon that isn't
- *    reloaded; "0" to "3"; "10": a minute), a creature's attack's `reload-N` trait (`reload-1-min`: a minute). Each
- *    shot costs 1 + its reload (adapter.js); one no turn has room to reload has only the shot it's loaded with.
+ *    reloaded; "0" to "3"; "10": a minute), a creature's attack's `reload-N` trait (`reload-1-min`: a minute). The
+ *    core's action.reload (API 20): a shot costs its action, and a Reload where the weapon's empty; loadedOf, what's
+ *    loaded in it as the sheet has it.
  *  - ammoOf, roundsOf: a character's weapon whose Strike spends ammunition as PF2e rolls it (`system.ammo`, not built in,
  *    `system.expend` a shot), and the rounds it has to shoot: what's loaded in it and the compatible ammunition its
  *    wielder carries (PF2e's own isAmmoFor; not stowed away), a magazine by its uses. The core's `action.ammo`.
@@ -83,6 +84,21 @@ export function loadedIn(weapon) {
   if ( !Number(weapon?.system?.ammo?.capacity) ) return [];
   return [...(weapon.subitems ?? [])].filter(i => i?.type === "ammo" || (i?.type === "weapon" && fits(i, weapon)))
     .sort((a, b) => (Number(a.sort) || 0) - (Number(b.sort) || 0));
+}
+
+/**
+ * A weapon that reloads, loaded as its sheet has it (the core's action.loaded and capacity, API 20): a character's
+ * weapon that takes ammunition, the shots loaded in it now (its subitems; a magazine by its uses), out of as many as it
+ * holds (its ammunition's capacity, or its capacity-N trait's, the more). Anything else (a creature's attack, a weapon
+ * whose ammunition PF2e doesn't keep) says nothing, and the core takes it as loaded. {loaded, capacity} or null.
+ */
+export function loadedOf(actor, weapon) {
+  const how = ammoOf(actor, weapon);
+  if ( !how ) return null;
+  const trait = (weapon.system?.traits?.value ?? []).map(t => /^capacity-(\d+)$/.exec(t)).find(Boolean);
+  const capacity = Math.max(1, Number(how.capacity) || 0, trait ? Number(trait[1]) : 0);
+  const rounds = loadedIn(weapon).reduce((n, i) => n + roundsIn(i), 0);
+  return { loaded: Math.min(capacity, Math.floor(rounds / Math.max(1, how.expend))), capacity };
 }
 
 /** The rounds a weapon has to shoot, loaded and carried; null for one that takes none. */

@@ -34,7 +34,8 @@ import { saveVsFrom } from "./save-vs.js";
 import { reading } from "./reading.js";
 import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./glossary.js";
 import { itemReactions } from "./reactions-item.js";
-import { reloadOf, ammoOf, roundsOf, nextAmmo } from "./ammo.js";
+import { reloadOf, ammoOf, roundsOf, nextAmmo, loadedOf } from "./ammo.js";
+import { gearKey, drawActions, retrieveActions, gearOnSheet, readyPf2eGear } from "./ready.js";
 
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion", "harm"]);
@@ -698,10 +699,12 @@ export class Pf2eAdapter extends SystemAdapter {
    *    precision damage against an off-guard foe;
    *  - a Strike set up by a class action is an action of its own: an investigator's Devise a Stratagem (Strategic
    *    Strike), a swashbuckler's finisher with panache (Precise Strike).
-   * A bomb or other consumable weapon can be thrown only as many times as it has. A shot costs its reload too (ammo.js
-   * reloadOf: a weapon's own, a creature's attack's trait), each shot of a weapon that takes ammunition spends its
-   * rounds (the core's action.ammo: what's loaded and carried, ammo.js roundsOf; with none, no shot), and one no turn has
-   * room to reload (a minute) has only the shot it's loaded with.
+   * A bomb or other consumable weapon can be thrown only as many times as it has, drawn again for each. A Strike's
+   * weapon is the core's gear (API 20): drawn first where it isn't in hand (a character's: its Draw or Retrieve, as many
+   * actions as PF2e's own takes; Quick Draw, none), and reloaded (its `reload`: ammo.js reloadOf, a weapon's own, a
+   * creature's attack's trait; a minute's, Infinity: no Reload fits a fight), loaded as its sheet has it (`loaded`,
+   * `capacity`: ammo.js loadedOf). Each shot of a weapon that takes ammunition spends its rounds (the core's action.ammo:
+   * what's loaded and carried, ammo.js roundsOf; with none, no shot).
    * @returns {Promise<{strikes: object[], variants: object[], listed: object[]}>}  `listed`: each Strike's attack effects
    *   that try a maneuver (effectFollowUps)
    */
@@ -742,11 +745,10 @@ export class Pf2eAdapter extends SystemAdapter {
       const ranged = !!item?.isRanged;
       const range = item?.range ?? item?.system?.range ?? null;
       const reach = reachOf(item);
-      // (Each shot costs 1 + its reload, the honest approximation: not even the first, as if the weapon weren't loaded
-      // as the fight began, and no Reload split over turns. A reload no turn has room for, a minute's: the shot it's
-      // loaded with alone.)
+      // (Its Reload, apart from the shot: the core counts it where the weapon's empty, and the shot empties it. Loaded as
+      // its sheet has it: what's in it, a character's; a creature's attack starts loaded.)
       const reload = reloadOf(item);
-      const loadedOnly = 1 + reload > (pf2eRules.actionsPerTurn ?? 3);
+      const loads = reload > 0 ? loadedOf(actor, item) : null;
       // (A character's weapon whose Strike spends ammunition: the rounds it has, loaded and carried; a shot, expend;
       // what it shoots next, by name: Bolts.)
       const ammo = ammoOf(actor, item);
@@ -771,8 +773,10 @@ export class Pf2eAdapter extends SystemAdapter {
         name: s.label,
         slug: s.slug ?? undefined, // (its item's, for a requirement or a multiattack that names it: glossary.js)
         kind: "strike",
-        cost: loadedOnly ? 1 : 1 + reload,
-        ...(loadedOnly ? { uses: 1 } : {}),
+        cost: 1,
+        // (Its weapon, in hand and loaded or not: the core's gear, one key a weapon.)
+        ...(item?.id ? { gear: gearKey(actor, item) } : {}),
+        ...(reload > 0 ? { reload, ...(loads ?? {}) } : {}),
         ...(ammo ? { ammo: `ammo:${item.id}`, rounds: roundsOf(actor, item), ...(ammo.expend > 1 ? { ammoCost: ammo.expend } : {}) } : {}),
         ...(next?.name ? { ammoName: next.name } : {}),
         bonus: s.totalModifier ?? 0,
@@ -786,8 +790,10 @@ export class Pf2eAdapter extends SystemAdapter {
         critDamage: crit ? parseTypedFormula(crit) : null,
         effects,
         bonusDamage,
-        // (Quick Draw: drawing it is part of the Strike.)
-        drawCost: s.ready === false && character && !has("quick-draw") ? 1 : 0,
+        // (Quick Draw: drawing it is part of the Strike. Otherwise its Draw or Retrieve, as PF2e's own action takes.)
+        drawCost: s.ready === false && character && !has("quick-draw") ? drawActions(s) : 0,
+        // (A bomb thrown: the next one drawn again.)
+        ...(consumable ? { drawEach: true } : {}),
         traits,
         storyType: storyLook(traits, item?.system?.group ?? null, damage),
         // (A weapon in hand, one that can be knocked away: a character's weapon, or a creature's that has one.)
@@ -1357,7 +1363,12 @@ export class Pf2eAdapter extends SystemAdapter {
         pool: quantity,
         selfOnly: true,
         itemId: item.id,
-        hands: 1 // (drinking it, or applying it, is an Interact action)
+        hands: 1, // (drinking it, or applying it, is an Interact action)
+        // (Got out first where it isn't in hand: PF2e's Interact to retrieve it, one action, two from a backpack; each
+        // one drunk, the next got out again. The core's gear.)
+        gear: gearKey(actor, item),
+        drawCost: retrieveActions(actor, item),
+        drawEach: true
       });
     }
     return out;
@@ -1414,7 +1425,8 @@ export class Pf2eAdapter extends SystemAdapter {
       ancestry: actor.ancestry?.slug ?? null,
       traits: [...(actor.system?.traits?.value ?? [])].map(String),
       shield: !!actor.system?.attributes?.shield?.ac,
-      heavy: armor?.system?.category === "heavy"
+      heavy: armor?.system?.category === "heavy",
+      feats: (actor.itemTypes?.feat ?? []).map(slugOf).filter(Boolean)
     };
   }
 
@@ -1651,8 +1663,18 @@ export class Pf2eAdapter extends SystemAdapter {
       hp: value, temp: unbroken ? 0 : hp.temp ?? 0, stamina: staminaOf(actor, hp).stamina?.value, maxHp: unbroken ? 1 : hp.max ?? 1,
       dying: sys.attributes?.dying?.value ?? 0, wounded: sys.attributes?.wounded?.value ?? 0, doomed: sys.attributes?.doomed?.value ?? 0,
       status: dead ? "dead" : value > 0 ? "standing" : "down",
-      conditions: this.#conditions(actor), persistent: this.#persistent(actor), resources
+      conditions: this.#conditions(actor), persistent: this.#persistent(actor), resources,
+      // (Its weapons and potions in hand or not, and what's loaded: the core's gear, API 20.)
+      gear: gearOnSheet(actor, { loaded: item => loadedOf(actor, item) })
     };
+  }
+
+  /**
+   * A live battle (the core's readyGear, API 20): a step a creature FastFighting plays took to get ready, on its sheet
+   * the PF2e way, with PF2e's own card (ready.js): a weapon drawn, a potion got out, a Reload, a Stand.
+   */
+  async readyGear(tokenDoc, step) {
+    return readyPf2eGear(tokenDoc, step);
   }
 
   /** What's left of one of its resources (a key toCombatantSpec gave it), or undefined for one it doesn't know. */

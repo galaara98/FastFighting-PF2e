@@ -1,6 +1,7 @@
 /**
  * Reloading and ammunition (ammo.js), with fakes shaped like PF2e 8.6's weapon and ammo items: a Strike's reload from
- * its weapon's system.reload (a creature's attack's reload-N trait), so a shot costs 1 + reload; the rounds a weapon has
+ * its weapon's system.reload (a creature's attack's reload-N trait), the core's reload apart from the shot (API 20),
+ * and what's loaded in it as its sheet has it; drawn first where it isn't in hand; the rounds a weapon has
  * (loaded and carried, compatible by PF2e's own isAmmoFor, not stowed, a magazine by its uses) as the core's
  * action.ammo, none of them no shot; in a live battle, its ammunition readied before PF2e's own Strike rolls (a bow's
  * stack picked, a crossbow loaded) and spent by it, the undo record putting all of it back; and rounds the engine's own
@@ -11,6 +12,8 @@ import { Pf2eAdapter, injuryWeapon } from "../scripts/adapter.js";
 import { reloadOf, ammoOf, roundsOf, readyAmmo, ammoState, ammoUndo, spendRounds } from "../scripts/ammo.js";
 import { commitPf2eChanges } from "../scripts/commit.js";
 import { hasUses } from "../../FastFighting/scripts/engine/behavior/evaluate.js";
+import { replay } from "../../FastFighting/scripts/engine/simulator.js";
+import { pf2eRules } from "../scripts/rules.js";
 
 const adapter = new Pf2eAdapter();
 
@@ -211,24 +214,59 @@ describe("its Strikes, as the engine has them", () => {
   };
   const strikeIn = (spec, slug) => spec.actions.find(a => a.kind === "strike" && a.slug === slug);
 
-  test("reload from system.reload: the heavy crossbow's shot costs 3; a crossbow's 2; a thrown weapon's ('-') 1; a minute's, its loaded shot once", async () => {
+  test("reload from system.reload (the core's reload, API 20): a shot costs its action, the Reload apart; loaded as the sheet has it; a minute's, no Reload in a fight", async () => {
+    const loadedBolt = { _id: "in", type: "ammo", system: { quantity: 1, baseItem: "bolts", uses: { value: 1, max: 1 } } };
     const spec = await specOf(harsk([
-      weapon("heavy-crossbow", { reload: "2" }), weapon("crossbow", { reload: "1" }), weapon("javelin", { reload: "-", baseType: null }), weapon("backpack-ballista", { reload: "10", baseType: "backpack-ballista-bolts" })
+      weapon("heavy-crossbow", { reload: "2" }), weapon("crossbow", { reload: "1", loaded: [loadedBolt] }), weapon("javelin", { reload: "-", baseType: null }),
+      weapon("backpack-ballista", { reload: "10", baseType: "backpack-ballista-bolts" }), weapon("pepperbox", { reload: "1", baseType: "bolts", traits: ["capacity-3"] })
     ], [ammo("bolts"), ammo("ballista-bolts", { baseItem: "backpack-ballista-bolts", quantity: 2 })]));
-    expect(strikeIn(spec, "heavy-crossbow")).toMatchObject({ cost: 3, ammo: "ammo:heavy-crossbow" });
+    // (Harsk's heavy crossbow, nothing in it: a shot's one action, its Reload two, empty as the fight begins.)
+    expect(strikeIn(spec, "heavy-crossbow")).toMatchObject({ cost: 1, reload: 2, loaded: 0, capacity: 1, ammo: "ammo:heavy-crossbow", gear: "harsk.gear.heavy-crossbow" });
     expect(strikeIn(spec, "heavy-crossbow").uses).toBeUndefined();
-    expect(strikeIn(spec, "crossbow")).toMatchObject({ cost: 2, ammo: "ammo:crossbow" });
+    expect(strikeIn(spec, "crossbow")).toMatchObject({ cost: 1, reload: 1, loaded: 1, ammo: "ammo:crossbow" });
     const javelin = strikeIn(spec, "javelin");
     expect(javelin.cost).toBe(1);
     expect(javelin.ammo).toBeUndefined();
-    expect(strikeIn(spec, "backpack-ballista")).toMatchObject({ cost: 1, uses: 1, ammo: "ammo:backpack-ballista" });
+    expect(javelin.reload).toBeUndefined();
+    // (A minute's Reload, empty: no shot this fight; a capacity weapon holds three.)
+    const ballista = strikeIn(spec, "backpack-ballista");
+    expect(ballista).toMatchObject({ cost: 1, reload: Infinity, loaded: 0, ammo: "ammo:backpack-ballista" });
+    expect(ballista.uses).toBeUndefined();
+    expect(hasUses({ resources: { ...spec.resources }, uses: {}, drawn: new Set(), loaded: new Map([[ballista.gear, 0]]) }, ballista)).toBe(false);
+    expect(strikeIn(spec, "pepperbox")).toMatchObject({ reload: 1, capacity: 3, loaded: 0 });
     // (Its pool, how many rounds it has; nothing of the reading left on the actions.)
-    expect(spec.resources).toMatchObject({ "ammo:heavy-crossbow": 20, "ammo:crossbow": 20, "ammo:backpack-ballista": 2 });
+    expect(spec.resources).toMatchObject({ "ammo:heavy-crossbow": 20, "ammo:crossbow": 21, "ammo:backpack-ballista": 2 });
     expect(spec.actions.some(a => "rounds" in a || "pool" in a)).toBe(false);
     // (Named for what it shoots next, in the planner and a fight's summary.)
     expect(strikeIn(spec, "heavy-crossbow").ammoName).toBe("bolts");
     expect(adapter.resourceLabel("ammo:heavy-crossbow", spec)).toBe("bolts");
     expect(adapter.describeOutcome(spec, { resources: { ...spec.resources, "ammo:heavy-crossbow": 18 } }).at(-1)).toContain("bolts");
+  });
+
+  test("Harsk's heavy crossbow worn, not held, nothing loaded: drawn first (PF2e's own Draw, one action), Quick Draw none", async () => {
+    const actor = harsk([weapon("heavy-crossbow", { reload: "2" })], [ammo("bolts")]);
+    actor.system.actions[0].ready = false;
+    actor.system.actions[0].auxiliaryActions = [{ annotation: "draw", hands: 1, actions: 1 }, { annotation: "draw", hands: 2, actions: 1 }];
+    const spec = await specOf(actor);
+    expect(strikeIn(spec, "heavy-crossbow")).toMatchObject({ cost: 1, drawCost: 1, reload: 2, loaded: 0, gear: "harsk.gear.heavy-crossbow" });
+    actor.items.push(Object.assign({ id: "qd", type: "feat", system: { slug: "quick-draw" } }, { slug: "quick-draw" }));
+    expect(strikeIn(await specOf(actor), "heavy-crossbow").drawCost).toBe(0);
+  });
+
+  test("in the core's own fight, Harsk with his kobolds in range: turn 1 a Draw and a Reload, turn 2 a shot and a Reload", async () => {
+    const actor = harsk([weapon("heavy-crossbow", { reload: "2" })], [ammo("bolts")]);
+    actor.system.actions[0].ready = false;
+    const spec = await specOf(actor);
+    const shot = { ...strikeIn(spec, "heavy-crossbow"), range: { increment: 120, max: 720 }, melee: false };
+    const harskSpec = { ...spec, side: "friendly", position: { x: 0, y: 0, size: 5 }, actions: [shot], tactics: { style: "ranged" },
+      traits: { tactical: { base: 60, fudge: 0 }, brave: { base: 60, fudge: 0 }, selfish: { base: 30, fudge: 0 }, loyal: { base: 60, fudge: 0 } } };
+    const kobold = { id: "kobold", name: "Kobold Cavern Mage", side: "hostile", kind: "npc", level: 1, hp: { value: 60, max: 60 }, defenses: { ac: 16, fortitude: 5, reflex: 7, will: 9 },
+      initiative: { mod: 0 }, speeds: { walk: 25 }, actions: [], iwr: {}, flags: { fearless: true }, conditions: { immobilized: 1 }, position: { x: 85, y: 0, size: 5 }, diesAtZero: true,
+      traits: { tactical: { base: 50, fudge: 0 }, brave: { base: 50, fudge: 0 }, selfish: { base: 50, fudge: 0 }, loyal: { base: 50, fudge: 0 } } };
+    const r = replay({ combatants: [harskSpec, kobold], sides: { friendly: { enemies: ["hostile"] }, hostile: { enemies: ["friendly"] } }, options: { positioning: true, maxRounds: 2 } }, pf2eRules, 1);
+    const turn = round => r.log.filter(e => e.actorId === "t1" && e.round === round && e.turnOf === "t1" && !["thought", "prepare"].includes(e.type)).map(e => e.type);
+    expect(turn(1)).toEqual(["draw", "reload"]);
+    expect(turn(2)).toEqual(["attack", "reload"]);
   });
 
   test("a weapon with no ammunition: its Strike there, but no shot (none to shoot until some turns up)", async () => {
@@ -251,7 +289,7 @@ describe("its Strikes, as the engine has them", () => {
 
   test("a shot that takes two rounds (a double barrel's): ammoCost 2", async () => {
     const spec = await specOf(harsk([weapon("double-barreled-musket", { reload: "1", baseType: "rounds", expend: 2, capacity: 2 })], [ammo("rounds", { baseItem: "rounds", quantity: 10 })]));
-    expect(strikeIn(spec, "double-barreled-musket")).toMatchObject({ ammo: "ammo:double-barreled-musket", ammoCost: 2, cost: 2 });
+    expect(strikeIn(spec, "double-barreled-musket")).toMatchObject({ ammo: "ammo:double-barreled-musket", ammoCost: 2, cost: 1, reload: 1, capacity: 2 });
     expect(spec.resources["ammo:double-barreled-musket"]).toBe(10);
   });
 

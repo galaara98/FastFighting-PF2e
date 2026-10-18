@@ -33,11 +33,18 @@ const TRAITS = Object.freeze({
   plant: { relentless: 0.3 }, dragon: { leader: 0.2 }, giant: { brawler: 0.3 }, elemental: { relentless: 0.2 }, troll: { relentless: 0.2 }
 });
 
+/**
+ * Feats that lean somewhere, by slug: moving without drawing a foe's reaction, striking on the move, reloading as it
+ * goes (a Kiter's: Player Core's Mobility and Skirmish Strike, Guns & Gears' Running Reload).
+ */
+const FEATS = Object.freeze({ mobility: { kiter: 0.4 }, "skirmish-strike": { kiter: 0.4 }, "running-reload": { kiter: 0.3 } });
+
 /** The playstyles that fit: {id: -1 to 1}. */
-export function pf2eHints({ cls = null, ancestry = null, traits = [], shield = false, heavy = false } = {}) {
+export function pf2eHints({ cls = null, ancestry = null, traits = [], shield = false, heavy = false, feats = [] } = {}) {
   const out = {};
   const add = map => { for ( const [k, v] of Object.entries(map ?? {}) ) out[k] = (out[k] ?? 0) + v; };
   add(CLASSES[cls]);
+  for ( const f of new Set(feats) ) add(FEATS[f]);
   add(ANCESTRIES[ancestry]);
   for ( const t of new Set(traits) ) add(TRAITS[t] ?? (t !== ancestry ? ANCESTRIES[t] : null));
   if ( shield ) add({ tank: 0.2 });

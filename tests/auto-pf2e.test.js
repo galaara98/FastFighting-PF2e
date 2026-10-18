@@ -19,6 +19,12 @@ describe("the playstyles PF2e says fit", () => {
     expect(pf2eHints({ cls: "commander" }).leader).toBe(0.7);
   });
 
+  test("feats that make a Kiter likelier: Mobility, Skirmish Strike, Running Reload (each once)", () => {
+    expect(pf2eHints({ cls: "ranger", feats: ["skirmish-strike", "running-reload"] }).kiter).toBeCloseTo(0.7);
+    expect(pf2eHints({ feats: ["mobility", "mobility"] }).kiter).toBeCloseTo(0.4);
+    expect(pf2eHints({ feats: ["power-attack"] }).kiter).toBeUndefined();
+  });
+
   test("a creature's traits (an ancestry among them counts once)", () => {
     expect(pf2eHints({ traits: ["undead", "mindless"] }).relentless).toBeCloseTo(0.8);
     expect(pf2eHints({ traits: ["fiend", "unholy"] }).cruel).toBeCloseTo(0.7);
