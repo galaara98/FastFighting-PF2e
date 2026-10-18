@@ -8,12 +8,14 @@
  *    rolls (its attack card shows it).
  *  - Its damage, once for all it catches: a spell's as its card's Damage button rolls it (spell.rollDamage); an
  *    ability's (a breath weapon's) as the first @Damage link on its card rolls it, clicked as the GM would (PF2e's
- *    inline damage: an elite's or a weak creature's adjustment, its rule elements). Nothing applied: FastFighting
- *    applies each target's share with applyDamageCard. Its card is marked as FastFighting's (cards.js).
+ *    inline damage: an elite's or a weak creature's adjustment, its rule elements); one with none that deals a
+ *    Strike's damage (Rend: the core's action.strikeOf, glossary.js), as that Strike's own Damage rolls it, at the
+ *    target. Nothing applied: FastFighting applies each target's share with applyDamageCard. Its card is marked as
+ *    FastFighting's (cards.js).
  * The action is found by the id the adapter gave it: the actor's id, then "spell" and the spell's id, "self" or "item"
  * and the item's id, or the item's id alone (an ability: abilities.js).
  */
-import { click, damageByType, spellAttackFor } from "./strike-roll.js";
+import { click, damageByType, spellAttackFor, strikeFor } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
 import { damageRollOf } from "./read-turn.js";
 
@@ -84,10 +86,11 @@ async function abilityDamage(card, secret) {
 /**
  * The action's damage, rolled once for all it catches (above).
  * @param {TokenDocument} token   the one using it
- * @param {object} options        {action: {id, name}; card: useAction's card, or null; secret: for the GMs only}
+ * @param {object} options        {action: {id, name, strikeOf}; card: useAction's card, or null; secret: for the GMs
+ *                                 only; target: the TokenDocument it's aimed at first, or null}
  * @returns {Promise<object|null>} {damage: {byType}, card: its message id, or null}, or null (the engine rolls it)
  */
-export async function rollPf2eDamage(token, { action, card = null, secret = false } = {}) {
+export async function rollPf2eDamage(token, { action, card = null, secret = false, target = null } = {}) {
   const actor = token?.actor;
   const item = actionItem(actor, action?.id);
   if ( !item || item.type === "consumable" ) return null;
@@ -98,7 +101,12 @@ export async function rollPf2eDamage(token, { action, card = null, secret = fals
     // (A spell attack's damage comes with its attack, rollStrike's.)
     if ( !damaging || item.isAttack || PART_CARDS.has(slugOf(item)) || typeof item.rollDamage !== "function" ) return null;
     roll = await item.rollDamage(click("showDamageDialogs", secret));
-  } else if ( !(await abilityDamage(card, secret)) ) return null;
+  } else if ( !(await abilityDamage(card, secret)) ) {
+    // (No damage of its own on its card: a Strike's, dealt with no roll of its own (Rend), by that Strike's own Damage.)
+    const strike = strikeFor(actor, action?.strikeOf);
+    if ( typeof strike?.damage !== "function" ) return null;
+    roll = await strike.damage({ event: click("showDamageDialogs", secret), ...(target ? { target: target.object ?? { document: target } } : {}) });
+  }
   const message = damageCardSince(seen, actor);
   if ( message ) await markRolled(message);
   const byType = damageByType(damageRollOf(message) ?? roll);

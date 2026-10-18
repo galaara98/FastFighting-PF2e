@@ -205,4 +205,25 @@ describe("an action's damage, rolled once for all it catches", () => {
     shown.renderHTML = async () => ({ querySelectorAll: () => [{ dataset: { damageRoll: "2d6" } }] });
     expect(await adapter.rollDamage(token, { action: { id: "orc1.a1" }, card: shown.id })).toBeNull();
   });
+
+  test("Rend (no damage of its own: the Strike it names, action.strikeOf): that Strike's own Damage, at the target, no dialog", async () => {
+    const rend = item("a2", "action", { slug: "rend" });
+    const token = orc(rend);
+    const asked = [];
+    const claw = { type: "strike", slug: "claw", visible: true, variants: [], damage: async params => {
+      asked.push(params);
+      const roll = damageRoll([["slashing", 13]]);
+      game.messages.post(damageCard(orcActor, roll));
+      return roll;
+    } };
+    orcActor.system = { actions: [claw] };
+    const target = hero();
+    const out = await adapter.rollDamage(token, { action: { id: "orc1.a2", strikeOf: "orc1.strike.claw.0" }, card: null, target });
+    expect(out).toEqual({ damage: { byType: { slashing: 13 } }, card: "m1" });
+    expect(asked).toEqual([{ event: { shiftKey: true, ctrlKey: false, metaKey: false }, target: target.object }]);
+    expect(game.messages.get("m1").flags["fast-fighting-pf2e"]).toEqual({ rolled: { times: 1 } });
+    // (A Strike the sheet no longer has, or none named: the engine's dice.)
+    expect(await adapter.rollDamage(token, { action: { id: "orc1.a2", strikeOf: "orc1.strike.bite.0" }, card: null })).toBeNull();
+    expect(await adapter.rollDamage(token, { action: { id: "orc1.a2" }, card: null })).toBeNull();
+  });
 });
