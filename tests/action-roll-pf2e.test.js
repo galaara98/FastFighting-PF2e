@@ -107,6 +107,15 @@ describe("an action's own card", () => {
     expect(game.messages.contents).toHaveLength(4);
   });
 
+  test("an ability put to a use of its own (Grab's Grapple after a hit, or Grab kept up): the ability's card", async () => {
+    const grab = item("g1", "action", { slug: "grab", damage: {} });
+    const token = orc(grab);
+    for ( const id of ["orc1.g1.grapple", "orc1.g1.keep"] ) expect(await adapter.useAction(token, { action: { id }, targets: [hero()] })).toEqual({ card: expect.any(String) });
+    expect(grab.asked).toEqual([["toMessage", null, {}], ["toMessage", null, {}]]);
+    // (No ability on the sheet, only the effect's slug in the id: no card.)
+    expect(await adapter.useAction(token, { action: { id: "orc1.grab.grapple" }, targets: [hero()] })).toBeNull();
+  });
+
   test("secret: for the GMs only, as PF2e posts a GM's card (a player's, blind)", async () => {
     const breath = item("a1", "action");
     const fireball = item("sp1", "spell");

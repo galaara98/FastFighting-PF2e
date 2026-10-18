@@ -24,7 +24,7 @@
  * How it classifies, by slug (an item's own, else made from its name, as the helper's slugOf makes it):
  *  - Fully understood: the helper builds an engine action, reaction, aura or flag from it. Its own pure functions run
  *    on the item's data, with reading/en.json's words (reading.js setReading): abilityAction (abilities.js, a
- *    Requirements line by requirements.js), gulletAction (gullet.js), attackEffects and ferocityOf (adapter.js),
+ *    Requirements line by requirements.js), gulletAction (gullet.js), attackEffects, effectFollowUps and ferocityOf (adapter.js),
  *    classActions (class-actions.js), derivePf2eTraits' flags (traits.js), modsFromRules on a self-effect's rules
  *    (effects.js), auraOf (auras.js), saveVsOf on each rule element (save-vs.js), glossaryActions, markGlossary's
  *    marks and glossarySpec (glossary.js, its GLOSSARY_SLUGS), readReaction on a reaction or triggered free action it
@@ -330,7 +330,7 @@ const traitIds = words => new Set(Object.keys(words).map(k => /^PF2E\.Trait([A-Z
 export function classifier(h, { effects, conditions, words }) {
   const { abilityAction } = h.abilities;
   const { GULLETS, gulletAction } = h.gullet;
-  const { attackEffects, ferocityOf, OWN_READING } = h.adapter;
+  const { attackEffects, effectFollowUps, ferocityOf, OWN_READING } = h.adapter;
   const { modsFromRules, ruleValue } = h.effects;
   const { levelDC } = h.holds;
   const { GLOSSARY_SLUGS, NO_FIGHT_EFFECT, PLAYED_ELSEWHERE, glossaryActions, markGlossary, glossarySpec } = h.glossary;
@@ -449,7 +449,8 @@ export function classifier(h, { effects, conditions, words }) {
       built.push({ elsewhere: slug });
     }
 
-    // A rider on a Strike that lists it (adapter.js attackEffects: prone, grab, push or pull, an affliction).
+    // A rider on a Strike that lists it (adapter.js attackEffects: an Improved Grab, Knockdown or Push, an affliction),
+    // or an action after its hit (effectFollowUps: Grab, Knockdown, Push, Pull; Grab kept up).
     const referenced = ctx.referenced?.has(slug);
     if ( referenced ) {
       const fake = { id: "a", items: ctx.items ?? [item] };
@@ -458,6 +459,11 @@ export function classifier(h, { effects, conditions, words }) {
         if ( riders.length ) {
           how.add("Strike rider");
           built.push({ rider: riders });
+        }
+        const follows = effectFollowUps(fake, [{ id: "s", slugs: [slug], reach: 5 }]);
+        if ( follows.length ) {
+          how.add("after a hit");
+          built.push({ followUps: follows });
         }
       } catch ( err ) {
         // (An effect it can't read is no rider.)
@@ -589,7 +595,7 @@ export function classifier(h, { effects, conditions, words }) {
       }
     }
 
-    const { signals, notes } = structureOf(item, { expanded: ctx.expanded ?? html, attackEffect: referenced && !how.has("Strike rider") });
+    const { signals, notes } = structureOf(item, { expanded: ctx.expanded ?? html, attackEffect: referenced && !how.has("Strike rider") && !how.has("after a hit") });
     if ( shieldless ) notes.add("no shield");
     for ( const s of rules.signals ) signals.add(s);
     if ( HINTS.has(slug) ) notes.add("setup hint");

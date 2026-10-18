@@ -78,7 +78,7 @@ const sheetOffGuard = u => {
  * as PF2e has them (statusPenalty: clumsy, enfeebled, stupefied, on top of frightened, sickened and fascinated).
  */
 const CHECK_ON = Object.freeze({ theft: "dex", talk: "mind", goad: "mind", firstAid: "mind", sizeUp: "mind", notice: "mind", heal: "mind" });
-const MANEUVER_ON = Object.freeze({ trip: "str", grapple: "str", disarm: "str", shove: "str", reposition: "str", demoralize: "mind", feint: "mind", distract: "mind", hide: "dex" });
+const MANEUVER_ON = Object.freeze({ trip: "str", grapple: "str", disarm: "str", shove: "str", reposition: "str", drag: "str", demoralize: "mind", feint: "mind", distract: "mind", hide: "dex" });
 const checkOn = (purpose, action) => CHECK_ON[purpose] ?? MANEUVER_ON[action?.maneuver] ?? null;
 
 /** A potion or an elixir, drunk (a consumable's heal, PF2e's: the adapter's itemId on a heal of its own): what one sickened can't. */

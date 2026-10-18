@@ -176,4 +176,31 @@ describe("the adapter", () => {
     expect(spec.actions.find(a => a.id === "drake.c")).toMatchObject({ kind: "save", requires: { holding: true } });
     expect(spec.swarmMind).toBe(true);
   });
+
+  test("its Strikes' Grab and Improved Knockdown: a Grapple after a jaws hit (an action), a free Trip on a claw hit, and Grab kept up", async () => {
+    globalThis.CONFIG = { PF2E: {} };
+    const actor = drake();
+    actor.items.push(item("g", "grab", "Grab", "<p>@Localize[PF2E.NPC.Abilities.Glossary.Grab]</p>"), item("k", "improved-knockdown", "Improved Knockdown", "", null));
+    const [jaws, claw] = actor.system.actions;
+    jaws.item.system.attackEffects = { value: ["grab"] };
+    claw.item.system.attackEffects = { value: ["improved-knockdown"] };
+    actor.skills = { athletics: { mod: 15 } };
+    actor.size = "lg";
+    const spec = await new Pf2eAdapter().toCombatantSpec({ id: "t1", name: "Drake", actor, texture: { src: "" } });
+    expect(spec.actions.find(a => a.id === "drake.g.grapple")).toMatchObject({ kind: "control", maneuver: "grapple", cost: 1, maxSize: 4, card: true,
+      check: { mod: 15, against: "fortitude" }, requires: { lastHit: { with: ["drake.strike.jaws.0"] } } });
+    expect(spec.actions.find(a => a.id === "drake.g.keep")).toMatchObject({ auto: true, requires: { holding: true }, outcome: { renew: true } });
+    expect(spec.actions.find(a => a.id === "drake.strike.claw.1").effects).toEqual([{ kind: "control", control: expect.objectContaining({ id: "drake.k.trip", maneuver: "trip", cost: 0 }) }]);
+    expect(spec.actions.find(a => a.id === "drake.strike.jaws.0").effects).toEqual([]);
+    expect(spec.actions.filter(a => a.id.endsWith(".keep")).map(a => a.id)).toEqual(["drake.g.keep"]);
+    // (Improved Grab alone: no action after the hit, its rider does that; kept up as an action all the same.)
+    jaws.item.system.attackEffects = { value: ["improved-grab"] };
+    actor.items.push(item("i", "improved-grab", "Improved Grab", "", null));
+    const improved = await new Pf2eAdapter().toCombatantSpec({ id: "t1", name: "Drake", actor, texture: { src: "" } });
+    expect(improved.actions.filter(a => a.requires?.lastHit).map(a => a.id)).toEqual([]);
+    expect(improved.actions.find(a => a.id === "drake.i.keep")).toMatchObject({ requires: { holding: true } });
+    // (Not read again as a save ability or a reaction.)
+    expect(spec.actions.filter(a => a.itemId === "g" || a.itemId === "k")).toEqual([]);
+    expect((spec.reactions ?? []).filter(r => /\.k$/.test(r.id))).toEqual([]);
+  });
 });

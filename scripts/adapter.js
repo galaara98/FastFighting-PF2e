@@ -24,7 +24,7 @@ import { aidAction, AID_SKILLS } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
-import { skillManeuvers, strikeMove } from "./maneuvers.js";
+import { skillManeuvers, attackEffectOf, effectManeuver, keepHold } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
 import { linkedEffect, theirsToOpen } from "./granted.js";
 import { AURA_REACTIONS, championReaction } from "./champion.js";
@@ -34,8 +34,6 @@ import { reading } from "./reading.js";
 import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./glossary.js";
 import { itemReactions } from "./reactions-item.js";
 
-const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
-const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
@@ -206,10 +204,36 @@ export function acrobaticsOf(actor) {
   return trainedIn(actor, "acrobatics") ? { mod: Number(actor.skills.acrobatics.mod) || 0 } : undefined;
 }
 
+/** A Strike's reach, in feet: its reach trait's, else the item's (5). */
+function reachOf(item) {
+  const trait = (item?.system?.traits?.value ?? []).find(t => /^reach(-\d+)?$/.test(t));
+  return trait ? (Number(trait.split("-")[1]) || 10) : (Number(item?.reach) || 5);
+}
+
+/** A PF2e key's word, if the system has one (its attack effects' names: PF2E.AttackEffectGrab). */
+const systemWord = key => (hasWords(key) ? localize(key) : null);
+
+/**
+ * An attack effect's maneuver, as the creature tries it (maneuvers.js effectManeuver): named for its ability (the
+ * creature's own item, else PF2e's name for the effect, else the maneuver's), and the maneuver's too where it has two
+ * (Push or Pull); its id the ability's item's, else the effect's slug; its Athletics, and its size one up.
+ */
+function effectAction(actor, slug, source, tries, how, { reach = 5, cost = 1 } = {}) {
+  const pascal = String(slug).replace(/(?:^|-)(\w)/g, (m, c) => c.toUpperCase());
+  const maneuver = actionName(how.action.charAt(0).toUpperCase() + how.action.slice(1));
+  const named = source?.name ?? systemWord(`PF2E.AttackEffect${pascal}`) ?? maneuver;
+  const name = tries.maneuvers.length > 1 ? t("EffectManeuver", { effect: named, maneuver }) : named;
+  return effectManeuver({
+    id: `${actor.id}.${source?.id ?? slug}`, name, how, feet: tries.feet, attack: tries.attack, reach, cost,
+    athletics: Number(actor.skills?.athletics?.mod) || 0, maxSize: sizeOf(actor.size ?? actor.system?.traits?.size?.value) + 1
+  });
+}
+
 /**
  * What a Strike carries beyond its damage, by the attack effects it lists (their slugs): a poison, disease or curse of
- * the creature's (afflictions.js), Knockdown and Trip (prone), Grab, and Push or Pull (maneuvers.js strikeMove). Each
- * as the core plays a hit's rider.
+ * the creature's (afflictions.js), and the Improved maneuvers (maneuvers.js attackEffectOf: Improved Grab, Knockdown
+ * and Push), each tried free at the one it hit, with a roll of its own (the core's maneuver rider: {kind: "control"}).
+ * The plain ones (Grab, Knockdown, Push, Pull) are actions after the hit: effectFollowUps.
  */
 export function attackEffects(actor, item) {
   const effects = [];
@@ -217,7 +241,7 @@ export function attackEffects(actor, item) {
   for ( const slug of item?.system?.attackEffects?.value ?? [] ) {
     const source = items.find(i => slugOf(i) === slug);
     const traits = source?.system?.traits?.value ?? [];
-    const moved = strikeMove(slug, englishName(source));
+    const tries = attackEffectOf(slug, englishName(source));
     if ( source && traits.some(t => AFFLICTION_TRAITS.has(t)) ) {
       const parsed = parseAffliction({
         id: `${actor.id}.${slug}`,
@@ -227,11 +251,45 @@ export function attackEffects(actor, item) {
         traits
       });
       if ( parsed ) effects.push(parsed);
-    } else if ( PRONE_EFFECTS.has(slug) ) effects.push({ kind: "prone" });
-    else if ( GRAB_EFFECTS.has(slug) ) effects.push({ kind: "grabbed" });
-    else if ( moved ) effects.push(moved);
+    } else if ( tries?.free ) {
+      for ( const how of tries.maneuvers ) effects.push({ kind: "control", control: effectAction(actor, slug, source, tries, how, { reach: reachOf(item), cost: 0 }) });
+    }
   }
   return effects;
+}
+
+/**
+ * The actions its Strikes' plain attack effects give it (maneuvers.js): Grab, Knockdown, Push and Pull (and a listed
+ * Trip), each an action straight after a hit with a Strike that lists it (the core's requires.lastHit, those Strikes'
+ * ids), one for each ability; and, for a creature with Grab or Improved Grab, Grab used to keep hold of a creature it
+ * holds (keepHold).
+ * @param {object} actor
+ * @param {{id: string, slugs: string[], reach: number}[]} strikes  its Strikes' ids, the attack effects each lists, and
+ *   its reach
+ */
+export function effectFollowUps(actor, strikes = []) {
+  const items = [...(actor?.items ?? [])];
+  const listed = new Map();
+  for ( const s of strikes ) {
+    for ( const slug of s.slugs ?? [] ) {
+      const at = listed.get(slug) ?? { ids: [], reach: 0 };
+      at.ids.push(s.id);
+      at.reach = Math.max(at.reach, Number(s.reach) || 5);
+      listed.set(slug, at);
+    }
+  }
+  const out = [];
+  let keep = null;
+  for ( const [slug, { ids, reach }] of listed ) {
+    const source = items.find(i => slugOf(i) === slug);
+    const tries = attackEffectOf(slug, englishName(source));
+    if ( !tries || (source && (source.system?.traits?.value ?? []).some(t => AFFLICTION_TRAITS.has(t))) ) continue;
+    if ( tries.maneuvers.some(m => m.maneuver === "grapple") ) keep ??= keepHold({ id: `${actor.id}.${source?.id ?? slug}`, name: effectAction(actor, slug, source, tries, tries.maneuvers[0]).name, reach });
+    if ( tries.free ) continue;
+    for ( const how of tries.maneuvers ) out.push({ ...effectAction(actor, slug, source, tries, how, { reach }), requires: { lastHit: { with: ids } } });
+  }
+  if ( keep ) out.push(keep);
+  return out;
 }
 
 /** Elements that show in the story (an attack's trait, by slug), and the damage they may be told over: a plain blow. */
@@ -300,7 +358,7 @@ export class Pf2eAdapter extends SystemAdapter {
         : traits.includes("minion") ? "minion" : "npc";
 
     // Its Strikes, and what its class does with them (Vicious Swing, Double Slice, Flurry of Blows, Hunter's Edge ...).
-    const { strikes, variants } = await this.#strikes(actor);
+    const { strikes, variants, listed } = await this.#strikes(actor);
     const martial = classActions({ actorId: actor.id, slugs: new Set(actor.items.map(i => slugOf(i)).filter(Boolean)), level, strikes, names: ownNames(actor) });
     // (Its own: a class's actions, a kineticist's blasts, a thaumaturge's mark, its feats' actions, what it puts on
     // itself, a creature's abilities. What "magic and specialties" means, with spells.)
@@ -316,7 +374,9 @@ export class Pf2eAdapter extends SystemAdapter {
       ...this.#poisons(actor, martial.strikes),
       ...own(this.#feats(actor)),
       ...own(await this.#selfEffects(actor)),
-      ...this.#skillActions(actor, traits, martial.strikes)
+      ...this.#skillActions(actor, traits, martial.strikes),
+      // (Grab, Knockdown, Push and Pull: an action after a hit with a Strike that lists one; Grab kept up.)
+      ...own(effectFollowUps(actor, listed))
     ];
     actions.push(...own(await this.#abilities(actor, actions)));
     // Its standard abilities, by slug (glossary.js): Draconic Frenzy, Rend and Pounce from its Strikes; Constrict only
@@ -564,11 +624,13 @@ export class Pf2eAdapter extends SystemAdapter {
    *  - a Strike set up by a class action is an action of its own: an investigator's Devise a Stratagem (Strategic
    *    Strike), a swashbuckler's finisher with panache (Precise Strike).
    * A bomb or other consumable weapon can be thrown only as many times as it has.
-   * @returns {Promise<{strikes: object[], variants: object[]}>}
+   * @returns {Promise<{strikes: object[], variants: object[], listed: object[]}>}  `listed`: each Strike's attack effects
+   *   that try a maneuver (effectFollowUps)
    */
   async #strikes(actor) {
     const out = [];
     const variants = [];
+    const listed = []; // (the attack effects each lists that try a maneuver: effectFollowUps)
     const character = actor.type === "character";
     const pack = this.#bonusDice(actor, "pack-attack");
     const sneak = this.#sneakAttackDice(actor);
@@ -592,12 +654,13 @@ export class Pf2eAdapter extends SystemAdapter {
       const crit = await formula([], true);
       const damage = normal ? parseTypedFormula(normal) : [];
       const effects = attackEffects(actor, item);
-      if ( !damage.length && !effects.length ) continue;
+      // (An attack effect that tries a maneuver: an action after its hit, or Grab kept up: effectFollowUps.)
+      const follows = (item?.system?.attackEffects?.value ?? []).filter(slug => attackEffectOf(slug));
+      if ( !damage.length && !effects.length && !follows.length ) continue;
       const traits = item?.system?.traits?.value ?? [];
       const ranged = !!item?.isRanged;
       const range = item?.range ?? item?.system?.range ?? null;
-      const reachTrait = traits.find(t => /^reach(-\d+)?$/.test(t));
-      const reach = reachTrait ? (Number(reachTrait.split("-")[1]) || 10) : (Number(item?.reach) || 5);
+      const reach = reachOf(item);
       const reload = Number(traits.find(t => t.startsWith("reload-"))?.split("-")[1]) || 0;
       const primaryType = damage[0]?.type ?? "untyped";
       // (A bomb, a dart of alchemist's fire: one throw each.)
@@ -644,6 +707,7 @@ export class Pf2eAdapter extends SystemAdapter {
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
       };
       out.push(strike);
+      if ( follows.length ) listed.push({ id: strike.id, slugs: follows, reach });
       // What a class action before the Strike makes of it.
       for ( const setup of setups ) {
         if ( consumable || !damage.length ) continue;
@@ -662,7 +726,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const best = variants.filter(v => v.setup === setup).map(v => v.strike).sort((a, b) => mean(b) - mean(a))[0];
       if ( best ) picked.push(best);
     }
-    return { strikes: out, variants: picked };
+    return { strikes: out, variants: picked, listed };
   }
 
   /**

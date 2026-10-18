@@ -173,6 +173,19 @@ describe("a check, rolled as PF2e's own action", () => {
     expect(asked.feint[0].difficultyClass).toEqual({ value: 17, slug: "perception" });
   });
 
+  test("a creature's Grab, Knockdown or Push after its hit: PF2e's own Grapple, Trip or Shove, no multiple attack penalty", async () => {
+    const croc = creature("croc1");
+    const hero = creature("pc1");
+    await adapter.rollCheck(croc, { purpose: "control", against: "fortitude", attackNumber: null, dc: 21, action: { id: "croc1.g1.grapple", name: "Grab" }, target: hero });
+    await adapter.rollCheck(croc, { purpose: "control", against: "reflex", attackNumber: null, dc: 19, action: { id: "croc1.knockdown.trip", name: "Knockdown" }, target: hero });
+    await adapter.rollCheck(croc, { purpose: "control", against: "fortitude", attackNumber: null, dc: 21, action: { id: "croc1.p1.shove", name: "Push" }, target: hero });
+    await adapter.rollCheck(croc, { purpose: "control", against: "fortitude", attackNumber: null, dc: 21, action: { id: "croc1.p2.reposition", name: "Pull" }, target: hero });
+    expect(asked.grapple[0]).toMatchObject({ actors: [croc.actor], difficultyClass: { value: 21, slug: "fortitude" }, target: hero.object });
+    expect(asked.trip[0].difficultyClass).toEqual({ value: 19, slug: "reflex" });
+    expect([asked.shove, asked.reposition].map(a => a.length)).toEqual([1, 1]);
+    for ( const a of [asked.grapple[0], asked.trip[0], asked.shove[0], asked.reposition[0]] ) expect(a).not.toHaveProperty("multipleAttackPenalty");
+  });
+
   test("a target not drawn here, none, or itself: no target, the DC alone; secret: Ctrl down", async () => {
     const goblin = creature("gob1");
     await adapter.rollCheck(goblin, { purpose: "control", against: "fortitude", dc: 20, action: { id: "gob1.grapple" }, target: creature("pc1", { drawn: false }) });

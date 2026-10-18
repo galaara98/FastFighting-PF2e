@@ -13,7 +13,8 @@
  *    target. Nothing applied: FastFighting applies each target's share with applyDamageCard. Its card is marked as
  *    FastFighting's (cards.js).
  * The action is found by the id the adapter gave it: the actor's id, then "spell" and the spell's id, "self" or "item"
- * and the item's id, or the item's id alone (an ability: abilities.js).
+ * and the item's id, or the item's id alone (an ability: abilities.js), or with the use it's put to after it (Grab's
+ * Grapple after a hit, or kept up: maneuvers.js, whose check is PF2e's own action: check-roll.js).
  */
 import { click, damageByType, spellAttackFor, strikeFor } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
@@ -34,12 +35,15 @@ const slugOf = item => item?.slug ?? item?.system?.slug ?? null;
 /** For the GMs only (`secret`), as PF2e posts a GM's card; else in the chat's own mode. */
 const modeOf = secret => (secret ? { mode: game.user?.isGM ? "gm" : "blind" } : {});
 
-/** The item an action's id names among the actor's (the adapter's ids), of a kind it can be; else null. */
+/**
+ * The item an action's id names among the actor's (the adapter's ids), of a kind it can be; else null. An ability's
+ * other uses name it first, then the use (`<actor>.<item id>.grapple`: Grab's Grapple, maneuvers.js).
+ */
 export function actionItem(actor, id) {
   const parts = typeof id === "string" ? id.split(".") : [];
   if ( !actor?.items || parts[0] !== actor.id || parts.length < 2 || parts.length > 3 ) return null;
-  const kind = parts.length === 3 ? parts[1] : "";
-  const item = KINDS[kind] ? actor.items.get?.(parts.at(-1)) : null;
+  const kind = parts.length === 3 && KINDS[parts[1]] ? parts[1] : "";
+  const item = actor.items.get?.(kind ? parts[2] : parts[1]) ?? null;
   return item && KINDS[kind].includes(item.type) ? item : null;
 }
 
