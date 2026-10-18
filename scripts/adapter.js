@@ -174,7 +174,7 @@ const FEROCITY = new Set(["ferocity", "orc-ferocity"]);
  * Reactions read their own way, by slug (#reactions, champion.js, traits.js's Reactive Strike, Ferocity): never read
  * again by reactions-read.js.
  */
-const OWN_READING = new Set(["shield-block", "reactive-shield", "nimble-dodge", "intercept-attack", "nimble-reprisal", "reactive-strike",
+export const OWN_READING = new Set(["shield-block", "reactive-shield", "nimble-dodge", "intercept-attack", "nimble-reprisal", "reactive-strike",
   "attack-of-opportunity", "undying-ferocity", ...FEROCITY, ...AURA_REACTIONS]);
 
 /**
