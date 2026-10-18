@@ -46,7 +46,7 @@ jobs:
       - name: Build module.zip
         working-directory: FastFighting-PF2e
         run: |
-          zip -r module.zip module.json scripts languages hardcoded-toEN.json README.md LICENSE
+          zip -r module.zip module.json scripts languages reading hardcoded-toEN.json README.md LICENSE
           unzip -l module.zip
 
       - name: Create release

@@ -90,6 +90,7 @@ Effect items are fetched once a session (`granted.js` `EFFECT_CACHE`); a summon 
 | `strike-roll.js` | A Strike or a spell attack rolled with PF2e's own roller (a live battle's turns and reactions); `strikesOf` and `strikeId`, the Strikes' action ids. |
 | `check-roll.js` | Saves and checks rolled with PF2e's own rollers (a live battle's turns), flat checks and Tumble Through among them. |
 | `action-roll.js` | An action's own card (`useAction`) and its damage (`rollDamage`), as its user shows and rolls them (a live battle's turns). |
+| `reading.js` | The words PF2e's own text is read by where its data says nothing (`reading/en.json`, and the reader's language's `reading/<lang>.json` tried first): `loadReading` at startup, `reading`, `currentReading`. |
 | `cards.js` | FastFighting's own damage cards: marked, their Apply buttons and menu entries gone, a spell attack's critical applied doubled. |
 
 
@@ -112,6 +113,8 @@ Features are found by slug (the same in every language). Where each lives:
 
 Every word this module shows is in `languages/en.json`; the code holds keys, never English. Translating takes only a copy of that file (see **Translating** in [the core's README](https://github.com/galaara98/FastFighting)). `npm run test:reworded` runs the tests with every word in the language files reworded, so no test depends on the wording.
 
+`reading/en.json` holds the patterns this module reads PF2e's own text by, where an item's data says nothing: a reaction's Trigger line, an ability's Requirements. A translation is a copy named for its language (`reading/de.json`), tried before the English; text it doesn't match is read as English, else not at all.
+
 `hardcoded-toEN.json` lists words that stay in English for now, whatever the reader's language: keys of `languages/en.json`, or a group (`"FFPF2E.Action"`), whose translation would contradict a game system that isn't translated yet. It holds the date it was last updated (`lastUpdated`) and the list (`keys`), and is edited like the language files.
 
 ## Development
@@ -121,4 +124,4 @@ Check out this repository next to the core (`../FastFighting`), then run `npm in
 - `npm test` (`vitest run`) and `npm run test:reworded` (`vitest run --mode reworded`). `tests/setup.js` gives each test a fake `game.i18n` that reads this module's and the core's language files (`tests/foundry-i18n.js`).
 - `.github/workflows/test.yml` runs both on every push to `main` and every pull request, with the core checked out beside this repository.
 - `node tools/coverage.mjs --out docs/coverage.md` (dev only, not released): what of PF2e's creature abilities and character options the helper understands, by slug and frequency, with reaction triggers against the core's master list ([docs/coverage.md](docs/coverage.md); options and approximations in the tool's header).
-- `.github/workflows/release.yml` runs on a `v*` tag: it tests, sets `version` and `download` in module.json, zips `module.json`, `scripts`, `languages`, `hardcoded-toEN.json`, `README.md` and `LICENSE` into `module.zip`, and publishes both files as a GitHub release.
+- `.github/workflows/release.yml` runs on a `v*` tag: it tests, sets `version` and `download` in module.json, zips `module.json`, `scripts`, `languages`, `reading`, `hardcoded-toEN.json`, `README.md` and `LICENSE` into `module.zip`, and publishes both files as a GitHub release.

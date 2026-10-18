@@ -6,6 +6,7 @@
 import { Pf2eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
 import { hideApply, hideApplyMenu } from "./cards.js";
+import { loadReading } from "./reading.js";
 
 /**
  * The core API majors this helper is known to work with (the core's api.major). Its own call: the core never refuses a
@@ -50,6 +51,8 @@ Hooks.once("fastFighting.init", api => {
   }
   if ( !KNOWN_API.includes(major) ) untested = major;
   api.registerAdapter("pf2e", Pf2eAdapter, { priority: 10, source: MODULE_ID });
+  // The words PF2e's own text is read by, where its data says nothing (reading.js).
+  loadReading();
   api.adviseTranslation(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
   // Words kept in English for now, while the system isn't translated (hardcoded-toEN.json).
   api.keepEnglish(MODULE_ID);

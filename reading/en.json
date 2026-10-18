@@ -1,0 +1,5 @@
+{
+  "$comment": "How FastFighting PF2e reads PF2e's own English text where an item's data says nothing. Patterns are regular expressions over the line, lower case. A translation is a copy of this file named for its language (de.json), read before this one. See CODING_README.md.",
+  "triggers": [],
+  "requirements": []
+}
