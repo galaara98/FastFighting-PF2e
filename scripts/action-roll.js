@@ -14,7 +14,8 @@
  *    FastFighting's (cards.js).
  * The action is found by the id the adapter gave it: the actor's id, then "spell" and the spell's id, "self" or "item"
  * and the item's id, or the item's id alone (an ability: abilities.js), or with the use it's put to after it (Grab's
- * Grapple after a hit, or kept up: maneuvers.js, whose check is PF2e's own action: check-roll.js).
+ * Grapple after a hit, or kept up: maneuvers.js, whose check is PF2e's own action: check-roll.js; a spell that both
+ * harms and heals, Heal's harm on the undead or Harm's healing of them: adapter.js #spells).
  */
 import { click, damageByType, spellAttackFor, strikeFor } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
@@ -37,12 +38,14 @@ const modeOf = secret => (secret ? { mode: game.user?.isGM ? "gm" : "blind" } : 
 
 /**
  * The item an action's id names among the actor's (the adapter's ids), of a kind it can be; else null. An ability's
- * other uses name it first, then the use (`<actor>.<item id>.grapple`: Grab's Grapple, maneuvers.js).
+ * other uses name it first, then the use (`<actor>.<item id>.grapple`: Grab's Grapple, maneuvers.js); a spell's, the
+ * same (`<actor>.spell.<spell id>.harm`).
  */
 export function actionItem(actor, id) {
   const parts = typeof id === "string" ? id.split(".") : [];
-  if ( !actor?.items || parts[0] !== actor.id || parts.length < 2 || parts.length > 3 ) return null;
-  const kind = parts.length === 3 && KINDS[parts[1]] ? parts[1] : "";
+  const spellUse = parts.length === 4 && parts[1] === "spell";
+  if ( !actor?.items || parts[0] !== actor.id || parts.length < 2 || (parts.length > 3 && !spellUse) ) return null;
+  const kind = (parts.length === 3 || spellUse) && KINDS[parts[1]] ? parts[1] : "";
   const item = actor.items.get?.(kind ? parts[2] : parts[1]) ?? null;
   return item && KINDS[kind].includes(item.type) ? item : null;
 }

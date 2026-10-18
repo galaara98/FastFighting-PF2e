@@ -6,27 +6,10 @@ import { t, conditionLabel, traitName, actionName } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
 import { ASSISTED, APPROPRIATE_DC, SICK_ANNOYANCE, sickDC, bleedDC, lower } from "./remedies.js";
+import { applyPf2eIwr, critImmune, healsIt } from "./iwr.js";
 
 /** A friend's persistent bleed, as a hold a friend breaks (Administer First Aid): the core's bleeding, as the story tells it. */
 const BLEED = "bleeding";
-
-/** Damage types grouped for IWR keys such as "physical" or "energy". */
-const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing", "bleed"]);
-const ENERGY = new Set(["acid", "cold", "electricity", "fire", "sonic", "force", "vitality", "void"]);
-
-function iwrMatches(key, type) {
-  if ( key === type || key === "all-damage" ) return true;
-  if ( key === "physical" ) return PHYSICAL.has(type);
-  if ( key === "energy" ) return ENERGY.has(type);
-  return false;
-}
-
-/**
- * Weaknesses, resistances and immunities to what deals the damage, by its traits (the core's applyIwr ctx.traits): the
- * remaster's holy and unholy, whatever the damage's type. An older item's alignment traits are read as the remaster has
- * them (good holy, evil unholy).
- */
-const TRAIT_IWR = Object.freeze({ holy: "holy", unholy: "unholy", good: "holy", evil: "unholy" });
 
 /** Spell traits that PF2e immunities name differently. */
 const TRAIT_IMMUNITY = { fear: "fear-effects", death: "death-effects" };
@@ -436,6 +419,8 @@ export const pf2eRules = {
    */
   usable(run, u, action, t) {
     if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderOf(run, t) && !full(run, u);
+    // (Vitality healing mends no one with void healing, Harm's void healing no one without: iwr.js healsIt.)
+    if ( action?.kind === "heal" && t && !healsIt(action, t) ) return false;
     // (Sickened: it can't willingly drink a potion or an elixir.)
     if ( ingested(action) && Number(u.conds?.sickened) > 0 ) return false;
     if ( action?.kind === "strike" && !action.light && holderOf(run, u) ) return false;
@@ -770,36 +755,23 @@ export const pf2eRules = {
   },
 
   /**
-   * Apply immunities, weaknesses and resistances to a {type: amount} map: each damage type's; and, by the traits of what
-   * deals it (TRAIT_IWR: holy, unholy), its highest weakness and resistance to those once for the whole of it, or none
-   * of it to one immune.
+   * Apply immunities, weaknesses and resistances to a {type: amount} map, as PF2e's own applyIWR does (iwr.js): each
+   * damage type an instance, tested with what deals it (the core's ctx: traits, materials, magical, an area's, a
+   * critical hit, its precision and splash); vitality and void only on whom they touch; a weakness to holy and the
+   * like once a blow.
    * @param {object} iwr
    * @param {Record<string, number>} byType
    * @param {object} [target]
-   * @param {{traits?: string[]}} [ctx]   the action's traits (the core's, API 20)
+   * @param {object} [ctx]   what deals it (the core's iwrContext, API 20)
    * @returns {number} total damage after IWR
    */
-  applyIwr(iwr, byType, target = null, { traits = [] } = {}) {
-    let total = 0;
-    for ( const [type, raw] of Object.entries(byType) ) {
-      if ( raw <= 0 ) continue;
-      if ( iwr?.immune?.some(k => iwrMatches(k, type)) ) continue;
-      let amount = raw;
-      let weak = 0;
-      for ( const [k, v] of Object.entries(iwr?.weak ?? {}) ) if ( iwrMatches(k, type) ) weak = Math.max(weak, v);
-      let resist = 0;
-      for ( const [k, v] of Object.entries(iwr?.resist ?? {}) ) if ( iwrMatches(k, type) ) resist = Math.max(resist, v);
-      amount = Math.max(0, amount + weak - resist);
-      total += amount;
-    }
-    const keys = [...new Set((traits ?? []).map(t => TRAIT_IWR[t]).filter(Boolean))];
-    if ( keys.length && Object.values(byType).some(v => v > 0) ) {
-      if ( keys.some(k => iwr?.immune?.includes(k)) ) return 0;
-      const weak = Math.max(0, ...keys.map(k => Number(iwr?.weak?.[k]) || 0));
-      const resist = Math.max(0, ...keys.map(k => Number(iwr?.resist?.[k]) || 0));
-      total = Math.max(0, total + weak - resist);
-    }
-    return total;
+  applyIwr(iwr, byType, target = null, ctx = {}) {
+    return applyPf2eIwr(iwr, byType, target, ctx ?? {});
+  },
+
+  /** A critical hit on one immune to critical hits deals a normal hit's damage (its exceptions aside): iwr.js. */
+  critImmune(target, action) {
+    return critImmune(target, action);
   },
 
   /**

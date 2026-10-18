@@ -24,7 +24,7 @@ import { aidAction, AID_SKILLS } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeOf } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
-import { skillManeuvers, attackEffectOf, effectManeuver, keepHold } from "./maneuvers.js";
+import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, bonMot } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
 import { linkedEffect, theirsToOpen } from "./granted.js";
 import { AURA_REACTIONS, championReaction } from "./champion.js";
@@ -35,7 +35,7 @@ import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./g
 import { itemReactions } from "./reactions-item.js";
 
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
-const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion"]);
+const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion", "harm"]);
 const SPEED_KEYS = { land: "walk", fly: "fly", swim: "swim", climb: "climb", burrow: "burrow" };
 /** A creature's rarity, as the core counts it (spec.rarity). */
 const RARITY = Object.freeze({ common: 0, uncommon: 1, rare: 2, unique: 3 });
@@ -164,6 +164,71 @@ export function dyingOf(attributes) {
   if ( Number.isFinite(dying?.recoveryDC) ) out.recoveryDC = dying.recoveryDC;
   return out;
 }
+
+/**
+ * Its immunities, weaknesses and resistances as PF2e prepared them (actor.attributes), for iwr.js: {immune: [keys],
+ * weak: {key: n}, resist: {key: n}}, with `except` ({immune|weak|resist: {key: [keys]}}: a resistance to physical damage
+ * but not silver's) and `doubleVs` ({key: [keys]}: a ghost's resistance doubled against non-magical damage) where it
+ * has them. Of two of a key, the higher. An exception PF2e words itself (a custom label, not a key) is left out.
+ */
+export function iwrOf(attributes) {
+  const iwr = { immune: [], weak: {}, resist: {} };
+  const keys = list => (Array.isArray(list) ? list.filter(x => typeof x === "string" && x) : []);
+  const except = (kind, entry) => {
+    const list = keys(entry.exceptions);
+    if ( list.length ) ((iwr.except ??= {})[kind] ??= {})[entry.type] = list;
+  };
+  for ( const i of attributes?.immunities ?? [] ) {
+    if ( !i?.type ) continue;
+    if ( !iwr.immune.includes(i.type) ) iwr.immune.push(i.type);
+    except("immune", i);
+  }
+  for ( const [kind, list] of [["weak", attributes?.weaknesses], ["resist", attributes?.resistances]] ) {
+    for ( const e of list ?? [] ) {
+      const value = Number(e?.value) || 0;
+      if ( !e?.type || (iwr[kind][e.type] ?? -Infinity) >= value ) continue;
+      iwr[kind][e.type] = value;
+      if ( iwr.except?.[kind] ) delete iwr.except[kind][e.type];
+      except(kind, e);
+      const doubled = kind === "resist" ? keys(e.doubleVs) : [];
+      if ( doubled.length ) (iwr.doubleVs ??= {})[e.type] = doubled;
+      else if ( iwr.doubleVs ) delete iwr.doubleVs[e.type];
+    }
+  }
+  return iwr;
+}
+
+/**
+ * What a Strike's damage is made of, as PF2e's own damage roll has it (a weakness to cold iron, a resistance but to
+ * silver): its weapon's precious material, a creature's attack's material traits, and what rule elements add or take
+ * away (PF2e's strike adjustments, called as its damage roll calls them). `materialKeys`: PF2e's material damage
+ * effects (CONFIG.PF2E.materialDamageEffects).
+ * @returns {string[]}
+ */
+export function strikeMaterials(item, { materialKeys = [], adjustments = [] } = {}) {
+  const known = new Set(materialKeys);
+  const out = new Set();
+  if ( item?.type === "melee" ) for ( const t of item.system?.traits?.value ?? [] ) if ( known.has(t) ) out.add(t);
+  const type = item?.system?.material?.type;
+  if ( known.has(type) ) out.add(type);
+  for ( const a of adjustments ?? [] ) {
+    try {
+      a?.adjustDamageRoll?.(item, { materials: out });
+    } catch ( err ) {
+      // (One that can't be worked out here: as if it weren't there.)
+    }
+  }
+  return [...out].filter(m => known.has(m));
+}
+
+/** A Strike's weapon's property runes (ghost touch, for iwr.js): their keys. */
+export function propertyRunesOf(item) {
+  const runes = item?.system?.runes?.property;
+  return Array.isArray(runes) ? runes.filter(r => typeof r === "string" && r) : [];
+}
+
+/** {[key]: list}, or nothing for an empty one (so a spec carries no empty lists). */
+const nonEmpty = (key, list) => (list?.length ? { [key]: list } : {});
 
 /** A creature's Ferocity, a character's Orc Ferocity (by slug). */
 const FEROCITY = new Set(["ferocity", "orc-ferocity"]);
@@ -396,10 +461,8 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     if ( !hazard && !speeds.walk && !Object.keys(speeds).length ) speeds.walk = 25; // (a hazard stays where it is)
 
-    const iwr = { immune: [], weak: {}, resist: {} };
-    for ( const i of actor.attributes?.immunities ?? [] ) iwr.immune.push(i.type);
-    for ( const w of actor.attributes?.weaknesses ?? [] ) iwr.weak[w.type] = w.value;
-    for ( const r of actor.attributes?.resistances ?? [] ) iwr.resist[r.type] = r.value;
+    // (With their exceptions and a resistance's doubleVs, as PF2e prepared them: iwr.js applies them.)
+    const iwr = iwrOf(actor.attributes);
 
     const resources = {};
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
@@ -449,6 +512,9 @@ export class Pf2eAdapter extends SystemAdapter {
       speeds,
       actions,
       iwr,
+      // Void healing (PF2e's negativeHealing: the undead, or an ability that gives it): vitality harms it, void doesn't,
+      // and only void heals it (iwr.js).
+      ...(hp.negativeHealing ? { voidHealing: true } : {}),
       resources,
       reactions: await this.#reactions(actor, actions),
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
@@ -657,7 +723,10 @@ export class Pf2eAdapter extends SystemAdapter {
       // (An attack effect that tries a maneuver: an action after its hit, or Grab kept up: effectFollowUps.)
       const follows = (item?.system?.attackEffects?.value ?? []).filter(slug => attackEffectOf(slug));
       if ( !damage.length && !effects.length && !follows.length ) continue;
-      const traits = item?.system?.traits?.value ?? [];
+      // (A magic weapon's blow is magical, as PF2e's item:magical has it, its runes and all: iwr.js, against a
+      // resistance doubled against non-magical damage.)
+      const traits = [...(item?.system?.traits?.value ?? [])];
+      if ( item?.isMagical && !traits.includes("magical") ) traits.push("magical");
       const ranged = !!item?.isRanged;
       const range = item?.range ?? item?.system?.range ?? null;
       const reach = reachOf(item);
@@ -704,6 +773,10 @@ export class Pf2eAdapter extends SystemAdapter {
         hands: strikeHands(item),
         // (Light enough to attack with from inside a gullet: unarmed, a creature's own, a weapon of light Bulk.)
         light: lightStrike(item) || undefined,
+        // (What its damage is made of, and its property runes: a weakness to cold iron, a ghost's resistance but to a
+        // ghost touch weapon. iwr.js.)
+        ...nonEmpty("materials", strikeMaterials(item, { materialKeys: Object.keys(CONFIG.PF2E?.materialDamageEffects ?? {}), adjustments: actor.synthetics?.strikeAdjustments })),
+        ...nonEmpty("propertyRunes", propertyRunesOf(item)),
         ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
       };
       out.push(strike);
@@ -845,7 +918,12 @@ export class Pf2eAdapter extends SystemAdapter {
         const id = `${actor.id}.spell.${spell.id}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
-        const isHeal = kinds.has?.("healing") && traits.includes("healing");
+        // (Healing: a spell with the healing trait, or one that harms some and heals others, Harm. One with a save that
+        // does both, Heal and Harm, is both: a heal for whom its energy mends, and its damage for whom it harms, by void
+        // healing, rules.js usable and iwr.js. The use that isn't its own trait's has its own id: `.heal`, `.harm`.)
+        const isHeal = kinds.has?.("healing") && (traits.includes("healing") || kinds.has?.("damage"));
+        const both = isHeal && kinds.has?.("damage") && !!spell.system.defense?.save;
+        const healId = traits.includes("healing") ? id : `${id}.heal`;
         // (A hand for one cast with gestures: the manipulate trait.)
         const hands = traitHands(traits);
         if ( summon ) {
@@ -869,10 +947,10 @@ export class Pf2eAdapter extends SystemAdapter {
           const feet = variable ? 30 : rangeFeet;
           const reach = touch ? { reach: 5 } : feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {};
           out.push({
-            id, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, hands,
+            id: healId, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands,
             targetTrait: animalOnly ? "animal" : null, ...reach, ...(selfOnlySpell(spell.system) ? { selfOnly: true } : {})
           });
-          continue;
+          if ( !both ) continue;
         }
         const defense = spell.system.defense;
         if ( control ) {
@@ -899,7 +977,7 @@ export class Pf2eAdapter extends SystemAdapter {
         }
         if ( !kinds.has?.("damage") && !afflicts ) continue;
         const action = {
-          id, name: spell.name, cost, damage: parts, resource, pool, uses,
+          id: isHeal && healId === id ? `${id}.harm` : id, name: spell.name, cost, damage: parts, resource, pool, uses,
           spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
           melee: false,
           range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
@@ -1231,9 +1309,8 @@ export class Pf2eAdapter extends SystemAdapter {
     }));
     out.push(...coverActions({ actorId: actor.id, hazard: actor.type === "hazard", stealth: skill("stealth") }));
     if ( skill("diplomacy") && actor.itemTypes?.feat?.some(f => slugOf(f) === "bon-mot") ) {
-      const jab = n => ({ mods: { saves: -n, checks: -n }, rounds: 10, label: t("Flustered") });
-      out.push({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), kind: "control", cost: 1, special: true, maneuver: "distract", traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near,
-        check: { mod: skill("diplomacy").mod ?? 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] });
+      // (Will saves and Perception alone: maneuvers.js bonMot.)
+      out.push(bonMot({ id: `${actor.id}.bon-mot`, name: featureName(ownNames(actor), "bon-mot"), diplomacy: skill("diplomacy").mod ?? 0 }));
     }
     return out;
   }
@@ -1251,6 +1328,8 @@ export class Pf2eAdapter extends SystemAdapter {
         kind: "heal",
         cost: 1,
         heal: [parseFormula(dmg.formula, "healing")],
+        // (Its traits: a healing potion's vitality mends no one with void healing, rules.js usable.)
+        traits: [...(item.system.traits?.value ?? [])],
         resource: `item:${item.id}`,
         pool: quantity,
         selfOnly: true,

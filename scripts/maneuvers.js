@@ -14,8 +14,9 @@
  *    critical failure, the foe grabs you (its choice, in the rules: that, or you fall prone).
  *  - Disarm (Athletics against Reflex, an attack; a foe with a weapon in hand): -2 to its attacks with it; on a critical
  *    success it drops it (disarmed: an action gone picking it up); a critical failure leaves you off-guard.
- *  - Feint (Deception against Perception, mental; in melee reach): off-guard to you for the rest of your turn; on a
- *    critical success, until the end of your next one.
+ *  - Feint (Deception against Perception, mental; in melee reach): off-guard to your next melee attack before the end of
+ *    your turn (the core's onlyVs "melee", uses 1, until: "source"); on a critical success, to all your melee attacks
+ *    until the end of your next turn.
  *  - Demoralize (Intimidation against Will, within 30 feet): frightened 1, 2 on a critical success; each foe once a
  *    fight (it's then immune to yours).
  * Those with the attack trait need a free hand, and a target no more than one size larger. Feint and Disarm are for
@@ -29,9 +30,11 @@
  * Pull, its choice of either. The plain ones are an action straight after the hit (the core's requires.lastHit); the
  * Improved ones free, at once (a blow's maneuver rider). A Trip a Strike lists is PF2e's Trip action: the same after
  * the hit, but an attack like any Trip. In a live battle the ability's own card shows first (`card`).
+ *  - Bon Mot (Diplomacy against Will, within 30 feet; with the feat): a -2 status penalty to Will saves and Perception
+ *    (the core's bySave and byCheck) for a minute, -3 on a critical success; a critical failure, you take the -2.
  * Not played: a failed Grapple letting go of a foe you already held, a critically failed Feint (off-guard to that
- * foe alone, which the core can't lay on the one acting), Feint's off-guard only against melee and Disarm's -2 only
- * until the foe's turn, a weapon's shove, trip or disarm trait standing in for the free hand, the Stride after a
+ * foe alone, which the core can't lay on the one acting), Disarm's -2 only until the foe's turn, retorting to a Bon
+ * Mot, a weapon's shove, trip or disarm trait standing in for the free hand, the Stride after a
  * Shove, Demoralize's -4 against a foe that doesn't share a language, and a body part holding a foe still striking.
  */
 import { parseFormula } from "./core.js";
@@ -93,12 +96,28 @@ export function skillManeuvers({ actorId, maxSize, athletics = null, deception =
     out.push({ id: `${actorId}.reposition`, name: actionName("Reposition"), maneuver: "reposition", ...grip, ...vs("fortitude"), onHit: DEGREES.reposition() });
   }
   if ( deception !== null ) {
-    // (Off-guard to you alone: for this turn's attacks; done well, your next turn's too.)
-    const exposed = rounds => ({ conditions: { offGuard: 1 }, onlyVs: true, rounds, label: conditionLabel("off-guard") });
+    // (Off-guard to your melee attacks alone, to the end of your turns: on a success, the next one before this turn
+    // ends; done well, every one until the end of your next turn.)
+    const exposed = extra => ({ conditions: { offGuard: 1 }, onlyVs: "melee", until: "source", rounds: 1, label: conditionLabel("off-guard"), ...extra });
     out.push({ id: `${actorId}.feint`, name: actionName("Feint"), kind: "control", maneuver: "feint", cost: 1, traits: ["mental"], melee: true, reach: 5,
-      check: { mod: deception, against: "perception" }, onHit: [null, null, exposed(1), exposed(2)] });
+      check: { mod: deception, against: "perception" }, onHit: [null, null, exposed({ uses: 1, thisTurn: true }), exposed()] });
   }
   return out;
+}
+
+/**
+ * Bon Mot, as a control action: Diplomacy against the foe's Will DC, within 30 feet; a status penalty to its Will saves
+ * and Perception (the core's bySave and byCheck) for a minute, -2, -3 on a critical success; a critical failure, the
+ * same -2 on you.
+ * @param {object} d
+ * @param {string} d.id         `<actor id>.bon-mot`
+ * @param {string} d.name
+ * @param {number} d.diplomacy  its Diplomacy modifier
+ */
+export function bonMot({ id, name, diplomacy }) {
+  const jab = n => ({ mods: { bySave: { will: -n }, byCheck: { perception: -n } }, rounds: 10, label: t("Flustered") });
+  return { id, name, kind: "control", cost: 1, special: true, maneuver: "distract", traits: ["auditory", "concentrate", "emotion", "linguistic", "mental"], ...near(),
+    check: { mod: Number(diplomacy) || 0, against: "will" }, onHit: [{ ...jab(2), self: true }, null, jab(2), jab(3)] };
 }
 
 /** The maneuvers (the core's maneuver, PF2e's action, the defense it's against). */

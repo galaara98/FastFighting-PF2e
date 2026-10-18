@@ -81,10 +81,13 @@ describe("PF2e's maneuvers, by degree (critical failure, failure, success, criti
     expect(onHit[0]).toMatchObject({ self: true, conditions: { offGuard: 1 } });
   });
 
-  test("Feint: off-guard to you alone, for this turn; on a critical success through your next", () => {
+  test("Feint: off-guard to your next melee attack this turn; on a critical success to all of them through your next", () => {
     const { onHit } = all().feint;
-    expect(onHit[2]).toMatchObject({ conditions: { offGuard: 1 }, onlyVs: true, rounds: 1 });
-    expect(onHit[3]).toMatchObject({ conditions: { offGuard: 1 }, onlyVs: true, rounds: 2 });
+    // (To the end of the feinter's turns, the core's until: "source"; this one only, or the next too.)
+    expect(onHit[2]).toMatchObject({ conditions: { offGuard: 1 }, onlyVs: "melee", uses: 1, until: "source", thisTurn: true, rounds: 1 });
+    expect(onHit[3]).toMatchObject({ conditions: { offGuard: 1 }, onlyVs: "melee", until: "source", rounds: 1 });
+    expect(onHit[3].uses).toBeUndefined();
+    expect(onHit[3].thisTurn).toBeUndefined();
     expect([onHit[0], onHit[1]]).toEqual([null, null]);
   });
 
