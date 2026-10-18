@@ -32,6 +32,7 @@ import { auraOf } from "./auras.js";
 import { saveVsFrom } from "./save-vs.js";
 import { reading } from "./reading.js";
 import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./glossary.js";
+import { itemReactions } from "./reactions-item.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -168,6 +169,13 @@ export function dyingOf(attributes) {
 
 /** A creature's Ferocity, a character's Orc Ferocity (by slug). */
 const FEROCITY = new Set(["ferocity", "orc-ferocity"]);
+
+/**
+ * Reactions read their own way, by slug (#reactions, champion.js, traits.js's Reactive Strike, Ferocity): never read
+ * again by reactions-read.js.
+ */
+const OWN_READING = new Set(["shield-block", "reactive-shield", "nimble-dodge", "intercept-attack", "nimble-reprisal", "reactive-strike",
+  "attack-of-opportunity", "undying-ferocity", ...FEROCITY, ...AURA_REACTIONS]);
 
 /**
  * Its Ferocity (spec.ferocity, for rules.onDropped): a reaction as it would fall, to stay up at 1 Hit Point. A
@@ -382,7 +390,7 @@ export class Pf2eAdapter extends SystemAdapter {
       actions,
       iwr,
       resources,
-      reactions: await this.#reactions(actor),
+      reactions: await this.#reactions(actor, actions),
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags, ...(hazard ? { fearless: true, mindless: true } : {}), masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
@@ -1097,14 +1105,18 @@ export class Pf2eAdapter extends SystemAdapter {
    * Reactions that answer an attack (see the core's responses.js): Shield Block (the raised shield's hardness off a
    * physical blow), Reactive Shield (raising it as the blow comes, perhaps a miss after all), Nimble Dodge (+2 AC
    * against one attack), a guardian's Intercept Attack and a champion's reaction for an ally (champion.js). By slug, on
-   * characters and monsters alike. Null when it has none.
+   * characters and monsters alike. Any other reaction or triggered free action as reactions-read.js reads it
+   * (reactions-item.js), where it reads it whole; not a Strike's rider (attackEffects: Grab,
+   * Knockdown), Reactive Strike or Ferocity, nor a hazard's (its reaction is its action). Null when it has none.
    */
-  async #reactions(actor) {
+  async #reactions(actor, actions = []) {
     const out = [];
     const shield = actor.system.attributes?.shield;
     const hasShield = shield?.ac > 0 && !shield.broken && !shield.destroyed;
     const slugs = new Set(actor.items.map(i => slugOf(i)).filter(Boolean));
     const seen = new Set(); // (a feat and the action it grants share a slug)
+    const riders = new Set((actor.itemTypes?.melee ?? []).flatMap(m => m.system?.attackEffects?.value ?? []));
+    const toRead = [];
     for ( const item of actor.items ) {
       if ( !["feat", "action"].includes(item.type) ) continue;
       const slug = slugOf(item);
@@ -1124,8 +1136,11 @@ export class Pf2eAdapter extends SystemAdapter {
         // A champion's reaction: a friend hit in its aura, the foe in it too, resists the blow (and the foe, in reach of
         // a Retributive Strike, gets struck).
         out.push(await championReaction(actor, item, { slug, slugs }));
+      } else if ( ["reaction", "free"].includes(item.system.actionType?.value) && !OWN_READING.has(slug) && !riders.has(slug) && actor.type !== "hazard" ) {
+        toRead.push(item);
       }
     }
+    out.push(...await itemReactions(actor, toRead, { actions, resolve: resolvedText, slugOf }));
     return out.length ? out : null;
   }
 
@@ -1736,13 +1751,12 @@ export function gulletsOf(actions) {
 /**
  * An item's text with its inline damage and checks worked out for this creature, as PF2e shows them: formulas that
  * use its level or ability scores, a class DC, its own rule elements (a kineticist's gate). Text with nothing to work
- * out is returned as it is.
+ * out is returned as it is. `keepLinks`: its @UUID links kept as they are (reactions-read.js reads what they link).
  */
-export async function resolvedText(item) {
+export async function resolvedText(item, { keepLinks = false } = {}) {
   // (Its links as their labels, embeds left out: only its formulas are worked out, and no link is ever followed.)
-  const raw = String(englishDescription(item) ?? "")
-    .replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ")
-    .replace(/@(?:UUID|Compendium)\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? " ");
+  const embedless = String(englishDescription(item) ?? "").replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ");
+  const raw = keepLinks ? embedless : embedless.replace(/@(?:UUID|Compendium)\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? " ");
   if ( !/@Damage\[[^\]]*@|@Check\[(?![^\]]*\bdc:\d)/i.test(raw) ) return raw;
   let html;
   try {

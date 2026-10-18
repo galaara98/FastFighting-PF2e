@@ -1,6 +1,588 @@
 {
   "$comment": "How FastFighting PF2e reads PF2e's own English text where an item's data says nothing. Patterns are regular expressions over the line, lower case. A translation is a copy of this file named for its language (de.json), read before this one. See CODING_README.md.",
-  "triggers": [],
+  "self": {
+    "you": "you",
+    "your": "your",
+    "articles": [
+      "the",
+      "a",
+      "an"
+    ],
+    "definite": [
+      "the"
+    ],
+    "plain": [
+      "the",
+      "a",
+      "an",
+      "of",
+      "and",
+      "in",
+      "on",
+      "with",
+      "to",
+      "from",
+      "at",
+      "by",
+      "for",
+      "or",
+      "elite",
+      "weak",
+      "young",
+      "adult",
+      "ancient",
+      "greater",
+      "lesser"
+    ],
+    "stock": [
+      "the monster"
+    ],
+    "possessive": "'s",
+    "replace": [
+      [
+        "\\byou're\\b",
+        "you are"
+      ],
+      [
+        "\\bit's\\b",
+        "it is"
+      ]
+    ]
+  },
+  "triggers": [
+    {
+      "name": "targeted by an attack",
+      "trigger": "attacked",
+      "whole": true,
+      "pattern": "^you (?:is|are) (?:targeted (?:with|by)|the target of|attacked (?:with|by)) (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike|attack roll|weapon attack|weapon or unarmed attack|unarmed attack|weapon|melee weapon or unarmed attack|spell attack)(?: or (?:a |an )?(?:ranged )?spell(?: attack(?: roll)?)?(?: with the attack trait)?)?(?: (?:by|from) (?:an attacker|a creature|an enemy) (?:it|they|he|she|you) can (?:see|observe))?$"
+    },
+    {
+      "name": "a foe attacks it",
+      "trigger": "attacked",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:creature|enemy|foe|opponent|attacker)(?: (?:that )?you can see)?(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?:targets|attacks) you(?: with (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike|attack roll|weapon attack|weapon or unarmed attack|unarmed attack|weapon|melee weapon or unarmed attack|spell attack)(?: or (?:a |an )?(?:ranged )?spell(?: attack(?: roll)?)?(?: with the attack trait)?)?)?(?:,? and (?:you|it|they|he|she) can see the attacker)?$"
+    },
+    {
+      "name": "a foe in reach strikes at it",
+      "trigger": "attacked",
+      "whole": true,
+      "melee": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker) within (?:your reach|reach of your [a-z' -]+?)(?: that you can see)? (?:makes|attempts) (?:a|an) (?:melee )?(?:strike|attack) against you$"
+    },
+    {
+      "name": "a foe strikes at it",
+      "trigger": "attacked",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker)(?: (?:that )?you can see)?(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?:makes|attempts) (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:strike|attack) against you$"
+    },
+    {
+      "name": "attacked",
+      "trigger": "attacked",
+      "whole": true,
+      "pattern": "^you (?:is|are) attacked$"
+    },
+    {
+      "name": "hit, or critically hit",
+      "trigger": "hit",
+      "whole": true,
+      "pattern": "^you (?:is|are) (?:(?<crit>critically )?hit|hit or critically hit)(?: (?:by|with) (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike|attack roll|weapon attack|weapon or unarmed attack|unarmed attack|weapon|melee weapon or unarmed attack|spell attack)(?: or (?:a |an )?(?:ranged )?spell(?: attack(?: roll)?)?(?: with the attack trait)?)?(?: made by a creature you can see)?)?$"
+    },
+    {
+      "name": "a foe hits it",
+      "trigger": "hit",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:(?:creature|enemy|foe|opponent|attacker)|strike|attack)(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?:(?<crit>critically hits|scores a critical hit on|achieves a critical hit against)|hits|successfully hits|strikes) you(?: with (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike|attack roll|weapon attack|weapon or unarmed attack|unarmed attack|weapon|melee weapon or unarmed attack|spell attack)(?: or (?:a |an )?(?:ranged )?spell(?: attack(?: roll)?)?(?: with the attack trait)?)?)?$"
+    },
+    {
+      "name": "a foe misses it",
+      "trigger": "missed",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:creature|enemy|foe|opponent|attacker)(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?<crit>critically )?misses you(?: with (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike|attack roll|weapon attack|weapon or unarmed attack|unarmed attack|weapon|melee weapon or unarmed attack|spell attack)(?: or (?:a |an )?(?:ranged )?spell(?: attack(?: roll)?)?(?: with the attack trait)?)?)?$"
+    },
+    {
+      "name": "a foe's attack at it fails",
+      "trigger": "missed",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:creature|enemy|foe|opponent|attacker)(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?<crit>critically )?fails (?:at )?(?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:strike|attack|attack roll) (?:against|to hit) you$"
+    },
+    {
+      "name": "an attack roll at it fails",
+      "trigger": "missed",
+      "whole": true,
+      "pattern": "^the attack roll (?:for|of) (?:a|an|any) (?:strike|attack) (?:targeting|against) you (?:fails|fails or critically fails|misses)$"
+    },
+    {
+      "name": "takes damage",
+      "trigger": "damaged",
+      "whole": true,
+      "pattern": "^you (?:takes|take|is dealt|are dealt) (?:any amount of )?(?:(?<types>[a-z]+(?:(?:,| or|, or) [a-z]+)*) )?damage(?: from (?:(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:(?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike)|creature|enemy|hostile action|hostile source|source)|an enemy within (?<range>\\d+) feet))?$"
+    },
+    {
+      "name": "a foe hurts it",
+      "trigger": "damaged",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:(?<adjacent>adjacent) )?(?:creature|enemy|foe|opponent|attacker)(?: within (?<range>\\d+) feet(?: of you)?| (?<adjacent2>adjacent to you)| within (?<reach>your reach))? (?:damages you|deals (?:(?<types>[a-z]+(?:(?:,| or|, or) [a-z]+)*) )?damage to you)(?: with (?:a|an|any) (?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike))?$"
+    },
+    {
+      "name": "damaged",
+      "trigger": "damaged",
+      "whole": true,
+      "pattern": "^you (?:is|are) damaged(?: by (?:(?:a|an|any)|another) (?:(?<adjacent>adjacent) )?(?:(?:(?<melee>melee )|(?<ranged>(?:physical )?ranged )|melee or ranged |)(?:attack|strike)|creature|enemy))?$"
+    },
+    {
+      "name": "reduced to 0, slain",
+      "trigger": "slain",
+      "whole": true,
+      "pattern": "^you(?:r hit points)? (?:is|are) (?:reduced to 0(?: hit points| hp)?|killed|destroyed|slain)$"
+    },
+    {
+      "name": "its blow lands on a foe",
+      "trigger": "ownHit",
+      "whole": true,
+      "pattern": "^you(?:r)? (?:(?<crit>critically )?(?:hits|hit|damages|damage)|(?:strike|attack) (?<crit2>critically )?hits) (?:a|an|the) (?:creature|foe|enemy|target|opponent)(?: with (?:(?:a|an) (?:(?<melee>melee )(?:weapon |unarmed )?|(?<ranged>ranged )(?:weapon )?|weapon |unarmed )?strike|(?:a|an|its|their|his|her|the) (?<strike>(?!melee |ranged |weapon |unarmed )[a-z' -]+?)(?: strike)?))?$"
+    },
+    {
+      "name": "its blow lands",
+      "trigger": "ownHit",
+      "whole": true,
+      "pattern": "^you (?<crit>critically )?(?:hits|hit) with (?:(?:a|an) (?:(?<melee>melee )(?:weapon |unarmed )?|(?<ranged>ranged )(?:weapon )?|weapon |unarmed )?strike|(?:a|an|its|their|his|her|the) (?<strike>(?!melee |ranged |weapon |unarmed )[a-z' -]+?)(?: strike)?)$"
+    },
+    {
+      "name": "its critical hit",
+      "trigger": "ownHit",
+      "whole": true,
+      "crit": true,
+      "pattern": "^you (?:rolls|roll|scores|score) a critical hit(?: (?:against|on) (?:a|an) (?:creature|foe|enemy|target|opponent))?(?: with (?:a|an|its|their|his|her|the) (?<strike>(?!melee |ranged |weapon |unarmed )[a-z' -]+?)(?: strike)?)?$"
+    },
+    {
+      "name": "a foe casts a spell",
+      "trigger": "foeCasts",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker)(?: (?:that |who )?you can (?:see|observe))?(?: within (?<range>\\d+) feet(?: of you)?)?(?: (?:that |who )?you can (?:see|observe))? casts a spell$"
+    },
+    {
+      "name": "a foe moves in its reach",
+      "trigger": "foeMovesInReach",
+      "alsoOn": [
+        "foeLeavesReach"
+      ],
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker) within (?:your reach|reach of (?:you|your [a-z' -]+?)|reach) (?:uses a move action(?: or leaves a square during (?:a|its) move action(?: it is using)?)?|leaves a square during (?:a|its) move action(?: it is using)?)$"
+    },
+    {
+      "name": "a foe leaves its reach",
+      "trigger": "foeLeavesReach",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker) within (?:your reach|reach of (?:you|your [a-z' -]+?)|reach)(?: of you)? (?:attempts to move away|moves away)(?: from you)?$"
+    },
+    {
+      "name": "a foe comes beside it",
+      "trigger": "foeApproaches",
+      "whole": true,
+      "range": 5,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker) (?:moves|ends (?:its|their|a) move(?:ment)?(?: action)?) (?:adjacent to you|into a space adjacent to you|into an adjacent square)$"
+    },
+    {
+      "name": "a foe comes within range",
+      "trigger": "foeApproaches",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker) (?:approaches|comes|moves|ends (?:its|their|a) move(?:ment)?(?: action)?) within (?<range>\\d+) feet(?: of you)?$"
+    },
+    {
+      "name": "a foe comes into its reach",
+      "trigger": "foeApproaches",
+      "whole": true,
+      "pattern": "^(?:a|an|any) (?:creature|enemy|foe|opponent|attacker)(?: that starts its move outside your reach)? (?:moves (?:from beyond your reach )?(?:to )?within|moves into|enters) (?:your|its) reach$"
+    },
+    {
+      "name": "rolls initiative",
+      "trigger": "fightStarts",
+      "pattern": "\\b(?:roll(?:s|ing)?|about to roll) initiative\\b|\\bfor initiative\\b|\\binitiative is rolled\\b|\\b(?:combat|encounter|fight) (?:begins|starts)\\b|\\bfirst turn of (?:an|the) encounter\\b"
+    },
+    {
+      "name": "own turn begins",
+      "trigger": "ownTurnStarts",
+      "pattern": "^\\s*you(?:r)? (?:own )?turn (?:begins|starts)|^\\s*you (?:begin|begins|start|starts) (?:your|its) turn|\\bstart of your turn\\b"
+    },
+    {
+      "name": "own turn ends",
+      "trigger": "ownTurnEnds",
+      "pattern": "^\\s*you(?:r)? (?:own )?turn ends|^\\s*you (?:end|ends) (?:your|its) turn|\\bend of your turn\\b|\\bat the end of your turn\\b"
+    },
+    {
+      "name": "another's turn begins",
+      "trigger": "otherTurnStarts",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:starts?|begins?) (?:its|their|his|her) turn\\b|\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:starts?|begins?) (?:its|their|his|her) turn\\b|'s turn (?:begins|starts)"
+    },
+    {
+      "name": "another's turn ends",
+      "trigger": "otherTurnEnds",
+      "pattern": "\\b(?:ends?|finish(?:es)?) (?:its|their|his|her) turn\\b|'s turn ends"
+    },
+    {
+      "name": "ally would drop",
+      "trigger": "allyWouldDrop",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\bwould (?:be reduced to 0|die|be killed|be knocked out|fall unconscious|gain the dying|increase)|dying condition of an ally"
+    },
+    {
+      "name": "ally drops",
+      "trigger": "allyDown",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:(?:is|are|was|were|be|been|becomes?) reduced to 0|dies|is killed|falls? unconscious|gains? the dying|is knocked out|drops? to 0)|reduces? (?:an? |your )?(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)[^.;]* to 0"
+    },
+    {
+      "name": "ally panics",
+      "trigger": "allyPanics",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:becomes? frightened|is frightened|flees|is fleeing|panics)"
+    },
+    {
+      "name": "ally targeted",
+      "trigger": "allyTargeted",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:(?:is|are|was|were|be|been|becomes?) (?:the )?target(?:ed)?|(?:is|are|was|were|be|been|becomes?) attacked)\\b|\\b(?:targets|attacks) (?:an? |your |one of your )?(?:adjacent |nearby )?(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)|attack against (?:an? |your )?(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)"
+    },
+    {
+      "name": "enemy damages an ally",
+      "trigger": "allyHit",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:damages?|hits?|critically hits?|deals? damage to) (?:an? |your |one of your |its |the )?(?:\\w+ )?(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)|\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:(?:is|are|was|were|be|been|becomes?) (?:critically )?hit|would (?:take|be dealt) damage)"
+    },
+    {
+      "name": "ally takes damage",
+      "trigger": "allyDamaged",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:takes?|is dealt) (?:\\w+ )?damage|\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\bis damaged"
+    },
+    {
+      "name": "ally afflicted",
+      "trigger": "allyAfflicted",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:becomes?|is|gains? the) (?:\\w+ )?(?:blinded|clumsy|confused|controlled|dazzled|deafened|doomed|drained|dying|enfeebled|fascinated|fatigued|fleeing|frightened|grabbed|immobilized|off-guard|paralyzed|persistent|petrified|prone|quickened|restrained|sickened|slowed|stunned|stupefied|unconscious|wounded)|\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:is|becomes?) (?:affected by|subjected to)"
+    },
+    {
+      "name": "ally's roll",
+      "trigger": "allyRolls",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:attempts?|fails?|critically fails?|succeeds?|critically succeeds?|would (?:fail|succeed)|rolls?|is about to roll)\\b"
+    },
+    {
+      "name": "ally strikes",
+      "trigger": "allyStrikes",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:hits?|critically hits?|damages?|attacks?|strikes?|lands? a|reduces? (?:a|an) (?:creature|enemy|foe)|kills?)\\b"
+    },
+    {
+      "name": "ally casts or acts",
+      "trigger": "allyActs",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:casts?|uses?|activates?|sustains?)\\b"
+    },
+    {
+      "name": "ally moves",
+      "trigger": "allyMoves",
+      "pattern": "\\b(?:all(?:y|ies|ied)|companions?|eidolon|minions?|students?|rider)\\b[^.;]*\\b(?:moves?|ends? (?:a|its|their) move|strides?|steps?|leaps?|ends? (?:its|their) movement)\\b"
+    },
+    {
+      "name": "mounted or commanded",
+      "trigger": "commanded",
+      "pattern": "\\bmounts?\\b|\\bcommand an animal\\b|\\bcommands? you\\b|\\bwhile riding you\\b|\\bis commanded\\b"
+    },
+    {
+      "name": "mount targeted",
+      "trigger": "rideTargeted",
+      "pattern": "\\b(?:your|its) mount\\b[^.;]*\\btarget|\\btargets? (?:your|its) mount\\b"
+    },
+    {
+      "name": "would drop to 0",
+      "trigger": "wouldDrop",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\bwould (?:be reduced to 0|die|be killed|be knocked out|fall unconscious|be destroyed|gain the dying)|\\bwould reduce you(?:r)? (?:hit points )?to 0|\\btakes? damage that would reduce you to 0|\\babout to gain the dying\\b|\\bwould die\\b"
+    },
+    {
+      "name": "reduced to 0, slain",
+      "trigger": "slain",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:(?:are|is) (?:reduced to 0|killed|destroyed|slain)|(?:hit points|hp) (?:are|is) reduced to 0|dies?\\b|falls? unconscious)|\\byou(?:r)? (?:are|is) reduced\\b|\\breduces? you to 0\\b"
+    },
+    {
+      "name": "badly hurt",
+      "trigger": "badlyHurt",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:reduced to|falls? to|drops? (?:to|below)) (?:half|fewer than|below|\\d+ hit points or fewer)|\\bbloodied\\b|\\bbelow half\\b"
+    },
+    {
+      "name": "shield raised, takes damage",
+      "trigger": "wouldTakeDamage",
+      "pattern": "\\bshield raised\\b[^.;]*\\bdamage\\b"
+    },
+    {
+      "name": "attack misses it",
+      "trigger": "missed",
+      "pattern": "\\bmiss(?:es|ed)? you\\b|\\bmiss(?:es)? [^.;]*against you\\b|\\b(?:fails?|critically fails?) (?:on |at )?(?:an? )?(?:\\w+ )?(?:attack|strike|spell attack)(?: roll)? (?:against|targeting) you\\b|\\battack roll for a strike targeting you fails\\b|\\byou (?:are|is) missed\\b"
+    },
+    {
+      "name": "hit or critically hit",
+      "trigger": "hit",
+      "pattern": "\\byou (?:are|is) (?:critically )?(?:hit|struck)\\b|\\b(?:hits?|critically hits?) you\\b|\\b(?:would hit|succeeds? at an attack against) you\\b|\\byou would be hit\\b|\\b(?:an? )?(?:attack|strike) (?:would )?hits? you\\b|\\bcritical hit (?:on|against) you\\b|\\bstrikes? you\\b"
+    },
+    {
+      "name": "would take damage",
+      "trigger": "wouldTakeDamage",
+      "pattern": "\\byou(?:r)? (?:\\w+ )?would (?:take|be dealt) (?:[\\w,-]+ ){0,6}(?:damage|acid|cold|electricity|fire|sonic|physical)|\\bwould (?:deal damage to|damage) you\\b"
+    },
+    {
+      "name": "takes damage",
+      "trigger": "damaged",
+      "pattern": "\\byou (?:take|takes|are dealt|is dealt) (?:[\\w,-]+ ){0,6}damage\\b|\\b(?:damages?|deals? (?:\\w+ ){0,3}damage to) you\\b|\\byou (?:are|is) damaged\\b"
+    },
+    {
+      "name": "targeted by an attack",
+      "trigger": "attacked",
+      "pattern": "\\byou\\b[^.;]*\\b(?:are|is) (?:the )?target(?:ed)?\\b(?:[^.;]*\\b(?:attack|strike|weapon)|\\s*$)|\\byou\\b[^.;]*\\b(?:are|is) attacked\\b|\\btargets? (?:you|them) with (?:an? )?(?:[\\w-]+ ){0,3}(?:attack|strike)|\\battacks? you\\b|\\b(?:makes?|attempts?) (?:an? )?(?:[\\w-]+ ){0,3}(?:attack|strike) (?:against|targeting) you\\b|\\btargets you\\b"
+    },
+    {
+      "name": "targeted by a spell or effect",
+      "trigger": "spellTargets",
+      "pattern": "\\byou\\b[^.;]*\\b(?:are|is) (?:the )?(?:target(?:ed)?|in the (?:area|emanation)) (?:by|with|of) (?:an? )?(?:[\\w-]+ (?:or [\\w-]+ )?){0,3}(?:spell|effect|magic|cantrip)\\b|\\b(?:spell|effect)s? (?:that )?targets? you\\b|\\bcasts? a spell (?:that )?(?:targets|targeting|at) you\\b|\\btargets? you with (?:a |an )?(?:[\\w-]+ )?(?:spell|effect)\\b|\\bto target you with\\b"
+    },
+    {
+      "name": "must save",
+      "trigger": "mustSave",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:attempt|attempts|would attempt|must attempt|about to attempt|roll|rolls|make|makes)\\b (?:a |an )?(?:[\\w-]+ ){0,2}(?:saving throw|save)\\b|\\bwould (?:require|force) you to (?:attempt|make) a save\\b"
+    },
+    {
+      "name": "would gain a condition",
+      "trigger": "wouldGainCondition",
+      "pattern": "\\byou\\b[^.;]*\\b(?:would (?:become|be|gain(?: the)?|be affected by)|about to gain) (?:an? |the )?(?:\\w+ )?(?:(?:blinded|clumsy|confused|controlled|dazzled|deafened|doomed|drained|dying|enfeebled|fascinated|fatigued|fleeing|frightened|grabbed|immobilized|off-guard|paralyzed|persistent|petrified|prone|quickened|restrained|sickened|slowed|stunned|stupefied|unconscious|wounded)|condition|affliction|curse|disease|poison|adverse effect)|\\bwould (?:frighten|grab|poison|curse|blind|stun|paralyze) you\\b|\\bwould cause you to become\\b"
+    },
+    {
+      "name": "maneuver tried on it",
+      "trigger": "maneuvered",
+      "pattern": "\\battempts? to (?:grapple|trip|shove|disarm|reposition|steal|grab|swallow|push|pull)\\b[^.;]*\\byou\\b|\\b(?:grapples?|trips?|shoves?|disarms?|repositions?) you\\b|\\b(?:athletics|thievery) check against you\\b"
+    },
+    {
+      "name": "becomes grabbed",
+      "trigger": "grabbed",
+      "pattern": "\\byou (?:are|is|become|becomes) (?:grabbed|restrained|swallowed|engulfed|grappled)\\b|\\b(?:grabs|swallows|engulfs) you\\b"
+    },
+    {
+      "name": "knocked prone",
+      "trigger": "knockedDown",
+      "pattern": "\\byou would (?:be knocked|fall) prone\\b|\\byou (?:are|is) (?:knocked prone|tripped)\\b|\\bknocks? you prone\\b"
+    },
+    {
+      "name": "moved by force",
+      "trigger": "forcedMovement",
+      "pattern": "\\byou would be (?:moved|pushed|pulled|shoved|forced|teleported)\\b|\\b(?:pushes|pulls|shoves|drags) you\\b|\\bforced movement\\b"
+    },
+    {
+      "name": "touched",
+      "trigger": "touched",
+      "pattern": "\\btouch(?:es)? you\\b|\\byou (?:are|is) touched\\b|\\bhits? you with an unarmed\\b|\\bhits or touches you\\b"
+    },
+    {
+      "name": "starts to fall",
+      "trigger": "falling",
+      "pattern": "\\byou (?:fall|falls|begin to fall|would fall|are falling)\\b(?! unconscious| prone)|\\bairborne at the end\\b"
+    },
+    {
+      "name": "gear breaks",
+      "trigger": "gearBreaking",
+      "pattern": "\\b(?:your|an?) (?:shield|weapon|armor|item)\\b[^.;]*\\b(?:would (?:be|become) (?:broken|destroyed)|becomes? broken|breaks)\\b"
+    },
+    {
+      "name": "foe in reach manipulates, shoots or moves",
+      "trigger": "foeOpening",
+      "pattern": "\\b(?:within|in) (?:your |the )?reach\\b[^.;]*\\buses? a manipulate action|\\buses? a manipulate action\\b|\\bmakes? a ranged attack\\b|\\b(?:drops?|picks? up|retrieves?|draws?|reloads?|eats?|drinks?) (?:an? |the )?(?:item|weapon|object|potion|elixir)|\\b(?:within|in) (?:your |the )?reach\\b[^.;]*\\b(?:makes? a strike|attempts? a skill check|takes? an action)"
+    },
+    {
+      "name": "held foe struggles",
+      "trigger": "heldFoeStruggles",
+      "pattern": "\\b(?:grabbed|restrained|swallowed|grappled|engulfed) by you\\b[^.;]*\\b(?:attempts?|escapes?|attacks?|moves?)|\\b(?:you have|you has) (?:a creature )?(?:grabbed|restrained|swallowed)\\b[^.;]*\\b(?:attempts? to escape|escapes?)|\\battempts? to escape (?:from )?you\\b|\\bescapes? (?:your|from your)\\b"
+    },
+    {
+      "name": "foe's roll fails",
+      "trigger": "foeFails",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:fails?|critically fails?|fumbles?)\\b|\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\bbecomes? prone\\b"
+    },
+    {
+      "name": "foe's roll",
+      "trigger": "foeRolls",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:attempts?|rolls?|would succeed|succeeds?|critically succeeds?|would roll) (?:an? |at an? |on an? )?(?:[\\w-]+ ){0,3}(?:check|save|saving throw|attack roll|skill check|flat check)\\b"
+    },
+    {
+      "name": "foe spotted",
+      "trigger": "foeSpotted",
+      "pattern": "\\bbecomes? (?:visible|observed|detected|unhidden)\\b|\\bis revealed\\b|\\bcomes? into view\\b|\\byou (?:see|notice|detect|perceive|become aware of) (?:an? |the )?(?:\\w+ )?(?:creature|enemy|foe)\\b|\\bteleports? (?:into|to|adjacent|within)\\b|\\bturns? invisible\\b|\\bappears?\\b"
+    },
+    {
+      "name": "about to be found",
+      "trigger": "aboutToBeFound",
+      "pattern": "\\bseeks?\\b|\\bwould (?:detect|find|locate|notice) you\\b|\\battempts? to (?:find|locate|detect|seek) you\\b|\\byou would be (?:detected|seen|revealed|found)\\b|\\bwould observe\\b"
+    },
+    {
+      "name": "foe comes close",
+      "trigger": "foeApproaches",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:moves? (?:from beyond[^.;]* )?(?:to )?(?:within|into) (?:your |its )?reach|enters? (?:your |its )?(?:reach|aura|area)|comes? within|approaches|moves? (?:to )?(?:within \\d+ feet|adjacent)|moves? into an? adjacent (?:square|space)|moves? from beyond [^.;]* to within|ends? (?:a|its|their) (?:move|movement)(?: action)? (?:adjacent|within)|enters? a square)"
+    },
+    {
+      "name": "foe moves within reach",
+      "trigger": "foeMovesInReach",
+      "pattern": "\\b(?:within|in) (?:your |the )?reach\\b[^.;]*\\b(?:uses? a move action|moves?|stands?(?: up)?)\\b|\\bstands? up\\b|\\bprone [\\w ]*stands\\b|\\bmoves? through (?:your |the )?reach\\b"
+    },
+    {
+      "name": "foe leaves reach",
+      "trigger": "foeLeavesReach",
+      "pattern": "\\bleaves? (?:a square|your reach|the reach|reach)\\b|\\bmoves? (?:away from|out of) (?:you|your reach)\\b|\\bmoves? away\\b|\\bretreats?\\b"
+    },
+    {
+      "name": "something in its space",
+      "trigger": "inItsSpace",
+      "pattern": "\\b(?:enters?|leaves?|moves? (?:into|through|out of)|occupies|is in) (?:your|its) space\\b|\\bwalks? (?:on top of|over|across) you\\b|\\b(?:enters?|moves? into) a (?:square|space) occupied by you\\b|\\bsteps? on you\\b"
+    },
+    {
+      "name": "foe casts a spell",
+      "trigger": "foeCasts",
+      "pattern": "^(?!\\s*you\\b)[^;]*?(?:\\bcasts? a spell\\b|\\bcast a spell\\b|\\bcasting a spell\\b|\\bsustains? a spell\\b|\\bactivates? (?:an? )?(?:magic )?item\\b|\\bcasts? (?:an? )?(?:[\\w-]+ )?(?:spell|cantrip|ritual)\\b)"
+    },
+    {
+      "name": "magic or an effect nearby",
+      "trigger": "magicNearby",
+      "pattern": "\\b(?:healing|teleportation|teleport|[\\w-]+) (?:spell|effect)s?\\b[^.;]*\\b(?:within|in) \\d+ feet\\b|\\b(?:within|in) \\d+ feet\\b[^.;]*\\b(?:spell|effect|teleports?|heals?|restores? hit points)\\b|\\bhealing effect\\b|\\brestores? hit points\\b|\\bspell (?:comes into|takes) effect\\b|\\buses? an? (?:[\\w-]+ (?:or [\\w-]+ )?)?(?:spell|effect)\\b|\\bteleports?\\b"
+    },
+    {
+      "name": "pressed or threatened",
+      "trigger": "pressed",
+      "pattern": "\\b(?:coerce|demoralize|make an impression|request|intimidate|persuade|bargain|bribe)s?\\b[^.;]*\\byou\\b|\\b(?:diplomacy|intimidation) check (?:against|targeting) you\\b"
+    },
+    {
+      "name": "lied to or feinted",
+      "trigger": "deceived",
+      "pattern": "\\b(?:feints?|lies|create a diversion|deceives?)\\b[^.;]*\\byou\\b|\\blies to you\\b|\\byou (?:are|is) deceived\\b|\\bdisguise\\b"
+    },
+    {
+      "name": "hears speech",
+      "trigger": "speech",
+      "pattern": "\\b(?:speaks?|says?|sings?|performs?|shouts?|whispers?)\\b|\\buses? a linguistic\\b|\\b(?:your|its) name\\b"
+    },
+    {
+      "name": "rule broken",
+      "trigger": "ruleBroken",
+      "pattern": "\\btrespass|\\bviolates?\\b|\\bdesecrat|\\bbreaks? (?:a|your|the) (?:rule|oath|vow|ward|anathema)\\b|\\benters? (?:your|the) (?:temple|shrine|lair|territory|hoard|domain)\\b|\\bsteals? from\\b|\\btouches? (?:your|the) hoard\\b"
+    },
+    {
+      "name": "drops a foe",
+      "trigger": "dropsFoe",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:reduces?|kills?|slays?|knocks? out) (?:a |an |the )?(?:[\\w-]+ )?(?:creature|enemy|foe|target|opponent)\\b[^.;]*(?:to 0|$)|\\byou(?:r)?\\b[^.;]*\\b(?:reduces?|kills?) (?:a |an )?(?:[\\w-]+ )?(?:creature|enemy|foe)|\\byou (?:kill|kills|slay|slays)\\b"
+    },
+    {
+      "name": "own blow lands",
+      "trigger": "ownHit",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:strike|attack|spellstrike|unarmed attack|spell attack)s? (?:roll )?(?:hits?|critically hits?|deals? damage|damages?)\\b|\\byou (?:hit|hits|critically hit|critically hits|damage|damages) (?:a |an |the )?(?:[\\w-]+ ){0,3}(?:creature|enemy|foe|target|opponent|it)\\b|\\byour (?:last|previous) action was a successful strike\\b|\\byou (?:roll|rolls) a critical hit\\b|\\byou (?:critically )?succeeds? at a strike\\b|\\byou (?:deal|deals) (?:[\\w-]+ )?damage\\b|\\byou (?:hit|hits) (?:a |an )?(?:[\\w-]+ )?with\\b|\\byou (?:critically )?(?:hit|hits)\\b"
+    },
+    {
+      "name": "own attack misses",
+      "trigger": "ownMiss",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:strike|attack|spell attack)s? (?:roll )?(?:misses|fails)\\b|\\byou (?:miss|misses|fail a strike|fails a strike)\\b"
+    },
+    {
+      "name": "own roll fails",
+      "trigger": "ownRollFails",
+      "pattern": "\\byou (?:fail|fails|critically fail|critically fails)\\b|\\byou rolls? a (?:critical )?failure\\b"
+    },
+    {
+      "name": "own roll succeeds",
+      "trigger": "ownRollSucceeds",
+      "pattern": "\\byou (?:succeed|succeeds|critically succeed|critically succeeds|successfully)\\b"
+    },
+    {
+      "name": "own roll",
+      "trigger": "ownRoll",
+      "pattern": "\\byou(?:r)?\\b[^.;]*\\b(?:roll|rolls|would roll|would attempt|attempt|attempts|are about to attempt|about to roll)\\b[^.;]*\\b(?:check|roll|d20|strike|attack)\\b"
+    },
+    {
+      "name": "a death nearby",
+      "trigger": "deathNearby",
+      "pattern": "\\b(?:creatures?|enem(?:y|ies)|foes?|opponents?|attackers?|someone|another|hazard)\\b[^.;]*\\b(?:dies|is reduced to 0|is killed)\\b|\\bdeath of\\b|\\bdies\\b"
+    },
+    {
+      "name": "uses a certain action",
+      "trigger": "ownAction",
+      "pattern": "^\\s*you(?:r)? (?:successfully |previous action was to |use |uses )?(?:grab|grabs|trip|trips|shove|shoves|grapple|grapples|hide|hides|stride|strides|step|steps|cast|casts|leap|leaps|jump|jumps|swallow|swallows|engulf|engulfs|enter|enters|transform|transforms|change|changes|reload|reloads|draw|draws|raise|raises|sustain|sustains|activate|activates|command|commands|demoralize|demoralizes|feint|feints|disable|disables|recall|recalls|rouse|rouses|use|uses|begin|begins|reach|reaches|lose|loses|become|becomes|gain|gains|size|push|pushes|fly|flies|make|makes)\\b"
+    },
+    {
+      "name": "hazard sensed",
+      "trigger": "hazardSensed",
+      "pattern": "\\b(?:looks? at|reads?|touches|uses) (?:the )?(?:\\w+ )?(?:hazard|trap|object)\\b"
+    }
+  ],
+  "effects": [
+    {
+      "name": "only if",
+      "effect": "unless",
+      "pattern": "^(?:if|when|whenever|unless|until|after|on a (?:hit|critical hit|success|critical success|failure|critical failure|miss))\\b"
+    },
+    {
+      "name": "a choice",
+      "effect": "unclear",
+      "pattern": "\\b(?:choos(?:e|es|ing)|cho(?:se|sen)|choice|instead|random(?:ly)?|redirects?|swaps?|teleports?|counteracts?|dispels?|disrupts?|rerolls?)\\b"
+    },
+    {
+      "name": "for others",
+      "effect": "unclear",
+      "pattern": "\\ballies\\b|\\ban ally\\b"
+    },
+    {
+      "name": "an affliction",
+      "effect": "unclear",
+      "pattern": "\\bstage \\d\\b|\\bmaximum duration\\b"
+    },
+    {
+      "name": "a lingering area, another form",
+      "effect": "unclear",
+      "pattern": "\\b(?:ending|ends|starting|starts) (?:its|their) turn (?:there|in|within)\\b|\\bwhile in (?:this|that|its) form\\b"
+    },
+    {
+      "name": "the foe",
+      "effect": "foe",
+      "pattern": "\\b(?:the |that |this |each |any )?(?:triggering |attacking |damaged |struck |adjacent )?(?:creature|target|attacker|enemy|foe|opponent|victim)s?\\b"
+    },
+    {
+      "name": "on a failure",
+      "effect": "onFail",
+      "pattern": "\\bfails?\\b|\\bfailure\\b"
+    },
+    {
+      "name": "not laid",
+      "effect": "notLaid",
+      "pattern": "\\b(?:not|isn't|aren't|no longer|already|while|has|have|had)(?: [a-z-]+(?: \\d+)?(?:,| or| and))*\\s*$"
+    },
+    {
+      "name": "harm to itself",
+      "effect": "selfHarm",
+      "pattern": "\\byou (?:takes?|increases)\\b[^.]*$"
+    },
+    {
+      "name": "a strike back",
+      "effect": "strike",
+      "pattern": "\\byou (?:immediately )?(?:makes?|attempts?|retaliates with) (?:a|an|its|their|his|her|one|another) (?:(?:melee |ranged )?(?<strike>(?!(?:melee|ranged|weapon|unarmed)\\b)[a-z' -]+?) )?strike(?: (?:against|at|on) (?:the |that |this )?(?:triggering (?:creature|enemy|foe|opponent)|attacker|attacking creature|creature|target|enemy|foe|opponent|them|it|him|her))?\\b"
+    },
+    {
+      "name": "strikes it",
+      "effect": "strike",
+      "pattern": "\\byou strikes? (?:the )?(?:triggering creature|attacker|triggering enemy)\\b"
+    },
+    {
+      "name": "a bonus to its defense",
+      "effect": "ac",
+      "pattern": "\\byou\\b[^.]*?\\b(?:gains?|gaining) an? \\+(?<value>\\d+) (?:circumstance |status )?bonus to (?:your |its |their |his |her )?ac(?: against the (?:triggering |incoming )?(?:attack|strike|attack roll))?\\b"
+    },
+    {
+      "name": "those beside it",
+      "effect": "around",
+      "range": 5,
+      "pattern": "\\b(?:all|each|every) adjacent (?:living |non-[a-z-]+ )?creatures?\\b|\\badjacent (?:living |non-[a-z-]+ )?creatures\\b|\\b(?:each creature|creatures) adjacent to you\\b"
+    },
+    {
+      "name": "those that close",
+      "effect": "around",
+      "pattern": "\\b(?:each|every|all) (?:living )?creatures? (?:in|within) (?:a |an )?(?<range>\\d+)(?:-foot| feet)\\b"
+    },
+    {
+      "name": "ready again",
+      "effect": "recharge",
+      "pattern": "\\byou(?:r)? (?<action>[a-z' -]+?) recharges\\b|\\byou recharges? (?:your |its |their |his |her )?(?<action2>[a-z' -]+?)(?:\\.|$| whenever| when| if| on)"
+    }
+  ],
   "requirements": [
     { "means": "line", "pattern": "<strong>\\s*requirements?\\s*</strong>(?<line>[\\s\\S]*?)(?:<strong>|<hr|</p>|$)" },
     { "means": "word", "word": "dying", "is": "unconscious" },
