@@ -696,7 +696,9 @@ export const pf2eRules = {
       // so through the attack that gives it away: afterAttack.)
       const t = ctx.target;
       const a = ctx.attacker;
-      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0)));
+      // (A creature's Surprise Attack: off-guard to it until the target's first turn.)
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0))
+        || (a?.spec?.surpriseAttack && !(t.turnsTaken > 0)));
     },
     defense(ctx) {
       // (Off guard on its sheet already: its AC has the -2.)

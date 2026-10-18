@@ -12,11 +12,13 @@
  *  - Draconic Momentum: a critical hit with a Strike recharges its breath (the core's rechargeOnCrit).
  *  - On its spec: Swarm Mind (immune to mental effects that pick out a single creature: rules.js isImmune), Camouflage
  *    (it can Hide without cover: rules.js usable), Slow (slowed, as its text says, for good), Light Blindness (dazzled
- *    in a brightly lit scene), and a constant tongues or truespeech (it talks with anyone: the core's anyLanguage).
+ *    in a brightly lit scene), Surprise Attack (a foe that hasn't acted yet is off-guard to it: rules.js exposed), and a
+ *    constant tongues or truespeech (it talks with anyone: the core's anyLanguage).
  * NO_FIGHT_EFFECT and PLAYED_ELSEWHERE list what needs nothing more.
  * Not played: Rend's and Draconic Frenzy's use from a reaction, Pounce's staying hidden until its Strike, Light
  * Blindness's blinded on first exposure (a creature in the fight has met the light by then), Camouflage's natural
- * surroundings (it Hides without cover anywhere), Slow's no reactions.
+ * surroundings (it Hides without cover anywhere), Slow's no reactions, a character's Surprise Attack (its initiative's
+ * skill isn't known), and a creature's that asks for Deception or Stealth initiative (played as if it had).
  * Pure, unit-tested.
  */
 import { meanPart } from "./core.js";
@@ -61,7 +63,7 @@ export const PLAYED_ELSEWHERE = Object.freeze(new Set([
 /** Abilities this module reads from an item of that slug (adapter.js gathers them for glossaryActions and the rest). */
 export const GLOSSARY_SLUGS = Object.freeze(new Set([
   "draconic-frenzy", "rend", "rend-jaws", "pounce", "constrict", "greater-constrict", "draconic-momentum", "swarm-mind",
-  "camouflage", "slow", "light-blindness"
+  "camouflage", "slow", "light-blindness", "surprise-attack"
 ]));
 
 /** Abilities that act only on a creature they hold. */
@@ -209,8 +211,8 @@ export function markGlossary(actions, abilities = [], items = []) {
 export const EVERY_LANGUAGE = Object.freeze(new Set(["tongues", "truespeech"]));
 
 /**
- * What its standard passives put on its spec: {swarmMind, camouflage, conditions, anyLanguage}, each only where it has
- * the ability.
+ * What its standard passives put on its spec: {swarmMind, camouflage, surpriseAttack, conditions, anyLanguage}, each
+ * only where it has the ability.
  * @param {object} d
  * @param {{slug: string, html: string}[]} [d.abilities]  its abilities of GLOSSARY_SLUGS
  * @param {boolean} [d.bright]          the scene is brightly lit (PF2e's own reading of its light)
@@ -222,6 +224,7 @@ export function glossarySpec({ abilities = [], bright = false, constant = [] } =
   const conditions = {};
   if ( has("swarm-mind") ) out.swarmMind = true;
   if ( has("camouflage") ) out.camouflage = true;
+  if ( has("surprise-attack") ) out.surpriseAttack = true;
   const slow = has("slow");
   if ( slow ) conditions.slowed = Math.max(1, Number(conditionsIn(plain(slow.html).toLowerCase()).slowed) || 1);
   if ( has("light-blindness") && bright ) conditions.dazzled = 1;

@@ -123,6 +123,13 @@ describe("its passives, on the spec", () => {
     expect(pf2eRules.isImmune(swarm, { traits: ["mental"], area: { targets: 3 }, onSave: [{ conditions: { frightened: 1 } }] })).toBe(false);
     expect(pf2eRules.usable({ units: [] }, { spec: { camouflage: true }, conds: {} }, { hide: true }, null)).toBe(true);
   });
+
+  test("surprise attack: a foe that hasn't acted yet is off-guard to it, and not once it has", () => {
+    expect(glossarySpec({ abilities: [ability("surprise-attack", "")] })).toEqual({ surpriseAttack: true });
+    const ctx = turns => ({ target: { conds: {}, turnsTaken: turns }, attacker: { spec: { surpriseAttack: true }, conds: {} } });
+    expect(pf2eRules.modifiers.exposed(ctx(0))).toBe(true);
+    expect(pf2eRules.modifiers.exposed(ctx(1))).toBe(false);
+  });
 });
 
 describe("what needs nothing more", () => {

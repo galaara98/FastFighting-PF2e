@@ -347,6 +347,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...mending,
       ...(passives.swarmMind ? { swarmMind: true } : {}),
       ...(passives.camouflage ? { camouflage: true } : {}),
+      ...(passives.surpriseAttack && actor.type !== "character" ? { surpriseAttack: true } : {}),
       saveUpgrades: upgrades.length ? upgrades : undefined,
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
