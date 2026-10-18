@@ -1,5 +1,20 @@
 {
   "$comment": "How FastFighting PF2e reads PF2e's own English text where an item's data says nothing. Patterns are regular expressions over the line, lower case. A translation is a copy of this file named for its language (de.json), read before this one. See CODING_README.md.",
   "triggers": [],
-  "requirements": []
+  "requirements": [],
+  "auras": {
+    "radius": { "pattern": "^\\s*(\\d+) (?:feet|foot)\\b" },
+    "enter": { "pattern": "\\b(?:enters?|entering)\\b" },
+    "turnStart": { "pattern": "\\b(?:starts?|starting|begins?|beginning) (?:its|their|your) turn\\b" },
+    "failure": { "pattern": "\\bfail" },
+    "critical": { "pattern": "\\bcritical(?:ly)? fail" },
+    "immune": { "pattern": "\\bimmune\\b" },
+    "immuneAny": { "pattern": "\\bregardless\\b" },
+    "immuneSuccess": { "pattern": "\\bsucce(?:ed|eds|ss)\\b" },
+    "immuneAll": { "pattern": "\\bimmune to all\\b" },
+    "degree0": { "pattern": "^critical failure$" },
+    "degree1": { "pattern": "^failure$" },
+    "degree2": { "pattern": "^success$" },
+    "degree3": { "pattern": "^critical success$" }
+  }
 }

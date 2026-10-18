@@ -28,6 +28,9 @@ import { skillManeuvers, strikeMove } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
 import { linkedEffect, theirsToOpen } from "./granted.js";
 import { AURA_REACTIONS, championReaction } from "./champion.js";
+import { auraOf } from "./auras.js";
+import { saveVsFrom } from "./save-vs.js";
+import { reading } from "./reading.js";
 
 const PRONE_EFFECTS = new Set(["knockdown", "improved-knockdown", "trip", "improved-trip"]);
 const GRAB_EFFECTS = new Set(["grab", "improved-grab"]);
@@ -336,9 +339,15 @@ export class Pf2eAdapter extends SystemAdapter {
     // A success that counts as a critical success: Evasion (Reflex), Juggernaut (Fortitude), Resolve (Will).
     const upgrades = Object.entries({ evasion: "reflex", juggernaut: "fortitude", resolve: "will" })
       .filter(([slug]) => actor.items.some(i => slugOf(i) === slug)).map(([, save]) => save);
+    // (A formula's numbers in its rule elements: its level and attribute modifiers.)
+    const ruleActor = { level, abilities: Object.fromEntries(Object.entries(sys.abilities ?? {}).map(([k, v]) => [k, { mod: Number(v?.mod) || 0 }])) };
     return {
       ...mending,
       saveUpgrades: upgrades.length ? upgrades : undefined,
+      // Bonuses to its saves against some effects only, that its sheet's saves leave out (save-vs.js), and its auras
+      // that make foes save (auras.js).
+      saveVs: saveVsFrom(actor.items, { traits: knownTraits(), actor: ruleActor }),
+      auras: await this.#auras(actor, ruleActor),
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
       actorId: actor.id,
@@ -702,7 +711,10 @@ export class Pf2eAdapter extends SystemAdapter {
           roll = null;
         }
         const kinds = roll?.kinds ?? new Set();
-        const traits = spell.system.traits?.value ?? [];
+        // (Its traits, and the tradition it's cast in, as PF2e's own roll options have it: a save against arcane magic.)
+        const tradition = entry.tradition ?? entry.system?.tradition?.value ?? null;
+        const own = spell.system.traits?.value ?? [];
+        const traits = tradition && !own.includes(tradition) ? [...own, tradition] : own;
         const parts = roll ? parseTypedFormula(roll.formula) : [];
         // An affliction it lays (Spider Sting's spider venom, Goblin Pox): its save the exposure, then stages worked off
         // with saves against the spell DC (afflictions.js).
@@ -1005,6 +1017,28 @@ export class Pf2eAdapter extends SystemAdapter {
       out.push({ ...action, itemId: item.id });
     }
     return out;
+  }
+
+  /**
+   * Its auras that make foes save (auras.js): a passive ability with the aura trait or an Aura rule element whose text
+   * asks for a save (Frightful Presence, Stench, a dragon's heat). Undefined with none.
+   */
+  async #auras(actor, ruleActor) {
+    const auraLike = item => ["action", "feat"].includes(item.type)
+      && ((item.system?.traits?.value ?? []).includes("aura") || (item.system?.rules ?? []).some(r => r?.key === "Aura"));
+    const items = actor.items.filter(auraLike);
+    if ( !items.length ) return undefined;
+    const words = (await reading()).auras ?? {};
+    const out = [];
+    for ( const item of items ) {
+      const aura = auraOf({
+        id: `${actor.id}.${item.id}`, slug: slugOf(item), name: item.name, html: await resolvedText(item), source: englishDescription(item),
+        traits: [...(item.system?.traits?.value ?? [])],
+        rules: item.system?.rules ?? [], actionType: item.system?.actionType?.value ?? "passive", actor: ruleActor, words
+      });
+      if ( aura ) out.push(aura);
+    }
+    return out.length ? out : undefined;
   }
 
   /**
@@ -1589,6 +1623,12 @@ export class Pf2eAdapter extends SystemAdapter {
 
 function levelOf(actor) {
   return actor.level ?? 0;
+}
+
+/** The trait ids PF2e knows (CONFIG.PF2E's), for a bare trait in a rule element's predicate (save-vs.js). */
+function knownTraits() {
+  const config = globalThis.CONFIG?.PF2E ?? {};
+  return new Set(["actionTraits", "spellTraits", "effectTraits", "magicTraditions"].flatMap(k => Object.keys(config[k] ?? {})));
 }
 
 /**
