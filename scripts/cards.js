@@ -3,7 +3,8 @@
  * (applyDamageCard) or settles by its own sum: each marked as its own (flags["fast-fighting-pf2e"].rolled), so the
  * card's Apply buttons and its Apply menu entries, which would apply the damage a second time, are gone for everyone
  * (the GMs' and the players'); and a spell attack's critical hit, whose card PF2e doubles only as it's applied (its
- * Double button), applied doubled (`times`).
+ * Double button), applied doubled (`times`). The mark counts only on a card a GM made: anyone may put any flag on their
+ * own card, and a player's would multiply the damage it's applied with, or hide its Apply buttons.
  */
 import { t } from "./words.js";
 
@@ -28,12 +29,15 @@ export async function markRolled(message, times = 1) {
   await message.setFlag(HELPER_ID, "rolled", { times: Number(times) > 0 ? Number(times) : 1 });
 }
 
-/** Is this card one FastFighting rolled for its own turn (markRolled)? */
-export const rolledHere = message => !!message?.flags?.[HELPER_ID]?.rolled;
+/**
+ * Is this card one FastFighting rolled for its own turn (markRolled)? Its mark, on a card a GM made (FastFighting rolls
+ * in the GM's browser); a player's card is theirs, whatever it says.
+ */
+export const rolledHere = message => !!message?.flags?.[HELPER_ID]?.rolled && !!message?.author?.isGM;
 
-/** How many times over FastFighting applies the card's total: 1, or as markRolled said. */
+/** How many times over FastFighting applies the card's total: as markRolled said on its own card, else 1. */
 export function timesOf(message) {
-  const n = Number(message?.flags?.[HELPER_ID]?.rolled?.times);
+  const n = rolledHere(message) ? Number(message.flags[HELPER_ID].rolled.times) : 1;
   return n > 0 ? n : 1;
 }
 

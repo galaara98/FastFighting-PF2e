@@ -200,6 +200,7 @@ describe("a damage card applied, as PF2e's own card applies it", () => {
     const rolled = (times = null) => {
       const m = card({ total: 30, sourceType: "save", outcome: null, options: ["item:defense:reflex", "item:defense:basic"], target: null, item: spell, origin: hero([]) });
       if ( times ) m.flags["fast-fighting-pf2e"] = { rolled: { times } };
+      m.author = { isGM: true };
       return m;
     };
     for ( const [multiplier, times, applied] of [[0.5, null, 0.5], [2, null, 2], [1, 1, 1], [1, 2, 2], [0.5, 2, 1]] ) {
@@ -208,6 +209,14 @@ describe("a damage card applied, as PF2e's own card applies it", () => {
       expect([multiplier, times, seen.applied.damage.from]).toEqual([multiplier, times, { multiplier: applied, addend: 0 }]);
       expect(seen.applied).toMatchObject({ item: spell, skipIWR: false, outcome: null });
     }
+  });
+
+  test("a player's own card marked as FastFighting's: applied as rolled, its mark not counted", async () => {
+    const m = { ...card({ total: 10, origin: hero([]) }), author: { isGM: false } };
+    m.flags["fast-fighting-pf2e"] = { rolled: { times: 10 } };
+    const { token, seen } = orc();
+    await adapter.applyDamageCard(m, token, { multiplier: 1 });
+    expect(seen.applied.damage.from).toEqual({ multiplier: 1, addend: 0 });
   });
 
   test("nothing applied without PF2e's damage roll, a token's actor or a multiplier above 0", async () => {
