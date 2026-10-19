@@ -41,7 +41,8 @@ const SAVE_ON = Object.freeze({ fortitude: "con", reflex: "dex", will: "mind" })
 
 /** The worst status penalty some conditions give a roll based on all of `on` (none: every roll's alone). */
 function worstStatus(conds, on) {
-  let n = Math.max(Number(conds?.frightened) || 0, Number(conds?.sickened) || 0);
+  if ( !conds ) return 0; // (a sheet read with no conditions: most are)
+  let n = Math.max(Number(conds.frightened) || 0, Number(conds.sickened) || 0);
   for ( const base of on ) {
     for ( const k of STATUS_ON[base] ?? [] ) n = Math.max(n, Number(conds?.[k]) > 0 || conds?.[k] === true ? FIXED[k] ?? Number(conds[k]) : 0);
   }
@@ -57,9 +58,10 @@ function worstStatus(conds, on) {
 const statusPenalty = (u, ...on) => worstStatus(u.conds, on) - worstStatus(u.spec?.conditions, on);
 
 /** Off guard on its sheet when its AC was read (PF2e's AC took the -2 in already): off-guard, or what brings it. */
+const SHEET_OFF_GUARD = Object.freeze(["offGuard", "prone", "grabbed", "restrained", "paralyzed", "unconscious"]);
 const sheetOffGuard = u => {
-  const c = u.spec?.conditions ?? {};
-  return ["offGuard", "prone", "grabbed", "restrained", "paralyzed", "unconscious"].some(k => Number(c[k]) > 0 || c[k] === true);
+  const c = u.spec?.conditions;
+  return !!c && SHEET_OFF_GUARD.some(k => Number(c[k]) > 0 || c[k] === true);
 };
 
 /**
