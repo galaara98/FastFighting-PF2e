@@ -956,11 +956,11 @@ export class Pf2eAdapter extends SystemAdapter {
         // (A hand for one cast with gestures: the manipulate trait.)
         const hands = traitHands(traits);
         if ( summon ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, ...summon });
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands, ...summon });
           continue;
         }
         if ( support ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, ...support });
+          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands, ...support });
           continue;
         }
 
@@ -976,7 +976,7 @@ export class Pf2eAdapter extends SystemAdapter {
           const feet = variable ? 30 : rangeFeet;
           const reach = touch ? { reach: 5 } : feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {};
           out.push({
-            id: healId, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands,
+            id: healId, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands,
             targetTrait: animalOnly ? "animal" : null, ...reach, ...(selfOnlySpell(spell.system) ? { selfOnly: true } : {})
           });
           if ( !both ) continue;
@@ -984,7 +984,7 @@ export class Pf2eAdapter extends SystemAdapter {
         const defense = spell.system.defense;
         if ( control ) {
           const action = {
-            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands,
+            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands,
             melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
           };
           // (A hold it lays that an Escape breaks, Web's, Tangle Vine's: against the spell DC.)
@@ -1007,7 +1007,7 @@ export class Pf2eAdapter extends SystemAdapter {
         if ( !kinds.has?.("damage") && !afflicts ) continue;
         const action = {
           id: isHeal && healId === id ? `${id}.harm` : id, name: spell.name, cost, damage: parts, resource, pool, uses,
-          spellId: spell.id, entryId: entry.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
+          spellId: spell.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
           melee: false,
           range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
         };
