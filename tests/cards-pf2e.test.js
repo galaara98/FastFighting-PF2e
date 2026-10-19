@@ -6,7 +6,8 @@
  * loses its Apply too.
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { hideApply, hideApplyMenu, timesOf } from "../scripts/cards.js";
+import { hideApply, hideApplyMenu, timesOf, unmarkRolled } from "../scripts/cards.js";
+import { Pf2eAdapter } from "../scripts/adapter.js";
 import { notedBy } from "../../FastFighting/scripts/foundry/applied-cards.js";
 
 /** An element as the DOM has one: its children, replaced. */
@@ -108,5 +109,26 @@ describe("a player's card whose damage the live battle applied itself", () => {
     const apply = { label: "PF2E.DamageButton.FullContext", visible: () => true };
     hideApplyMenu({}, [apply]);
     expect([apply.visible({ dataset: { messageId: "m2" } }), apply.visible({ dataset: { messageId: "m3" } })]).toEqual([true, true]);
+  });
+});
+
+describe("a card the table settles itself after all (the core's leaveToTable, API 21)", () => {
+  /** A card of FastFighting's, its flags unset as Foundry unsets them. */
+  const unsettable = card => Object.assign(card, { unsetFlag: async (scope, key) => { delete card.flags[scope][key]; } });
+
+  test("its mark off: its Apply buttons back, as PF2e renders them", async () => {
+    const card = unsettable(mine());
+    await new Pf2eAdapter().leaveToTable(card);
+    expect(card.flags["fast-fighting-pf2e"].rolled).toBeUndefined();
+    const sections = [element()];
+    hideApply(card, rendered(sections));
+    expect(sections[0].children).toHaveLength(2);
+  });
+
+  test("only its own mark, on a GM's card: a player's card is left alone", async () => {
+    const card = unsettable(forged());
+    await unmarkRolled(card);
+    expect(card.flags["fast-fighting-pf2e"].rolled).toEqual({ times: 10 });
+    await unmarkRolled(null);
   });
 });

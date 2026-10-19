@@ -9,11 +9,12 @@
  *  - Damage and healing: PF2e's damage card, a DamageRoll whose instances are the roll's parts by type (a precision or
  *    splash part flavored inside its type, a critical hit's doubling written as PF2e writes it, `2 * (...)`), every
  *    die as it fell (damageFormula: PF2e parses the formula, the dice are filled in before it's evaluated, so nothing is
- *    rolled); flags.pf2e.context "damage-roll" with its target, its source (attack or save), the outcome of an attack,
- *    and the item it came from as its origin (a Strike's, a spell's, an ability's, by the adapter's ids). Persistent
- *    damage isn't on it (the engine lays that itself). Marked as FastFighting's (cards.js), so its Apply buttons are
- *    gone: FastFighting applies it (applyDamageCard: in a turn it plays, the core's "card" then "apply") or has written
- *    the engine's sum already.
+ *    rolled; a heal of so many hit points, its number alone, API 21); its target named under its title (targetLine,
+ *    PF2e's "Target: ..."); flags.pf2e.context "damage-roll" with its target, its source (attack or save), the outcome
+ *    of an attack, and the item it came from as its origin (a Strike's, a spell's, an ability's, by the adapter's ids).
+ *    Persistent damage isn't on it (the engine lays that itself). Marked as FastFighting's (cards.js), so its Apply
+ *    buttons are gone: FastFighting applies it (applyDamageCard: in a turn it plays, the core's "card" then "apply") or
+ *    has written the engine's sum already; one the table settles itself has them back (the core's leaveToTable, API 21).
  * Styling only: the engine's result stands, its dice exactly, and nothing PF2e does with the card changes it (a check
  * card has no Damage buttons and no Hero Point reroll). One card a roll, to whom the core says (`audience`: everyone, or
  * the GMs alone: "gm"). Anything else (a recharge, a crit table's die, a roll with no token): null, the core's plain roll.
@@ -139,6 +140,19 @@ export function damageFlavor(title, outcome = null) {
   const words = outcome ? sys(`PF2E.Check.Result.Degree.Attack.${outcome}`) : "";
   const subtitle = words ? `<span class="subtitle degree-of-success">(<span class="${outcome}">${escape(words)}</span>)</span>` : "";
   return inertHtml(`<h4 class="action"><strong>${escape(title)}</strong>${subtitle}</h4>`);
+}
+
+/**
+ * Whom a damage or healing card is at, in PF2e's own words for a check's target ("Target: Lem": the opposer part of its
+ * WithTarget label, no DC), the name as its nameplate shows it (`visible`; else the GMs'); else this module's words.
+ * Inert, as damageFlavor is. "" with no name.
+ */
+export function targetLine(name, { visible = true } = {}) {
+  if ( !name ) return "";
+  const labels = globalThis.CONFIG?.PF2E?.checkDCs?.Label ?? {};
+  const own = /<opposer>([\s\S]*?)<\/opposer>/.exec(sys(labels.WithTarget ?? "PF2E.Check.DC.Label.WithTarget", { dcType: "", dc: "", opposer: escape(name) }))?.[1];
+  const words = own ?? escape(t("CardTarget", { name }));
+  return inertHtml(`<div class="target-dc-result"><div class="target-dc"><span data-whose="target"${visible ? "" : ' data-visibility="gm"'}>${words}</span></div></div>`);
 }
 
 /* -------------------------------------------- */
@@ -315,8 +329,8 @@ function dcWords(slug) {
 
 /**
  * A damage card (above): PF2e's DamageRoll parsed from damageFormula, its dice filled in with the engine's before it's
- * evaluated (so it rolls none), marked as FastFighting's, posted. Its id, or null (a formula PF2e reads otherwise than
- * it was written: the core's plain roll).
+ * evaluated (so it rolls none), marked as FastFighting's, posted; whom it's at under its title (targetLine). Its id, or
+ * null (a formula PF2e reads otherwise than it was written: the core's plain roll).
  */
 async function postDamage(roll, { token, target, audience, flavor, flags, materialsOf }) {
   const DamageRoll = globalThis.CONFIG?.Dice?.rolls?.find?.(r => r?.name === "DamageRoll");
@@ -348,8 +362,9 @@ async function postDamage(roll, { token, target, audience, flavor, flags, materi
     domains: [roll.kind === "healing" ? "healing" : "damage"], options, contextualOptions: {}, notes: [], secret: messageMode === "gm", messageMode,
     traits: [], skipDialog: true, outcome, unadjustedOutcome: outcome
   };
+  const named = target?.actor ? targetLine(target.name ?? target.actor.name ?? "", { visible: !!target.playersCanSeeName || !settings.nameVisibility }) : "";
   const message = await damage.toMessage({
-    speaker: speakerOf(token), flavor: damageFlavor(title, outcome),
+    speaker: speakerOf(token), flavor: damageFlavor(title, outcome) + named,
     flags: { ...flags, pf2e: { context, target: at, modifiers: [], dice: [], origin: item?.getOriginData?.() ?? null }, [HELPER_ID]: { rolled: { times: 1 } } }
   }, { messageMode });
   return message?.id ?? null;

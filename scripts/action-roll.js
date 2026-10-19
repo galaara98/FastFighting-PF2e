@@ -16,10 +16,13 @@
  * and the item's id, or the item's id alone (an ability: abilities.js), or with the use it's put to after it (Grab's
  * Grapple after a hit, or kept up: maneuvers.js, whose check is PF2e's own action: check-roll.js; a spell that both
  * harms and heals, Heal's harm on the undead or Harm's healing of them: adapter.js #spells).
+ * A champion's touch heal (Lay on Hands, Touch of the Void: touch-heals.js) is shown and rolled as its variant for the
+ * use: its healing variant's card for the heal, its harming variant's card and damage for the harm (`.harm`).
  */
 import { click, damageByType, spellAttackFor, strikeFor, slugOf } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
 import { damageRollOf } from "./read-turn.js";
+import { touchOverlay } from "./touch-heals.js";
 
 /** The kinds of item an action of each kind of id is, by the id's middle part (none: an ability). */
 const KINDS = Object.freeze({ __proto__: null, spell: ["spell"], self: ["action", "feat"], item: ["consumable"], "": ["action", "feat"] });
@@ -31,6 +34,21 @@ const KINDS = Object.freeze({ __proto__: null, spell: ["spell"], self: ["action"
 const PART_CARDS = new Set(["force-barrage"]);
 
 /** An item's slug, PF2e's own. */
+
+/**
+ * The spell as an action of its uses it: a champion's touch heal as its variant for that use (PF2e's loadVariant, the
+ * overlay touchOverlay names, at the rank it's cast at); any other spell, or none to load, as it is.
+ */
+export function asUsed(item, actionId) {
+  if ( item?.type !== "spell" || typeof item.loadVariant !== "function" ) return item;
+  const overlay = touchOverlay(item, actionId);
+  if ( !overlay ) return item;
+  try {
+    return item.loadVariant({ overlayIds: [overlay], castRank: item.rank }) ?? item;
+  } catch ( err ) {
+    return item;
+  }
+}
 
 /** For the GMs only (`secret`), as PF2e posts a GM's card; else in the chat's own mode. */
 const modeOf = secret => (secret ? { mode: game.user?.isGM ? "gm" : "blind" } : {});
@@ -57,7 +75,7 @@ export function actionItem(actor, id) {
  */
 export async function usePf2eAction(token, { action, targets = [], secret = false } = {}) {
   const actor = token?.actor;
-  const item = actionItem(actor, action?.id);
+  const item = asUsed(actionItem(actor, action?.id), action?.id);
   if ( typeof item?.toMessage !== "function" ) return null;
   // (A spell attack rollStrike rolls, at a target drawn here: its attack card shows it.)
   if ( spellAttackFor(actor, action.id) && targets?.[0]?.object ) return null;
@@ -98,7 +116,7 @@ async function abilityDamage(card, secret) {
  */
 export async function rollPf2eDamage(token, { action, card = null, secret = false, target = null } = {}) {
   const actor = token?.actor;
-  const item = actionItem(actor, action?.id);
+  const item = asUsed(actionItem(actor, action?.id), action?.id);
   if ( !item || item.type === "consumable" ) return null;
   const seen = cardIds();
   let roll = null;

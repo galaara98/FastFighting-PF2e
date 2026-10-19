@@ -36,6 +36,8 @@ import { GLOSSARY_SLUGS, glossaryActions, markGlossary, glossarySpec } from "./g
 import { itemReactions } from "./reactions-item.js";
 import { reloadOf, ammoOf, roundsOf, nextAmmo, loadedOf } from "./ammo.js";
 import { gearKey, drawActions, retrieveActions, gearOnSheet, readyPf2eGear } from "./ready.js";
+import { unmarkRolled } from "./cards.js";
+import { TOUCH_HEALS, touchHealActions } from "./touch-heals.js";
 
 const AFFLICTION_TRAITS = new Set(["poison", "disease", "curse"]);
 const HEAL_SPELLS_TWO_ACTION_BONUS = new Set(["heal", "heal-animal", "heal-companion", "harm"]);
@@ -907,20 +909,23 @@ export class Pf2eAdapter extends SystemAdapter {
         const own = spell.system.traits?.value ?? [];
         const traits = tradition && !own.includes(tradition) ? [...own, tradition] : own;
         const parts = roll ? parseTypedFormula(roll.formula) : [];
+        // (A champion's touch that heals one kind of creature and harms the other, both only in its variants: Lay on
+        // Hands, Touch of the Void. Built as what it does, never its linked effect alone: touch-heals.js.)
+        const touchSlug = !parts.length && TOUCH_HEALS[slugOf(spell)] ? slugOf(spell) : null;
         // An affliction it lays (Spider Sting's spider venom, Goblin Pox): its save the exposure, then stages worked off
         // with saves against the spell DC (afflictions.js).
         const saved = spell.system.defense?.save;
         const afflicts = saved ? spellAffliction({ id: `${actor.id}.spell.${spell.id}.affliction`, html: await resolvedText(spell), name: spell.name, traits,
           save: { type: saved.statistic, dc: stat.dc?.value ?? 10 + levelOf(actor) } }) : null;
         // No damage: maybe it's crowd control, conditions by degree of the target's save or of a spell attack.
-        const control = !parts.length && !afflicts && (saved || spell.isAttack)
+        const control = !parts.length && !afflicts && !touchSlug && (saved || spell.isAttack)
           ? parseControl({ description: englishDescription(spell), duration: spell.system.duration?.value })
           : null;
         // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
-        const support = !parts.length && !control && !afflicts ? await this.#spellSupport(spell, stat) : null;
+        const support = !parts.length && !control && !afflicts && !touchSlug ? await this.#spellSupport(spell, stat) : null;
         // A summon spell: the creature it most likely calls, which must be Sustained.
         const summon = traits.includes("summon") && !this.#summoning ? await this.#summon(spell) : null;
-        if ( !parts.length && !control && !support && !summon && !afflicts ) continue;
+        if ( !parts.length && !control && !support && !summon && !afflicts && !touchSlug ) continue;
 
         // Resource
         let resource = null;
@@ -960,6 +965,10 @@ export class Pf2eAdapter extends SystemAdapter {
         const healId = traits.includes("healing") ? id : `${id}.heal`;
         // (A hand for one cast with gestures: the manipulate trait.)
         const hands = traitHands(traits);
+        if ( touchSlug ) {
+          out.push(...await this.#touchHeal(spell, touchSlug, { id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands }, stat.dc?.value ?? 10 + levelOf(actor)));
+          continue;
+        }
         if ( summon ) {
           out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands, ...summon });
           continue;
@@ -1045,6 +1054,27 @@ export class Pf2eAdapter extends SystemAdapter {
       }
     }
     return out;
+  }
+
+  /**
+   * A champion's touch heal (touch-heals.js): its heal and its harm from its variants, at the rank it's cast at; the bonus
+   * its linked effect lends (Lay on Hands' +2 AC), read from the effect's rule elements, for another it heals.
+   */
+  async #touchHeal(spell, slug, base, dc) {
+    let ward = null;
+    let effectRef;
+    for ( const m of englishDescription(spell).matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {
+      const effect = await linkedEffect(m[1]);
+      if ( !effect ) continue;
+      ward = modsFromRules(effect.system?.rules ?? [], { rank: spell.rank ?? 1 });
+      effectRef = { uuids: [m[1]] };
+      break;
+    }
+    const mods = ward?.mods && Object.keys(ward.mods).length ? ward.mods : null;
+    return touchHealActions({
+      slug, system: spell.system, rank: spell.rank ?? 1, base, dc, ward: mods ? { mods } : null, effectRef,
+      label: mods ? describeMods(mods) : "", failedLabel: describeMods(TOUCH_HEALS[slug].failed)
+    });
   }
 
   /**
@@ -1733,6 +1763,14 @@ export class Pf2eAdapter extends SystemAdapter {
   /** API 19. A damage card applied to a token as PF2e's own card applies it (commit.js), with its undo record. */
   async applyDamageCard(message, token, options) {
     return applyPf2eDamageCard(message, token, options);
+  }
+
+  /**
+   * API 21. A card of FastFighting's own it won't apply after all, the table settling it (a player's character's heal or
+   * damage at another, Apply players' damage off): its mark off (cards.js), so PF2e's Apply buttons are back for everyone.
+   */
+  async leaveToTable(message) {
+    await unmarkRolled(message);
   }
 
   /**

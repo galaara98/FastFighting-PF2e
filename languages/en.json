@@ -120,6 +120,9 @@
     "FlatCheckFor": "Flat check: {what}",
     "Persistent": "persistent {type}",
     "DamageHandled": "FastFighting handles this damage.",
+    "CardTarget": "Target: {name}",
+    "Given": "{action} → {target} ({effect})",
+    "GivenWaits": "{action} → {target} ({effect}), not applied: drag it from the card above.",
     "Poisoned": "{strike} with {poison}",
     "Remedy": {
       "Retch": "Retch",

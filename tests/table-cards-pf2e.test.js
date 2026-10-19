@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Pf2eAdapter } from "../scripts/adapter.js";
-import { damageFormula, resultBlock, checkContext, checkTitle, damageFlavor } from "../scripts/table-cards.js";
+import { damageFormula, resultBlock, checkContext, checkTitle, damageFlavor, targetLine } from "../scripts/table-cards.js";
 import { recordingRng, diceAt, tableRoll } from "../../FastFighting/scripts/engine/table-rolls.js";
 import { createRng } from "../../FastFighting/scripts/engine/rng.js";
 import { sampleDamage, parseFormula, parseTypedFormula, doubled } from "../../FastFighting/scripts/engine/dice.js";
@@ -300,6 +300,36 @@ describe("posted as PF2e's own cards, and applied", () => {
     expect(card.flavor).toContain(`<span class="${["criticalFailure", "failure", "success", "criticalSuccess"][roll.degree]}">`);
     expect(card.flags["fast-fighting"]).toEqual(flags["fast-fighting"]);
     expect(card.flags["fast-fighting-pf2e"]).toBeUndefined();
+  });
+
+  test("a heal: PF2e's healing card, naming whom it heals and how much; a flat heal (no dice) too, its number alone", async () => {
+    const seelah = token("seelah", { playerOwned: true });
+    const lem = token("lem", { hp: 10, playerOwned: true });
+    // (Lay on Hands' 6, no dice: the core records it all the same, API 21.)
+    const run = { rng: recordingRng(createRng(1)) };
+    const flat = tableRoll(run, diceAt(run), { by: "seelah", target: "lem", kind: "healing", label: "Lay on Hands", parts: [parseFormula("6", "healing")], total: 6 });
+    expect(flat).not.toBeNull();
+    await adapter.showTableRoll(flat, { token: seelah, target: lem, audience: "public", flavor: "", flags });
+    const [card] = posted;
+    expect(card.rolls[0].formula).toBe("{6[healing]}");
+    expect(card.rolls[0].total).toBe(6);
+    expect(card.flags.pf2e.context).toMatchObject({ type: "damage-roll", domains: ["healing"], target: { actor: lem.actor.uuid, token: lem.uuid } });
+    // (Whom it heals, under its title, in PF2e's words.)
+    expect(card.flavor).toContain("Lay on Hands");
+    expect(card.flavor).toContain("Target: lem");
+    expect(card.flavor).not.toContain('data-visibility="gm"');
+    // (A rolled heal: its dice the engine's, its target named the same way.)
+    const rolled = engineDamage([parseFormula("1d8+4", "healing")], { kind: "healing" });
+    await adapter.showTableRoll(rolled, { token: seelah, target: lem, audience: "public", flavor: "", flags });
+    expect(posted[1].rolls[0].formula).toBe("{(1d8 + 4)[healing]}");
+    expect(posted[1].rolls[0].total).toBe(rolled.total);
+    expect(posted[1].flavor).toContain("Target: lem");
+  });
+
+  test("whom a card is at, as its nameplate shows it to the players; else the GMs'", () => {
+    expect(targetLine("Goblin")).toContain('<span data-whose="target">Target: Goblin</span>');
+    expect(targetLine("Goblin", { visible: false })).toContain('data-visibility="gm"');
+    expect(targetLine("")).toBe("");
   });
 
   test("what PF2e has no card for, or a roll with no one's token: the core's plain roll", async () => {

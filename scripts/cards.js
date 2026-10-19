@@ -7,7 +7,9 @@
  * own card, and a player's would multiply the damage it's applied with, or hide its Apply buttons. A card whose damage
  * the live battle applied itself, whoever made it (a player's reaction rolled on their screen when FastFighting asks, a
  * player's damage card applied for them), loses its Apply too in the browser of the GM who plays the battle: by the ids
- * the core noted as it applied them (its damageApplied), never by the card's flags.
+ * the core noted as it applied them (its damageApplied), never by the card's flags. A card the table settles itself after
+ * all (the core's leaveToTable, API 21: a player's character's at another, Apply players' damage off) loses its mark
+ * (unmarkRolled), its Apply back.
  */
 import { damageApplied } from "./core.js";
 import { t } from "./words.js";
@@ -37,6 +39,15 @@ export function damageCardSince(seen, actor) {
 export async function markRolled(message, times = 1) {
   if ( typeof message?.setFlag !== "function" ) return;
   await message.setFlag(HELPER_ID, "rolled", { times: Number(times) > 0 ? Number(times) : 1 });
+}
+
+/**
+ * A card of FastFighting's it won't apply after all, the table settling it (the core's leaveToTable, API 21): its mark
+ * off, so its Apply buttons and menu entries are back for everyone. Only its own mark, on a card a GM made.
+ */
+export async function unmarkRolled(message) {
+  if ( !rolledHere(message) || typeof message?.unsetFlag !== "function" ) return;
+  await message.unsetFlag(HELPER_ID, "rolled");
 }
 
 /**

@@ -64,6 +64,20 @@ describe("reading PF2e spell effects", () => {
     expect(modsFromRules([{ key: "FastHealing", predicate: ["x"], value: 3 }, { key: "FastHealing", value: 0 }])).toEqual({ mods: {}, tempHp: 0, oneRoll: false });
   });
 
+  test("a bonus to one save alone: the core's bySave (Soothing Words' Will, heightened); a buff all the same", () => {
+    // (As the Player Core's Spell Effect carries it: Will alone; more against emotion effects only sometimes, left out.)
+    const soothing = [
+      { key: "FlatModifier", selector: "will", type: "status", value: "ternary(gte(@item.level,5),2,1)" },
+      { key: "AdjustModifier", mode: "upgrade", predicate: ["item:trait:emotion"], selector: "will", value: "ternary(gte(@item.level,5),3,2)" }
+    ];
+    expect(modsFromRules(soothing, { rank: 1 }).mods).toEqual({ bySave: { will: 1 } });
+    expect(modsFromRules(soothing, { rank: 5 }).mods).toEqual({ bySave: { will: 2 } });
+    // (With the other bonuses it lays: Shields Up's AC and Reflex.)
+    expect(modsFromRules([{ key: "FlatModifier", selector: ["ac", "reflex"], type: "circumstance", value: 2 }]).mods).toEqual({ ac: 2, bySave: { reflex: 2 } });
+    expect(helps({ bySave: { will: 1 } })).toBe(true);
+    expect(helps({ bySave: { will: -2 } })).toBe(false);
+  });
+
   test("durations and who it reaches", () => {
     expect(spellRounds("1 minute")).toBe(10);
     expect(spellRounds("10 minutes")).toBe(100);

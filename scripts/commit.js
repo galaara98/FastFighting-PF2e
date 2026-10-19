@@ -224,6 +224,8 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
   }
   if ( !dead ) {
     for ( const e of changes.effects?.added ?? [] ) await laySpellEffect(actor, e, options, undo);
+    // (Who got what, where no card of PF2e's names it.)
+    await tellGiven(tokenDoc, spec, changes, options);
   }
   for ( const e of changes.effects?.ended ?? [] ) await liftSpellEffect(actor, e, undo);
 
@@ -288,6 +290,65 @@ async function laySpellEffect(actor, e, options, undo) {
     const [created] = await actor.createEmbeddedDocuments("Item", [data]);
     if ( created ) undo.createdItems.push(created.id);
   }
+}
+
+/** Does a roll of PF2e's own name whom an action's effect went to: a save's card, a check's or an attack's target? */
+const rollNames = a => !!(a?.save || a?.check || a?.afflict?.save || a?.harm?.save || Number.isFinite(a?.bonus) || a?.kind === "strike" || a?.kind === "spell-attack");
+
+/** An action that can go only to its user (Rage, a potion): its own card names whom it went to. */
+const ownOnly = a => a?.targets === "self" || !!a?.selfOnly;
+
+/**
+ * A card naming who got which effect, from whoever gave it, after the action's own card: "Lay on Hands → Lem (+2 AC)".
+ * For each effect laid this turn (the core's change set: `effects.added`, and `laid`, conditions an effect lays alone)
+ * where no roll of PF2e's names whom it went to (a buff, a heal's bonus, a debuff with no save: the action's card is
+ * its user's and names only who it may go to), and for each the table settles itself (`left`, API 21: a player's
+ * character's at another, Apply players' damage off), waiting for its players to drag it from the action's card, which
+ * links it. Not one an action only its user can take laid on itself. Its effect linked (draggable, as PF2e links an
+ * applied effect), where the action has one. To whom the core says (options.audience: the GMs alone where the one who
+ * gave it or the one who got it is hidden from the players); the name of one the players can't see, the GMs' alone.
+ * Nothing without the core's options (an older core): no card.
+ */
+async function tellGiven(tokenDoc, spec, changes, options) {
+  if ( typeof options?.tokenOf !== "function" || typeof options?.effectSource !== "function" ) return;
+  const given = [
+    ...[...(changes.effects?.added ?? []), ...(changes.laid ?? [])].map(e => ({ e, waits: false })),
+    ...[...(changes.left?.effects ?? []), ...(changes.left?.laid ?? [])].map(e => ({ e, waits: true }))
+  ];
+  const Message = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+  for ( const { e, waits } of given ) {
+    const source = options.effectSource(e.key);
+    const action = source?.action;
+    if ( !action || rollNames(action) || (ownOnly(action) && e.sourceId === spec.id) ) continue;
+    const by = options.tokenOf(e.sourceId) ?? tokenDoc;
+    const gm = [e.sourceId, spec.id].some(id => options.audience?.(id) === "gm");
+    // (Whom it went to, as the players may name it: a name its nameplate doesn't show them, the GMs' alone.)
+    const shown = gm || tokenDoc.actor?.hasPlayerOwner || tokenDoc.playersCanSeeName !== false || !globalThis.game?.pf2e?.settings?.tokens?.nameVisibility;
+    const target = shown ? escapeHtml(tokenDoc.name ?? "") : `<span data-visibility="gm">${escapeHtml(tokenDoc.name ?? "")}</span>`;
+    const words = t(waits ? "GivenWaits" : "Given", { action: escapeHtml(action.name ?? ""), target, effect: escapeHtml(e.label || action.name || "") });
+    const link = await effectLink(action);
+    try {
+      await Message.create({
+        speaker: Message.getSpeaker({ token: by, actor: by.actor }),
+        content: inertHtml(`<p>${words}</p>${link ? `<p>${link}</p>` : ""}`),
+        ...(gm ? { whisper: (globalThis.game?.users ?? []).filter(u => u.isGM).map(u => u.id) } : {})
+      });
+    } catch ( err ) {
+      console.error(`${MODULE_ID} | naming who got ${action.name}`, err);
+    }
+  }
+}
+
+/** The effect an action lays, as a link to drag (PF2e's own anchor), or "" (none, or none found). */
+async function effectLink(action) {
+  for ( const uuid of action?.effectRef?.uuids ?? [] ) {
+    let effect = null;
+    try {
+      effect = await fromUuid(uuid);
+    } catch ( err ) { /* gone */ }
+    if ( effect?.documentName === "Item" && effect.type === "effect" && typeof effect.toAnchor === "function" ) return effect.toAnchor({ attrs: { draggable: "true" } }).outerHTML;
+  }
+  return "";
 }
 
 /** A buff or debuff the engine ended (its time up, its caster's concentration broken): the effect it laid comes off. */

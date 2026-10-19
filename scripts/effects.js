@@ -24,6 +24,9 @@ const SELECTORS = {
   "speed": ["speed"], "all-speeds": ["speed"], "land-speed": ["speed"]
 };
 
+/** FlatModifier selectors for one save alone -> the engine's bySave, by PF2e's save keys (Soothing Words: Will). */
+const ONE_SAVE = new Set(["fortitude", "reflex", "will"]);
+
 /**
  * The value of a rule's number: a plain number, or a formula PF2e heightens with ("ternary(gte(@item.level,9),3,
  * ternary(gte(@item.level,6),2,1))"), worked out by a small evaluator (no eval) with @item.level as the spell's rank.
@@ -112,7 +115,8 @@ export function predicateHolds(predicate, options) {
 /**
  * Rule elements as engine bonuses and penalties (and temporary hit points, and healing over time: FastHealing, as fast
  * healing or, of the regeneration type, regeneration with the damage types that deactivate it: Regenerate, Life
- * Boost). `oneRoll`: a bonus that's spent by the roll it helps (removeAfterRoll: Guidance).
+ * Boost). `oneRoll`: a bonus that's spent by the roll it helps (removeAfterRoll: Guidance). A bonus to one save alone
+ * is the core's `bySave` (Soothing Words' Will).
  * @param {object[]} rules
  * @param {object} [o]
  * @param {number} [o.rank]       the spell's rank (or the item's level)
@@ -144,6 +148,12 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
       if ( !value ) continue;
       if ( r.removeAfterRoll ) oneRoll = true;
       for ( const selector of [].concat(r.selector ?? []) ) {
+        if ( ONE_SAVE.has(selector) ) {
+          const by = mods.bySave ??= {};
+          const prev = by[selector] ?? 0;
+          by[selector] = value > 0 ? Math.max(prev > 0 ? prev : 0, value) + (prev < 0 ? prev : 0) : Math.min(prev < 0 ? prev : 0, value) + (prev > 0 ? prev : 0);
+          continue;
+        }
         for ( const key of SELECTORS[selector] ?? [] ) {
           // Bonuses of a kind don't stack: keep the larger of each sign.
           const prev = mods[key] ?? 0;
@@ -193,7 +203,8 @@ export function spellReach({ area, target, range }) {
   return feet ? { range: { increment: Number(feet[1]), max: Number(feet[1]), noPenalty: true } } : { reach: 5 };
 }
 
-/** Does this help whoever has it (a buff) or hurt them (a debuff)? */
+/** Does this help whoever has it (a buff) or hurt them (a debuff)? One save's or one check's bonus counts as its own. */
 export function helps(mods = {}) {
-  return Object.values(mods).reduce((s, v) => s + Math.sign(Number(v) || 0), 0) > 0;
+  const signs = v => (v && typeof v === "object" ? Object.values(v).reduce((s, x) => s + Math.sign(Number(x) || 0), 0) : Math.sign(Number(v) || 0));
+  return Object.values(mods).reduce((s, v) => s + signs(v), 0) > 0;
 }
