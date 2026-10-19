@@ -15,11 +15,17 @@ export const HELPER_ID = "fast-fighting-pf2e";
 export const cardIds = () => new Set((globalThis.game?.messages?.contents ?? []).map(m => m?.id));
 
 /**
+ * Was this card made in this browser (by its user, who just rolled)? Anyone can post a card with any speaker meanwhile:
+ * another player's card for the same creature is never taken for the one a roll here made.
+ */
+export const madeHere = message => !!globalThis.game?.user?.id && message?.author?.id === globalThis.game.user.id;
+
+/**
  * The damage card a roll just made for this actor: the newest PF2e damage roll's card (context "damage-roll") not
- * among `seen`, its speaker the actor. Null for none.
+ * among `seen`, made here (madeHere), its speaker the actor. Null for none.
  */
 export function damageCardSince(seen, actor) {
-  const fresh = (globalThis.game?.messages?.contents ?? []).filter(m => m && !seen.has(m.id));
+  const fresh = (globalThis.game?.messages?.contents ?? []).filter(m => m && !seen.has(m.id) && madeHere(m));
   return fresh.reverse().find(m => m.flags?.pf2e?.context?.type === "damage-roll" && (!actor || m.speaker?.actor === actor.id)) ?? null;
 }
 

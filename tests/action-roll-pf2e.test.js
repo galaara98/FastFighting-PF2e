@@ -39,7 +39,7 @@ const damageRoll = parts => ({
 });
 
 /** A damage roll's card, as PF2e's DamagePF2e.roll makes it, the actor its speaker. */
-const damageCard = (actor, roll) => ({ speaker: { actor: actor.id }, flags: { pf2e: { context: { type: "damage-roll" } } }, rolls: [roll] });
+const damageCard = (actor, roll) => ({ speaker: { actor: actor.id }, author: { id: "gm" }, flags: { pf2e: { context: { type: "damage-roll" } } }, rolls: [roll] });
 
 /**
  * An item on the orc's sheet, its toMessage posting its card (and keeping what it was asked). A spell's rollDamage rolls
@@ -78,7 +78,7 @@ function hero({ drawn = true } = {}) {
 
 const was = { CONFIG: globalThis.CONFIG };
 beforeEach(() => {
-  globalThis.game.user = { isGM: true, settings: { showCheckDialogs: false, showDamageDialogs: true } };
+  globalThis.game.user = { id: "gm", isGM: true, settings: { showCheckDialogs: false, showDamageDialogs: true } };
   globalThis.game.messages = chat();
   globalThis.CONFIG = {};
 });

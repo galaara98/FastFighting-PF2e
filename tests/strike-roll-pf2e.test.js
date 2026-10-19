@@ -43,12 +43,12 @@ function hero({ drawn = true } = {}) {
 }
 
 /** The attack's card, as PF2e's Check.roll writes its context. */
-const attackCard = (actor, target) => ({ flags: { pf2e: { context: { type: "attack-roll", origin: { actor, token: "Scene.s.Token.t1" }, target: { actor: "Actor.pc", token: target } } } } });
+const attackCard = (actor, target, author = "gm") => ({ author: { id: author }, flags: { pf2e: { context: { type: "attack-roll", origin: { actor, token: "Scene.s.Token.t1" }, target: { actor: "Actor.pc", token: target } } } } });
 
 let mine;
 beforeEach(() => {
   mine = new Set(["someone"]);
-  globalThis.game.user = { settings: { showCheckDialogs: true, showDamageDialogs: false }, targets: mine };
+  globalThis.game.user = { id: "gm", settings: { showCheckDialogs: true, showDamageDialogs: false }, targets: mine };
   globalThis.game.messages = { contents: [] };
 });
 
@@ -141,8 +141,8 @@ describe("a Strike, rolled with PF2e's own roller", () => {
 });
 
 /** A damage card in the chat, as PF2e's DamagePF2e.roll makes it: the actor its speaker; its flags set as setFlag sets them. */
-function damageCardOf(id, actorId = "orc1") {
-  const m = { id, speaker: { actor: actorId }, flags: { pf2e: { context: { type: "damage-roll" } } } };
+function damageCardOf(id, actorId = "orc1", author = "gm") {
+  const m = { id, speaker: { actor: actorId }, author: { id: author }, flags: { pf2e: { context: { type: "damage-roll" } } } };
   m.setFlag = async (scope, key, value) => {
     (m.flags[scope] ??= {})[key] = value;
     return m;
@@ -163,6 +163,20 @@ describe("a Strike's damage card", () => {
     expect(out).toEqual({ attack: { degree: 2, natural: 13, total: 21 }, damage: { byType: { slashing: 7 } }, card: "dmg1" });
     expect(made.flags["fast-fighting-pf2e"]).toEqual({ rolled: { times: 1 } });
     expect(game.messages.contents[0].flags["fast-fighting-pf2e"]).toBeUndefined();
+  });
+
+  test("never another's card for the same creature, posted meanwhile: only the one made here", async () => {
+    const claw = strike("claw");
+    const made = damageCardOf("dmg1");
+    const forged = damageCardOf("lin's", "orc1", "lin");
+    claw.damage = async params => {
+      claw.asked.damage = params;
+      game.messages.contents.push(made, forged);
+      return damageRoll([["slashing", 7]]);
+    };
+    const out = await adapter.rollStrike(orc(claw), { action: { id: "orc1.strike.claw.0" }, target: hero() });
+    expect(out.card).toBe("dmg1");
+    expect(forged.flags["fast-fighting-pf2e"]).toBeUndefined();
   });
 });
 

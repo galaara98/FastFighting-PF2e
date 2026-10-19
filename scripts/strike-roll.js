@@ -10,7 +10,7 @@
  * crossbow loaded); PF2e's Strike then spends it, and the undo record of both goes back with the roll (`records`).
  */
 import { listOf, naturalOf } from "./read-turn.js";
-import { cardIds, damageCardSince, markRolled } from "./cards.js";
+import { cardIds, damageCardSince, madeHere, markRolled } from "./cards.js";
 import { ammoOf, ammoState, ammoUndo, readyAmmo } from "./ammo.js";
 
 /** A character's or creature's weapon Strikes, as the system lists them (the ones it shows). */
@@ -62,12 +62,15 @@ export const click = (setting, secret = false) => ({ shiftKey: !!game.user?.sett
  */
 const asTarget = doc => doc.object ?? { document: doc };
 
-/** The attack's card just made (the newest by this actor at this token): its context, as PF2e's own Damage button passes it. */
+/**
+ * The attack's card just made (the newest made here, madeHere, by this actor at this token): its context, as PF2e's own
+ * Damage button passes it.
+ */
 function attackContext(actor, target) {
   const recent = game.messages?.contents?.slice(-10).reverse() ?? [];
   return recent.find(m => {
     const c = m?.flags?.pf2e?.context;
-    return c?.type === "attack-roll" && c.origin?.actor === actor.uuid && c.target?.token === target.uuid;
+    return madeHere(m) && c?.type === "attack-roll" && c.origin?.actor === actor.uuid && c.target?.token === target.uuid;
   })?.flags.pf2e.context;
 }
 
