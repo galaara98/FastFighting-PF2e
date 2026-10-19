@@ -22,6 +22,8 @@
  *  - The helper's own rules' checks (rules.js, through the core's systemRolled): a flat check ("flat": PF2e's flat
  *    check, the d20 alone, titled with what it's for), and Tumble Through ("tumble": PF2e's action, at the foe's
  *    Reflex DC).
+ *  - A Seek (purpose "seek", the core's patrol: behavior/patrol.js): PF2e's own Seek action, its secret trait rolling it
+ *    for the GMs, against the engine's DC (the hardest Stealth DC of those it may find); without the action, Perception.
  * Null where it can't tell what to roll (a spell check: PF2e has none; an Aid only a Strike would make: PF2e's Aid
  * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
@@ -143,6 +145,8 @@ function checkFor(actor, { purpose, skill, action }) {
   const last = id.split(".").pop();
   if ( (purpose === "control" || purpose === "aid") && ACTIONS.has(last) ) return { action: last };
   if ( purpose === "aid" && last === "aid" ) return aidWay(actor);
+  // (A Seek: PF2e's own, its card and its secret trait; without the action, Perception as the sheet rolls it.)
+  if ( purpose === "seek" ) return pf2eAction("seek") ? { action: "seek" } : statisticOf(actor, "perception") ? { statistic: statisticOf(actor, "perception") } : null;
   const item = itemIn(actor, id);
   const own = ITEM_SKILLS[slugOf(item)];
   if ( own && actor.skills?.[own] ) return { statistic: actor.skills[own], item };

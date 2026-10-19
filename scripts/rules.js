@@ -1,7 +1,7 @@
 /**
  * Pathfinder 2e rules for the simulation engine. Pure functions only: no Foundry globals.
  */
-import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies, systemRolled, rollCheck } from "./core.js";
+import { DOWNED_MODELS, STATUS, doubled, part, bestReactionStrike, localize, degreeDistribution, samplePart, dropCondition, coverOf, holderOf, areEnemies, systemRolled, rollCheck, hiddenFrom } from "./core.js";
 import { t, conditionLabel, traitName, actionName } from "./words.js";
 import { levelDC, sheetHold } from "./holds.js";
 import { holderId, full, cuttingStrike, chanceAtLeast } from "./gullet.js";
@@ -69,7 +69,7 @@ const sheetOffGuard = u => {
  * the Athletics maneuvers Strength's, words, Medicine, Recall Knowledge and Perception the mind's; its status penalties
  * as PF2e has them (statusPenalty: clumsy, enfeebled, stupefied, on top of frightened, sickened and fascinated).
  */
-const CHECK_ON = Object.freeze({ theft: "dex", talk: "mind", goad: "mind", firstAid: "mind", sizeUp: "mind", notice: "mind", heal: "mind" });
+const CHECK_ON = Object.freeze({ theft: "dex", talk: "mind", goad: "mind", firstAid: "mind", sizeUp: "mind", notice: "mind", seek: "mind", heal: "mind" });
 const MANEUVER_ON = Object.freeze({ trip: "str", grapple: "str", disarm: "str", shove: "str", reposition: "str", drag: "str", demoralize: "mind", feint: "mind", distract: "mind", hide: "dex" });
 const checkOn = (purpose, action) => CHECK_ON[purpose] ?? MANEUVER_ON[action?.maneuver] ?? null;
 
@@ -133,13 +133,14 @@ function foeCovers(run, u) {
 }
 
 /**
- * The flat check a creature must make to affect another with an attack (PF2e's): DC 11 against one hidden from it, DC 5
- * against one concealed from it, or from it dazzled (unless it has a precise sense besides sight); 0 for none. Not
- * against an area. And why (the story tells it: "hidden", "concealed", "dazzled"): {dc, why}.
+ * The flat check a creature must make to affect another with an attack (PF2e's): DC 11 against one hidden from it (not
+ * one it has found with a Seek since it hid: the core's hiddenFrom), DC 5 against one concealed from it, or from it
+ * dazzled (unless it has a precise sense besides sight); 0 for none. Not against an area. And why (the story tells it:
+ * "hidden", "concealed", "dazzled"): {dc, why}.
  */
 function flatCheck(attacker, target, action) {
   if ( action?.area || !target ) return { dc: 0, why: null };
-  if ( Number(target.conds?.hidden) > 0 ) return { dc: 11, why: "hidden" };
+  if ( hiddenFrom(attacker, target) ) return { dc: 11, why: "hidden" };
   if ( Number(target.conds?.concealed) > 0 ) return { dc: 5, why: "concealed" };
   return Number(attacker?.conds?.dazzled) > 0 && !attacker.spec?.otherPrecise ? { dc: 5, why: "dazzled" } : { dc: 0, why: null };
 }
@@ -214,6 +215,12 @@ export const pf2eRules = {
   tauntCost: { actions: 1 },
   /** A creature keeping a low profile on the way in Avoids Notice: Stealth for initiative, when it's better. */
   stealthInitiative: true,
+  /**
+   * Seek (the core's patrol: behavior/patrol.js): an action, a secret Perception check against the Stealth DC of each
+   * creature hidden from it or out of its senses in the area it scans, which the remaster has 30 feet or less in any
+   * dimension: a 30-foot cone toward where it looks, or round itself, 15 feet. Found, a hidden one is observed by it.
+   */
+  seek: { cost: 1, area: { shape: "cone", feet: 30 }, around: { shape: "emanation", feet: 15 } },
   /**
    * Surprise as PF2e has it (the planner's Follow System): no surprise round and no one surprised. Those sneaking up as
    * it starts (hidden tokens, Avoiding Notice) roll Stealth for initiative; one whose Stealth beats the Perception DC of
@@ -707,7 +714,7 @@ export const pf2eRules = {
       const t = ctx.target;
       const a = ctx.attacker;
       // (A creature's Surprise Attack: off-guard to it until the target's first turn.)
-      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || Number(a.conds?.hidden) > 0))
+      return !!(t.prone || t.conds.offGuard || t.conds.paralyzed || ctx.grabbed || ctx.flanked || ctx.exposedTo || (a && (holderId(a) === t.id || hiddenFrom(t, a)))
         || (a?.spec?.surpriseAttack && !(t.turnsTaken > 0)));
     },
     defense(ctx) {

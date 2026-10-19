@@ -68,7 +68,7 @@ function pf2eActions({ degree = 2 } = {}) {
   const asked = {};
   const slugs = [
     "trip", "grapple", "shove", "disarm", "reposition", "demoralize", "feint", "create-a-diversion", "hide", "aid", "escape", "steal", "administer-first-aid",
-    "request", "make-an-impression", "coerce", "lie"
+    "request", "make-an-impression", "coerce", "lie", "seek"
   ];
   game.pf2e = {
     actions: new Map(slugs.map(slug => [slug, {
@@ -213,6 +213,17 @@ describe("a check, rolled as PF2e's own action", () => {
     expect(asked.escape[0]).not.toHaveProperty("multipleAttackPenalty");
     expect(asked.steal[0].difficultyClass).toEqual({ value: 16 });
     expect(asked["administer-first-aid"].map(a => [a.variant, a.difficultyClass])).toEqual([["stabilize", { value: 16 }], ["stop-bleeding", { value: 18 }]]);
+  });
+
+  test("a Seek (the core's patrol): PF2e's own Seek action against the engine's DC, no target; without the action, Perception", async () => {
+    const goblin = creature("gob1");
+    const out = await adapter.rollCheck(goblin, { purpose: "seek", skill: "perception", dc: 18, action: { id: null, name: "" } });
+    expect(out).toEqual({ degree: 2, natural: 11, total: 19 });
+    expect(asked.seek[0]).toMatchObject({ actors: [goblin.actor], difficultyClass: { value: 18 } });
+    expect(asked.seek[0]).not.toHaveProperty("target");
+    game.pf2e.actions.delete("seek");
+    await adapter.rollCheck(goblin, { purpose: "seek", skill: "perception", dc: 18, action: { id: null, name: "" }, secret: true });
+    expect(goblin.actor.perception.asked).toEqual([{ dc: { value: 18 }, skipDialog: true, messageMode: "gm" }]);
   });
 
   test("Aid: PF2e's Aid with its best skill of those the adapter weighs (one on a par with its best Strike too); a Strike better, the engine's", async () => {

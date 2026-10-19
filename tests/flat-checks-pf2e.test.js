@@ -44,6 +44,21 @@ describe("an attack's flat check, the system's", () => {
     expect(pf2eRules.adjustRoll(struck.run, orc, hit, { kind: "attack", target: hero, action: MELEE })).toBe(hit);
   });
 
+  test("one the attacker found with a Seek since it hid (the core's hiddenFrom): no flat check, and not off-guard to it", () => {
+    const orc = unit("orc");
+    const hero = { ...unit("hero", { hidden: 1 }), foundBy: new Set(["orc"]) };
+    const plain = table();
+    expect(pf2eRules.adjustRoll(plain.run, orc, hit, { kind: "attack", target: hero, action: MELEE })).toBe(hit);
+    expect(plain.asked).toEqual([]);
+    // (Still hidden from anyone else: their flat check stands.)
+    const other = table([failed(2)]);
+    expect(pf2eRules.adjustRoll(other.run, unit("goblin"), hit, { kind: "attack", target: hero, action: MELEE }).degree).toBe(1);
+    // (A hidden attacker its target has found: the target isn't off-guard to it.)
+    const elf = { ...unit("elf"), prone: false };
+    expect(pf2eRules.modifiers.exposed({ target: elf, attacker: hero })).toBe(true);
+    expect(pf2eRules.modifiers.exposed({ target: elf, attacker: { ...hero, foundBy: new Set(["elf"]) } })).toBe(false);
+  });
+
   test("after a strike the system rolled itself (ctx.rolled): the flat check still stands, the system's, and nothing else is done", () => {
     const concealed = unit("hero", { concealed: 1 });
     const missed = table([failed(4)]);

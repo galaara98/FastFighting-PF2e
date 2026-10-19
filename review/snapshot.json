@@ -1,7 +1,7 @@
 {
   "system": "pf2e",
   "version": "8.6.1",
-  "taken": "2026-10-18",
+  "taken": "2026-10-19",
   "generic": {
     "1-000-cuts": {"built": "84a4f3f52dd3", "count": 1},
     "1-ac-vs-traps": {"built": "0c8bd1776a3f", "count": 1},
@@ -12705,7 +12705,6 @@
     "seed-spray": {"built": "c5e5850ec3ea", "count": 2},
     "seed-volley": {"built": "174af02e5842", "count": 1},
     "seedpod": {"built": "0c8bd1776a3f", "count": 1},
-    "seek": {"built": "0c8bd1776a3f", "count": 1},
     "seek-and-destroy": {"built": "0c8bd1776a3f", "count": 1},
     "seek-creatures-using-hearing": {"built": "0c8bd1776a3f", "count": 1},
     "seek-injustice": {"built": "0c8bd1776a3f", "count": 1},
