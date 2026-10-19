@@ -17,7 +17,7 @@
  * Grapple after a hit, or kept up: maneuvers.js, whose check is PF2e's own action: check-roll.js; a spell that both
  * harms and heals, Heal's harm on the undead or Harm's healing of them: adapter.js #spells).
  */
-import { click, damageByType, spellAttackFor, strikeFor } from "./strike-roll.js";
+import { click, damageByType, spellAttackFor, strikeFor, slugOf } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
 import { damageRollOf } from "./read-turn.js";
 
@@ -31,7 +31,6 @@ const KINDS = Object.freeze({ __proto__: null, spell: ["spell"], self: ["action"
 const PART_CARDS = new Set(["force-barrage"]);
 
 /** An item's slug, PF2e's own. */
-const slugOf = item => item?.slug ?? item?.system?.slug ?? null;
 
 /** For the GMs only (`secret`), as PF2e posts a GM's card; else in the chat's own mode. */
 const modeOf = secret => (secret ? { mode: game.user?.isGM ? "gm" : "blind" } : {});

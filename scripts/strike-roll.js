@@ -56,6 +56,9 @@ export function spellAttackFor(actor, id) {
  */
 export const click = (setting, secret = false) => ({ shiftKey: !!game.user?.settings?.[setting], ctrlKey: !!secret, metaKey: false });
 
+/** An item's slug, PF2e's own (none made from its name, which is in the world's language): the rollers find items by it. */
+export const slugOf = item => item?.slug ?? item?.system?.slug ?? null;
+
 /**
  * The target as PF2e's Strike takes it: its token on the canvas (PF2e reads its document, and from the two tokens the
  * distance and flanking); one not drawn here, by its document alone, all PF2e reads of it.

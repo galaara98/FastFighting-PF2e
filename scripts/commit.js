@@ -7,7 +7,7 @@
  *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
  *   A damage card's also: createdEffects: [id], statusesBefore: [id], combatant: {uuid, defeated}.
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord, escapeHtml, inertHtml } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord, handOverItem, escapeHtml, inertHtml } from "./core.js";
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
@@ -583,29 +583,15 @@ export async function commitPf2eConcession(giverDoc, receiverDoc, concession) {
     }
     return records;
   }
-  const item = giver.items.get(concession.item?.id);
-  if ( !item ) return [];
-  const giverUndo = emptyRecord(giverDoc, giver);
-  const data = item.toObject();
-  delete data._id;
+  // (An item: the core's handOverItem, one of it, worn and out of any container; no statuses kept from before.)
+  return handOverItem(giverDoc, receiver ? receiverDoc : null, concession.item?.id, { prepare: looseItem, statusesBefore: false });
+}
+
+/** An item handed over, the PF2e way: one of it, worn, held in no hand, out of any container. */
+function looseItem(data) {
   data.system.quantity = 1;
   data.system.containerId = null;
   data.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
-  if ( item.quantity > 1 ) {
-    giverUndo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.quantity } });
-    await item.update({ "system.quantity": item.quantity - 1 });
-  } else {
-    giverUndo.deletedItems.push(item.toObject());
-    await item.delete();
-  }
-  records.push(giverUndo);
-  if ( receiver ) {
-    const receiverUndo = emptyRecord(receiverDoc, receiver);
-    const [created] = await receiver.createEmbeddedDocuments("Item", [data]);
-    if ( created ) receiverUndo.createdItems.push(created.id);
-    records.push(receiverUndo);
-  }
-  return records;
 }
 
 async function handleLoot(tokenDoc, actor, options, undo) {

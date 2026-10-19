@@ -22,7 +22,7 @@
  */
 import { classifyLine, normalizeLine, selfWords, wholeLine, READ_MOST } from "./trigger-lines.js";
 import { damageIn, saveIn, cooldownIn, checkParams } from "./abilities.js";
-import { plain, durationRounds, conditionsLabel } from "./control.js";
+import { plain, unmarked, durationRounds, conditionsLabel } from "./control.js";
 import { modsFromRules, ruleValue, effectRounds, helps } from "./effects.js";
 
 /** The core's moments this reader builds for. */
@@ -81,7 +81,7 @@ function degreeParts(html) {
 }
 
 /** A text's sentences, its @-links kept whole (their dots aren't followed by a space). */
-const sentences = html => String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").split(/(?<=[.!?])\s+(?=[A-Z@])/).map(s => s.trim()).filter(Boolean);
+const sentences = html => unmarked(html).split(/(?<=[.!?])\s+(?=[A-Z@])/).map(s => s.trim()).filter(Boolean);
 
 /** The conditions a text links (@UUID to PF2e's conditions), [{slug, value}] in order, by `conditionOf(uuid)`. */
 function linkedConditions(text, conditionOf) {

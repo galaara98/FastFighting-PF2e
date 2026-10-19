@@ -21,12 +21,12 @@
  * skill isn't known), and a creature's that asks for Deception or Stealth initiative (played as if it had).
  * Pure, unit-tested.
  */
-import { meanPart } from "./core.js";
 import { plain, conditionsIn } from "./control.js";
 import { currentReading } from "./reading.js";
 import { READ_MOST } from "./trigger-lines.js";
 import { strikesNamed } from "./requirements.js";
 import { t } from "./words.js";
+import { damageMean, bestStrike } from "./class-actions.js";
 
 /**
  * Standard abilities that do nothing in a fight the engine can play, so there is nothing to read from them. The
@@ -73,11 +73,6 @@ const HOLDING = new Set(["constrict", "greater-constrict"]);
 /** A dragon's breath, whatever it breathes: what Draconic Momentum recharges. */
 const BREATH = /(?:^|-)breath(?:-|$)/;
 
-/** A Strike's mean damage, each part once, and how well it hits: only to tell the better Strike. */
-const meanOf = parts => (parts ?? []).reduce((s, p) => s + meanPart(p), 0);
-const score = s => (s.bonus ?? 0) + meanOf(s.damage);
-const best = list => [...list].sort((a, b) => score(b) - score(a))[0] ?? null;
-
 /** Its melee Strikes with damage, as the adapter read them (not one built on another: a class action, a poison). */
 const meleeOf = strikes => strikes.filter(s => s.kind === "strike" && s.melee && s.damage?.length && !s.sequence && !s.classAction);
 
@@ -121,11 +116,11 @@ export function frenzyAction({ actorId, ability, strikes, words = currentReading
   const parts = [];
   for ( const { n, name } of counted ) {
     const ids = strikesNamed(melee, name);
-    const strike = best(ids ? melee.filter(s => ids.includes(s.id)) : melee.filter(s => !used.has(s.id))) ?? best(melee);
+    const strike = bestStrike(ids ? melee.filter(s => ids.includes(s.id)) : melee.filter(s => !used.has(s.id))) ?? bestStrike(melee);
     used.add(strike.id);
     for ( let i = 0; i < Math.min(n, 4); i++ ) parts.push(strike);
   }
-  parts.sort((a, b) => Number(agile(a)) - Number(agile(b)) || meanOf(b.damage) - meanOf(a.damage));
+  parts.sort((a, b) => Number(agile(a)) - Number(agile(b)) || damageMean(b.damage) - damageMean(a.damage));
   const sequence = parts.map((s, i) => ({ ...s, id: `${s.id}.frenzy.${i}`, from: s.id }));
   return {
     ...parts[0], id: `${actorId}.${ability.id}`, name: ability.name, cost: Math.max(1, Math.min(3, Number(ability.actions) || 2)),
@@ -153,7 +148,7 @@ function rendStrikes(ability, melee, words) {
 export function rendAction({ actorId, ability, strikes, words = currentReading() }) {
   const melee = meleeOf(strikes);
   const ids = rendStrikes(ability, melee, words);
-  const strike = ids ? best(melee.filter(s => ids.includes(s.id))) : null;
+  const strike = ids ? bestStrike(melee.filter(s => ids.includes(s.id))) : null;
   if ( !strike ) return null;
   return {
     id: `${actorId}.${ability.id}`, name: ability.name, kind: "auto", cost: Math.max(1, Math.min(3, Number(ability.actions) || 1)), traits: [], ability: true,
@@ -165,7 +160,7 @@ export function rendAction({ actorId, ability, strikes, words = currentReading()
 
 /** Pounce: a Stride and its best melee Strike, for one action. */
 export function pounceAction({ ability, strikes }) {
-  const strike = best(meleeOf(strikes));
+  const strike = bestStrike(meleeOf(strikes));
   if ( !strike ) return null;
   return { ...strike, id: `${strike.id}.pounce`, from: strike.id, name: t("WithStrike", { action: ability.name, strike: strike.name }),
     cost: Math.max(1, Math.min(3, Number(ability.actions) || 1)), charge: 1, glossary: "pounce" };

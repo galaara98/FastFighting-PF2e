@@ -33,14 +33,17 @@ const CONDITION_RE = /\b(frightened|slowed|stunned|sickened|clumsy|enfeebled|off
 
 const DEGREES = ["Critical Failure", "Failure", "Success", "Critical Success"];
 
-export function plain(html) {
-  return String(html ?? "")
-    .replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1")
-    .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+/** PF2e's text with its markup gone: tags as spaces, spaces single (enrichers as they're written). */
+export const unmarked = html => String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * PF2e's text as plain words: its links and other enrichers as their labels (one with none gone, or kept as written
+ * with `bare`: auto.js reads a trigger so), its markup gone (unmarked).
+ */
+export function plain(html, { bare = false } = {}) {
+  const text = String(html ?? "");
+  return unmarked(bare ? text.replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1")
+    : text.replace(/@UUID\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? ""));
 }
 
 /** Rounds from a duration phrase: "1 round", "3 rounds", "1 minute", "until the end of its next turn". */

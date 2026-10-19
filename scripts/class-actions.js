@@ -7,10 +7,12 @@
 import { featureName } from "./words.js";
 import { doubled, part, meanPart } from "./core.js";
 
-/** A Strike's mean damage, each part once (persistent damage too: only to tell the better Strike). */
-const meanOf = parts => (parts ?? []).reduce((s, p) => s + meanPart(p), 0);
-const score = s => (s.bonus ?? 0) + meanOf(s.damage);
-const best = list => [...list].sort((a, b) => score(b) - score(a))[0] ?? null;
+/** Mean damage of some parts, each once (persistent damage too: only to tell the better Strike). */
+export const damageMean = parts => (parts ?? []).reduce((s, p) => s + meanPart(p), 0);
+/** How good a Strike is, to tell the better one: how well it hits and its mean damage. */
+export const strikeScore = s => (s.bonus ?? 0) + damageMean(s.damage);
+/** The best of some Strikes (strikeScore), or null for none. */
+export const bestStrike = list => [...list].sort((a, b) => strikeScore(b) - strikeScore(a))[0] ?? null;
 
 /** n more of the weapon's own damage die (its first part's die, of its type). */
 function weaponDice(strike, n) {
@@ -81,7 +83,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   const melee = changed.filter(s => s.kind === "strike" && s.melee && s.damage?.length && !s.sequence);
   // Vicious Swing (Power Attack): two actions, an extra weapon die (two from 10th level, three from 18th), and it
   // counts as two attacks for the multiple attack penalty.
-  const swing = has("vicious-swing") || has("power-attack") ? best(melee.filter(s => !s.traits?.includes("unarmed")).length ? melee.filter(s => !s.traits?.includes("unarmed")) : melee) : null;
+  const swing = has("vicious-swing") || has("power-attack") ? bestStrike(melee.filter(s => !s.traits?.includes("unarmed")).length ? melee.filter(s => !s.traits?.includes("unarmed")) : melee) : null;
   if ( swing ) {
     const extra = weaponDice(swing, level >= 18 ? 3 : level >= 10 ? 2 : 1);
     if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? named("vicious-swing") : named("power-attack")} (${swing.name})`, cost: 2, attacks: 2,
@@ -90,7 +92,7 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   // Double Slice: a Strike with each of two melee weapons, both at the current penalty (one in each hand: both hands).
   if ( has("double-slice") ) {
     const weapons = [];
-    for ( const s of [...melee].filter(x => !x.traits?.includes("unarmed")).sort((a, b) => score(b) - score(a)) ) {
+    for ( const s of [...melee].filter(x => !x.traits?.includes("unarmed")).sort((a, b) => strikeScore(b) - strikeScore(a)) ) {
       if ( !weapons.some(w => w.name === s.name) ) weapons.push(s);
       if ( weapons.length === 2 ) break;
     }
@@ -102,13 +104,13 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   }
   // Sudden Charge: two Strides, then a Strike.
   if ( has("sudden-charge") && melee.length ) {
-    const s = best(melee);
+    const s = bestStrike(melee);
     out.push({ ...s, id: `${s.id}.sudden-charge`, name: `${named("sudden-charge")} (${s.name})`, cost: 2, charge: 2, classAction: "sudden-charge" });
   }
   // Flurry of Blows: two unarmed Strikes for one action, once a turn.
   if ( has("flurry-of-blows") ) {
     const unarmed = melee.filter(s => s.traits?.includes("unarmed"));
-    const s = best(unarmed.length ? unarmed : melee);
+    const s = bestStrike(unarmed.length ? unarmed : melee);
     if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: named("flurry-of-blows"), cost: 1, oncePerTurn: true,
       sequence: [0, 1].map(i => ({ ...s, id: `${s.id}.flurry-of-blows.${i}` })), classAction: "flurry-of-blows" });
   }

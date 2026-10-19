@@ -12,6 +12,7 @@
  * A damage roll's card is read here too as it's made (pf2eDamageCard), for the core to apply it or put it before a GM;
  * and a card that opened a character up to a foe's reaction, for whether a critical hit disrupts it (pf2eDisrupts).
  */
+import { idFromUuid } from "./core.js";
 import { asksSave } from "./abilities.js";
 import { actionNameOf } from "./words.js";
 
@@ -24,9 +25,6 @@ const MANEUVERS = { __proto__: null, demoralize: "demoralize", trip: "trip", gra
 const TALK = { diplomacy: "persuade", intimidation: "intimidate", deception: "deceive" };
 /** PF2e's social actions, by slug: the core's kind of pitch each is (Demoralize besides its maneuver). */
 const SOCIAL = { __proto__: null, demoralize: "intimidate", request: "persuade", "make-an-impression": "persuade", coerce: "intimidate", lie: "deceive" };
-
-/** The token id at the end of a token's uuid ("Scene.x.Token.y"), or the id itself. */
-const tokenIdOf = ref => (typeof ref === "string" ? ref.split(".").pop() : null);
 
 /** The natural die of a d20 check, where it shows. */
 export function naturalOf(roll) {
@@ -109,7 +107,7 @@ export function pf2eDamageCard(message) {
   const roll = damageRollOf(message);
   const amount = Number(roll?.total);
   if ( !roll || !Number.isFinite(amount) ) return null;
-  const at = tokenIdOf(targetOf(message));
+  const at = idFromUuid(targetOf(message));
   let actor = null;
   try {
     actor = message.target?.actor ?? null;
@@ -137,13 +135,13 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
   const events = [];
   const mine = m => {
     const c = m.flags?.pf2e?.context;
-    return (c?.token && tokenIdOf(c.token) === tokenId) || m.speaker?.token === tokenId;
+    return (c?.token && idFromUuid(c.token) === tokenId) || m.speaker?.token === tokenId;
   };
   for ( const m of messages ) {
     try {
       const c = m.flags?.pf2e?.context;
       if ( !c || !mine(m) ) continue;
-      const at = tokenIdOf(targetOf(m));
+      const at = idFromUuid(targetOf(m));
       const target = at && Object.hasOwn(ids, at) ? ids[at] : null;
       const roll = m.rolls?.[0] ?? null;
       const degree = Object.hasOwn(DEGREE, String(c.outcome)) ? DEGREE[c.outcome] : null;
@@ -211,7 +209,7 @@ const NOT_ACTIONS = new Set(["saving-throw", "flat-check", "initiative"]);
 export function pf2eOpening(message, tokenId) {
   const f = message.flags?.pf2e ?? {};
   const c = f.context;
-  const mine = (c?.token && tokenIdOf(c.token) === tokenId) || message.speaker?.token === tokenId;
+  const mine = (c?.token && idFromUuid(c.token) === tokenId) || message.speaker?.token === tokenId;
   if ( !mine ) return false;
   if ( c?.type === "attack-roll" ) {
     return !meleeOf(c);

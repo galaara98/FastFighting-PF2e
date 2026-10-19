@@ -26,7 +26,7 @@
  * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
 import { naturalOf } from "./read-turn.js";
-import { click, strikesOf } from "./strike-roll.js";
+import { click, strikesOf, slugOf } from "./strike-roll.js";
 import { AID_SKILLS } from "./edges.js";
 import { t } from "./words.js";
 
@@ -70,9 +70,6 @@ const mode = secret => (secret ? { messageMode: game.user?.isGM ? "gm" : "blind"
 
 /** The engine's DC, a whole number; null without one. */
 const dcOf = dc => (typeof dc === "number" && Number.isFinite(dc) ? Math.trunc(dc) : null);
-
-/** An item's slug, PF2e's own (none made from its name, which is in the world's language). */
-const slugOf = item => item?.slug ?? item?.system?.slug ?? null;
 
 const traitsOf = item => [...(item?.system?.traits?.value ?? [])];
 

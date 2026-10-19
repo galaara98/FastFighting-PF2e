@@ -4,7 +4,7 @@
  */
 // (In a translated world, a Babele translation of PF2e's compendiums, an item's rules are read from the English Babele
 // keeps of it, so they're understood whatever the language: the core's englishName and englishDescription.)
-import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, meanPart, part, englishName, englishDescription, plainText } from "./core.js";
+import { SystemAdapter, parseTypedFormula, parseFormula, describeMods, localize, hasWords, part, englishName, englishDescription, plainText } from "./core.js";
 import { pf2eRules } from "./rules.js";
 import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf, animalisticOf } from "./traits.js";
@@ -18,7 +18,7 @@ import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { showPf2eTableRoll } from "./table-cards.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction } from "./abilities.js";
-import { classActions, extraParts } from "./class-actions.js";
+import { classActions, extraParts, strikeScore } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction, AID_SKILLS } from "./edges.js";
@@ -101,6 +101,9 @@ function ownNames(actor) {
   return out;
 }
 
+/** A language key's words, where the reader's language (or English) has them; else null. */
+const word = key => (key && hasWords(key) ? localize(key) : null);
+
 function slugOf(item) {
   const slug = item?.slug ?? item?.system?.slug;
   if ( slug ) return slug;
@@ -132,7 +135,10 @@ function areaSpec(area, targets) {
   return area?.type ? { targets, shape: area.type === "cylinder" ? "burst" : area.type, feet: Number(area.value) || 5 } : { targets };
 }
 
-/** Rough number of enemies caught by an area. */
+/**
+ * Rough number of enemies caught by a spell's area, or the creatures its target line names. (abilities.js areaFoes
+ * estimates an ability's area its own way, by the feet alone: merging the two would change how many either expects.)
+ */
 function areaTargets(area, targetText) {
   if ( /1 or 2 creatures/i.test(targetText ?? "") ) return 2;
   const n = /up to (\d+) creatures/i.exec(targetText ?? "");
@@ -822,10 +828,9 @@ export class Pf2eAdapter extends SystemAdapter {
       }
     }
     // One of each: the Strike it does most with.
-    const mean = a => (a.damage ?? []).reduce((s, p) => s + meanPart(p), 0) + (a.bonus ?? 0);
     const picked = [];
     for ( const setup of setups ) {
-      const best = variants.filter(v => v.setup === setup).map(v => v.strike).sort((a, b) => mean(b) - mean(a))[0];
+      const best = variants.filter(v => v.setup === setup).map(v => v.strike).sort((a, b) => strikeScore(b) - strikeScore(a))[0];
       if ( best ) picked.push(best);
     }
     return { strikes: out, variants: picked, listed };
@@ -1450,7 +1455,6 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /** What pf2eTactics reads of a character (plain values, with the names the GM sees). */
   #tacticFacts(actor, spec) {
-    const word = key => (key && hasWords(key) ? localize(key) : null);
     const features = {};
     const abilities = [];
     let formation = null;
@@ -1549,7 +1553,6 @@ export class Pf2eAdapter extends SystemAdapter {
     // (Each feat, feature and action once, with its rules: what they do says something of who has them.)
     const seen = new Set();
     const items = own.map(i => ({ slug: slugOf(i), name: i.name, rules: i.system?.rules ?? [] })).filter(i => i.slug && !seen.has(i.slug) && seen.add(i.slug));
-    const word = key => (key && hasWords(key) ? localize(key) : null);
     const pc = actor.type === "character";
     const skills = Object.entries(actor.skills ?? {});
     return derivePf2eTraits({
@@ -1907,9 +1910,8 @@ const INJURES = new Set(["piercing", "slashing"]);
  * dealing piercing or slashing damage.
  */
 export function injuryWeapon(strikes) {
-  const mean = a => (a.damage ?? []).reduce((s, p) => s + meanPart(p), 0) + (a.bonus ?? 0);
   return (strikes ?? []).filter(a => a.kind === "strike" && !a.resource && (!a.ammo || a.rounds > 0) && (a.damage ?? []).some(p => INJURES.has(p.type) && !p.persistent))
-    .sort((a, b) => mean(b) - mean(a))[0] ?? null;
+    .sort((a, b) => strikeScore(b) - strikeScore(a))[0] ?? null;
 }
 
 /** How many actions its activation takes ("Activate ◆◆": the action glyph), two where it doesn't say. */

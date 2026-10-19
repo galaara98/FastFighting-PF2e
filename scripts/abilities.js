@@ -82,7 +82,7 @@ export function templateIn(html) {
   return words ? { shape: words[2].toLowerCase(), feet: Number(words[1]) } : null;
 }
 
-/** About how many foes an area of this shape and size catches. */
+/** About how many foes an area of this shape and size catches. (Not adapter.js areaTargets, a spell's: they differ.) */
 export function areaFoes({ shape, feet }) {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
   if ( shape === "cone" ) return clamp(feet / 12, 2, 6);

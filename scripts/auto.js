@@ -7,6 +7,7 @@
  */
 import { listJoin, plainText } from "./core.js";
 import { t, traitName, modifier } from "./words.js";
+import { plain } from "./control.js";
 
 /** What each class leans toward. */
 const CLASSES = Object.freeze({
@@ -120,7 +121,8 @@ export const highSkill = level => Math.floor((Number(level) || 0) * 1.45) + 7;
 
 /* Reading what a reaction or action does: its trigger, as PF2e writes it (in English, which a translation keeps). */
 
-const words = html => String(html ?? "").replace(/@\w+\[[^\]]*\]\{([^}]*)\}/g, "$1").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+/** Its words (control.js plain): links as their labels, an enricher with none as it's written. */
+const words = html => plain(html, { bare: true });
 
 /** A reaction's trigger, as plain words ("" when it has none). */
 export function triggerOf(html) {
