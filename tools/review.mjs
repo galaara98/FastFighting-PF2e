@@ -292,7 +292,7 @@ export async function check(o) {
   const nowSlugs = (ledger.notSlugs ?? []).filter(n => fresh.vocab.has(n));
   // (auras.js knows PF2e's conditions by their items' ids: an id that no longer names its condition breaks a link.)
   const moved = Object.entries(h.auras.CONDITION_ITEMS).filter(([id, slug]) => fresh.conditionIds.get(id) !== slug)
-    .map(([id, slug]) => [`\`${id}\``, `\`${slug}\``, fresh.conditionIds.get(id) ? `\`${fresh.conditionIds.get(id)}\`` : "no such id"]);
+    .map(([id, slug]) => [tools.code(id), tools.code(slug), fresh.conditionIds.get(id) ? tools.code(fresh.conditionIds.get(id)) : "no such id"]);
 
   // The code that names each, linked.
   const at = codeAt();
@@ -309,7 +309,7 @@ export async function check(o) {
     extra: [
       { title: "Condition ids that no longer name their condition", intro: "auras.js `CONDITION_ITEMS` links conditions by these ids: put the new ids in.", head: ["id", "was", "now"], rows: moved },
       { title: "Names the ledger calls no slug that PF2e has as slugs now", intro: "Move each to an entry (it's a special case) or to `ignore` (the code means something else by it).",
-        head: ["name"], rows: nowSlugs.map(n => [`\`${n}\``]) }
+        head: ["name"], rows: nowSlugs.map(n => [tools.code(n)]) }
     ],
     commands: { check: "node tools/review.mjs --pf2e <PF2e's packs>", accept: "node tools/review.mjs --pf2e <PF2e's packs> --accept", acceptGeneric: "node tools/review.mjs --pf2e <PF2e's packs> --accept-generic" }
   });
