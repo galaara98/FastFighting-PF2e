@@ -28,7 +28,9 @@ function patterns(reading) {
 }
 
 /** The most a pattern may take on one text (ms), and the longest text tried. */
-const LIMIT = 50;
+// (Room for a busy CI runner, which has timed a fine pattern at 69 ms: a backtracking one takes seconds, so 150 still
+// catches it long before the longest text.)
+const LIMIT = 150;
 const LONGEST = 3000;
 const SIZES = [25, 50, 100, 200, 400, 800, 1600, LONGEST];
 
