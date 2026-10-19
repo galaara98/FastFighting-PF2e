@@ -31,6 +31,7 @@ import { conditionsIn, conditionsLabel, plain, durationRounds } from "./control.
 import { ruleValue } from "./effects.js";
 import { engineKey } from "./commit.js";
 import { currentReading } from "./reading.js";
+import { READ_MOST } from "./trigger-lines.js";
 
 /** The rounds in PF2e's minute: how long a creature stays immune, and how long a sickening lasts at most. */
 export const MINUTE = 10;
@@ -131,9 +132,9 @@ const atLeastFailure = list => (list && !list[0] && list[1] ? [list[1], ...list.
 export function degreesIn(html, words = currentReading().auras ?? {}) {
   const patterns = [0, 1, 2, 3].map(d => patternOf(words, `degree${d}`));
   if ( !patterns.some(Boolean) ) return null;
-  const text = String(html ?? "");
+  const text = String(html ?? "").slice(0, READ_MOST.text);
   const heads = [...text.matchAll(/<strong>([^<]*)<\/strong>/gi)]
-    .map(m => ({ at: m.index, end: m.index + m[0].length, degree: patterns.findIndex(p => p?.test(m[1].trim())) }));
+    .map(m => ({ at: m.index, end: m.index + m[0].length, degree: m[1].length > READ_MOST.line ? -1 : patterns.findIndex(p => p?.test(m[1].trim())) }));
   const out = [null, null, null, null];
   let any = false;
   heads.forEach((h, i) => {
@@ -170,7 +171,8 @@ export function failuresIn(html, words = currentReading().auras ?? {}) {
   const failure = patternOf(words, "failure");
   const critical = patternOf(words, "critical");
   // (Sentence by sentence, its links kept: the check marked, tags gone.)
-  const sentences = String(html ?? "").replace(/@Check\[[^\]]*\]/gi, " \u0001 ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").split(/(?<=[.!?])\s+(?=[A-Z@])/);
+  const sentences = String(html ?? "").slice(0, READ_MOST.text).replace(/@Check\[[^\]]*\]/gi, " \u0001 ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+(?=[A-Z@])/).filter(s => s.length <= READ_MOST.sentence);
   const fail = {};
   const crit = {};
   // (Each part's own words for how long: a failure's, and a critical failure's.)
@@ -194,7 +196,7 @@ function rangeOf(rule, html, actor, words) {
   if ( Number(radius) > 0 ) return Number(radius);
   const area = templateIn(html);
   if ( area?.feet > 0 && area.shape === "emanation" ) return area.feet;
-  const m = patternOf(words, "radius")?.exec(plain(html));
+  const m = patternOf(words, "radius")?.exec(plain(html).slice(0, READ_MOST.text));
   return m ? Number(m[1]) || null : null;
 }
 
@@ -203,7 +205,7 @@ function rangeOf(rule, html, actor, words) {
  * (found: its words said any of it).
  */
 export function timingIn(html, words = currentReading().auras ?? {}) {
-  const text = plain(html);
+  const text = plain(html).slice(0, READ_MOST.text);
   const enter = !!patternOf(words, "enter")?.test(text);
   const start = !!patternOf(words, "turnStart")?.test(text);
   const out = { when: enter && !start ? "enter" : start && !enter ? "turnStart" : "both", immuneAfter: null, immuneAll: false, immuneRounds: null };

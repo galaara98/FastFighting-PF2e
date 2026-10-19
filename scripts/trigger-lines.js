@@ -14,6 +14,14 @@
  * Pure: no Foundry globals, no imports (the coverage scan loads it outside Foundry).
  */
 
+/**
+ * The most of PF2e's text the reading's patterns run on: an item's text is anyone's to write (a player's own items too),
+ * and the GM's browser reads every actor's. A Trigger or a Requirements line (`line`), longer, isn't read; nor an
+ * Effect's sentence (`sentence`), and the reaction isn't built; a text read whole (`text`: an aura's words, a
+ * multiattack's, what an ability rolls) only so far. Real lines are under 300 characters, sentences under 700.
+ */
+export const READ_MOST = Object.freeze({ line: 300, sentence: 1000, text: 4000 });
+
 /** Defaults for the "self" words, should a reading file have none. */
 const SELF = Object.freeze({
   you: "you", your: "your", articles: [], definite: [], plain: [], stock: [], possessive: "'s", replace: []
@@ -86,7 +94,7 @@ function expr(entry) {
  */
 export function classifyLine(norm, entries = []) {
   const text = String(norm ?? "").replace(/[.;:,\s]+$/, "");
-  if ( !text ) return null;
+  if ( !text || text.length > READ_MOST.line ) return null;
   let first = null;
   const also = [];
   for ( const entry of entries ) {

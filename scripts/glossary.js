@@ -24,6 +24,7 @@
 import { meanPart } from "./core.js";
 import { plain, conditionsIn } from "./control.js";
 import { currentReading } from "./reading.js";
+import { READ_MOST } from "./trigger-lines.js";
 import { strikesNamed } from "./requirements.js";
 import { t } from "./words.js";
 
@@ -88,7 +89,7 @@ const agile = s => (s.traits ?? []).includes("agile") || (Number(s.maps?.[1]) ||
  * name before "Strike"), the first entry that finds any.
  */
 export function countedStrikes(html, words = currentReading()) {
-  const text = plain(html).toLowerCase();
+  const text = plain(html).toLowerCase().slice(0, READ_MOST.text);
   for ( const entry of Array.isArray(words?.multiattack) ? words.multiattack : [] ) {
     let re;
     try {

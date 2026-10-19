@@ -20,7 +20,7 @@
  * being built at all.
  * Pure: the item's links come resolved (`conditionOf`, `effectOf`), and the words from reading/en.json.
  */
-import { classifyLine, normalizeLine, selfWords, wholeLine } from "./trigger-lines.js";
+import { classifyLine, normalizeLine, selfWords, wholeLine, READ_MOST } from "./trigger-lines.js";
 import { damageIn, saveIn, cooldownIn, checkParams } from "./abilities.js";
 import { plain, durationRounds, conditionsLabel } from "./control.js";
 import { modsFromRules, ruleValue, effectRounds, helps } from "./effects.js";
@@ -209,7 +209,7 @@ const firstMatch = (entries, text) => {
  * @param {object} o      {name, kinds, reading}
  */
 export function readTrigger(line, { name = "", kinds = [], reading = {} } = {}) {
-  if ( !line ) return null;
+  if ( !line || String(line).length > READ_MOST.line ) return null;
   const norm = normalizeLine(line, { name, kinds, words: selfWords(reading) });
   const whole = wholeLine(classifyLine(norm, reading?.triggers ?? []));
   return whole && READ_TRIGGERS.includes(whole.trigger) ? whole : null;
@@ -235,6 +235,8 @@ export function readEffects(html, { trigger, reading = {}, name = "", kinds = []
   const norm = s => normalizeLine(plain(s), { name, kinds, words });
   const unclear = text => !!firstMatch(effectsSaying(reading, "unclear"), norm(text));
   const { degrees, before } = degreeParts(html);
+  // (Longer than any real one, a degree's text or a sentence: not read, and nothing built.)
+  if ( degrees.some(d => d && d.length > READ_MOST.text) || sentences(before).some(s => s.length > READ_MOST.sentence) ) return null;
   // (A degree that holds something it can't play: none of it is built.)
   if ( degrees.some(d => d && unclear(d)) ) return null;
   const out = {};

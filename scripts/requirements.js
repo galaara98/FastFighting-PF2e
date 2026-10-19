@@ -19,6 +19,7 @@
 import { coreKeyFor } from "./core.js";
 import { currentReading } from "./reading.js";
 import { plain } from "./control.js";
+import { READ_MOST } from "./trigger-lines.js";
 
 /** Before any reading is loaded: the system's own bold label, so a requirement is never mistaken for none. */
 const UNREAD_LINE = /<strong>\s*Requirements?\s*<\/strong>/i;
@@ -46,7 +47,7 @@ const slugify = s => String(s ?? "").toLowerCase().replace(/['’]/g, "").replac
 
 /** The line of its text a requirement is on: {line (plain, lower case), html (the part to leave out)}, or null. */
 export function requirementLine(html, words = currentReading()) {
-  const text = String(html ?? "");
+  const text = String(html ?? "").slice(0, READ_MOST.text);
   for ( const entry of entriesOf(words) ) {
     if ( entry.means !== "line" ) continue;
     const m = patternOf(entry)?.exec(text);
@@ -107,7 +108,8 @@ export function strikesNamed(strikes, name) {
  */
 export function readRequirement(line, { strikes = [], words = currentReading() } = {}) {
   const text = String(line ?? "").trim();
-  if ( !text ) return null;
+  // (Longer than any real one: not read, so not expressed.)
+  if ( !text || text.length > READ_MOST.line ) return null;
   for ( const entry of entriesOf(words) ) {
     if ( entry.means === "line" || entry.means === "word" ) continue;
     const m = patternOf(entry)?.exec(text);
@@ -137,7 +139,7 @@ export function readRequirement(line, { strikes = [], words = currentReading() }
  * "rolled" entries, over its text plain and lower case. Then its damage isn't simply dealt.
  */
 export function rollsItself(html, words = currentReading()) {
-  const text = plain(html).toLowerCase();
+  const text = plain(html).toLowerCase().slice(0, READ_MOST.text);
   return entriesOf(words).some(e => e.means === "rolled" && patternOf(e)?.test(text));
 }
 
