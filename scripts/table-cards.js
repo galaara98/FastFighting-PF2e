@@ -19,7 +19,7 @@
  * the GMs alone: "gm"). Anything else (a recharge, a crit table's die, a roll with no token): null, the core's plain roll.
  * The pure parts (damageFormula, checkFlavor, damageFlavor, resultBlock, checkContext) need no Foundry.
  */
-import { localize, hasWords, rolledParts, rollJson } from "./core.js";
+import { localize, hasWords, rolledParts, rollJson, inertHtml } from "./core.js";
 import { t } from "./words.js";
 import { strikeFor } from "./strike-roll.js";
 import { actionItem } from "./action-roll.js";
@@ -133,12 +133,12 @@ export function damageFormula(roll, { damageTypes = globalThis.CONFIG?.PF2E?.dam
 
 /**
  * A damage card's header, as PF2e's own (chat/action/header.hbs): the title, and an attack's outcome after it
- * ("(Critical Hit)"), its words PF2e's.
+ * ("(Critical Hit)"), its words PF2e's. Inert, as checkFlavor is.
  */
 export function damageFlavor(title, outcome = null) {
   const words = outcome ? sys(`PF2E.Check.Result.Degree.Attack.${outcome}`) : "";
   const subtitle = words ? `<span class="subtitle degree-of-success">(<span class="${outcome}">${escape(words)}</span>)</span>` : "";
-  return `<h4 class="action"><strong>${escape(title)}</strong>${subtitle}</h4>`;
+  return inertHtml(`<h4 class="action"><strong>${escape(title)}</strong>${subtitle}</h4>`);
 }
 
 /* -------------------------------------------- */
@@ -179,8 +179,11 @@ export function resultBlock({ degree, total, dc, dcType, scope = "Check", oppose
     + `<div class="result degree-of-success"${resultVisible ? "" : ' data-visibility="gm"'}>${result}</div></div>`;
 }
 
-/** A check card's flavor, as PF2e's own Check writes it: its title, its DC and result, then the rule under them. */
-export const checkFlavor = (title, block = "") => `<h4 class="action"><strong>${escape(title)}</strong></h4>${block}<hr>`;
+/**
+ * A check card's flavor, as PF2e's own Check writes it: its title, its DC and result, then the rule under them. PF2e
+ * enriches a card's flavor: a name in it with [[...]] or @UUID[...] stays words (inertHtml), as on the core's cards.
+ */
+export const checkFlavor = (title, block = "") => inertHtml(`<h4 class="action"><strong>${escape(title)}</strong></h4>${block}<hr>`);
 
 /** What a roll was for, in words the fight has: the action's name, else the core's word for it, else the core's flavor. */
 function nameOf(roll, flavor = "") {

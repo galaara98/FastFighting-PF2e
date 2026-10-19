@@ -53,7 +53,7 @@ export function ruleValue(raw, { rank = 1, actor = null, flags = {} } = {}) {
   const call = () => {
     const m = /^[a-z]+/i.exec(src.slice(i));
     if ( !m ) return number();
-    const fn = FUNCS[m[0]];
+    const fn = Object.hasOwn(FUNCS, m[0]) ? FUNCS[m[0]] : null;
     if ( !fn ) fail();
     i += m[0].length;
     if ( src[i++] !== "(" ) fail();

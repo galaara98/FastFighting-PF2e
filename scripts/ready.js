@@ -12,7 +12,7 @@
  *  - stand: PF2e's own Stand action (its card; prone off).
  * Each returns the undo record of what it changed (Rewind puts it back), its cards the turn's.
  */
-import { undoRecord } from "./core.js";
+import { undoRecord, escapeHtml, inertHtml } from "./core.js";
 import { strikesOf } from "./strike-roll.js";
 import { ammoOf, ammoState, ammoUndo, nextAmmo, loadedOf } from "./ammo.js";
 
@@ -83,8 +83,11 @@ async function interactCard(actor, token, item, annotation, { glyph = 1, data = 
   const flavor = await render("systems/pf2e/templates/chat/action/flavor.hbs", {
     action: { title: "PF2E.Actions.Interact.Title", subtitle: `PF2E.Actions.Interact.${annotation}.Title`, glyph: String(glyph) }, traits
   });
+  // (The template puts its message in as HTML: the names in it escaped and inert, as the core's cards have them.)
+  const name = s => inertHtml(escapeHtml(s));
+  const named = Object.fromEntries(Object.entries({ actor: actor.name, weapon: item.name, ...data }).map(([k, v]) => [k, name(v)]));
   const content = await render("systems/pf2e/templates/chat/action/content.hbs", {
-    imgPath: item.img, message: game.i18n.format(`PF2E.Actions.Interact.${annotation}.Description`, { actor: actor.name, weapon: item.name, ...data })
+    imgPath: item.img, message: game.i18n.format(`PF2E.Actions.Interact.${annotation}.Description`, named)
   });
   const Message = ChatMessage.implementation;
   return Message.create({

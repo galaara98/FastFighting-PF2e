@@ -145,4 +145,15 @@ describe("in a live battle: getting ready on the sheet, the PF2e way", () => {
   test("the adapter hands the core's readyGear to it", async () => {
     expect(await new Pf2eAdapter().readyGear({ actor: null }, { step: "stand" })).toBeNull();
   });
+
+  test("its card's names are words, never markup: escaped, and [[...]] and @UUID[...] in them not made live", async () => {
+    const potion = item("potion", "consumable", { equipped: { carryType: "worn" }, containerId: null }, { name: "[[/r 1d100]] @UUID[Actor.x] <img src=x>" });
+    const actor = sheet([potion], { name: "Harsk <b>" });
+    game.i18n.format = (key, data) => `${data.actor} gets out ${data.weapon}`;
+    await readyPf2eGear(tokenOf(actor), { step: "retrieve", gear: "harsk.gear.potion" });
+    const { message } = JSON.parse(cards[0].content).data;
+    expect(message).toContain("Harsk &lt;b&gt;");
+    expect(message).toContain("&lt;img src=x&gt;");
+    expect(message).not.toMatch(/\[\[|@UUID\[|<b>|<img/);
+  });
 });

@@ -7,7 +7,7 @@
  *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
  *   A damage card's also: createdEffects: [id], statusesBefore: [id], combatant: {uuid, defeated}.
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord, escapeHtml, inertHtml } from "./core.js";
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
@@ -116,15 +116,23 @@ function dcShown(a) {
   return !!game.actors?.get(String(a.id ?? "").split(".")[0])?.hasPlayerOwner;
 }
 
-/** An affliction's effect item, as a fight lays it. */
-function afflictionItem(a) {
-  const when = a.onset > 0 ? t("Affliction.Onset", { n: a.onset, stage: a.stage }) : t("Affliction.Stage", { stage: a.stage });
+/** A save's name as PF2e has it (CONFIG.PF2E.saves: fortitude, reflex, will), escaped for HTML; "" for anything else. */
+export function saveName(key) {
+  const label = typeof key === "string" && Object.hasOwn(globalThis.CONFIG?.PF2E?.saves ?? {}, key) ? CONFIG.PF2E.saves[key] : null;
+  return label ? inertHtml(escapeHtml(game.i18n.localize(label))) : "";
+}
+
+/** An affliction's effect item, as a fight lays it (its description HTML: nothing in it from the affliction but numbers and PF2e's save name). */
+export function afflictionItem(a) {
+  const n = v => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const when = n(a.onset) > 0 ? t("Affliction.Onset", { n: n(a.onset), stage: n(a.stage) }) : t("Affliction.Stage", { stage: n(a.stage) });
+  const save = saveName(a.save);
   return {
     type: "effect",
-    name: t("Affliction.Name", { name: a.name, stage: a.stage }),
+    name: t("Affliction.Name", { name: a.name, stage: n(a.stage) }),
     img: "icons/svg/poison.svg",
     system: {
-      description: { value: dcShown(a) ? t("Affliction.Description", { when, save: a.save, dc: a.dc }) : t("Affliction.DescriptionNoDc", { when, save: a.save }) },
+      description: { value: dcShown(a) ? t("Affliction.Description", { when, save, dc: n(a.dc) }) : t("Affliction.DescriptionNoDc", { when, save }) },
       badge: { type: "counter", value: a.stage },
       duration: { value: -1, unit: "unlimited", expiry: null, sustained: false },
       tokenIcon: { show: true }
