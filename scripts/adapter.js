@@ -127,12 +127,12 @@ export function selfOnlySpell(system) {
   return !String(system?.range?.value ?? "").trim() && !system?.area && !String(system?.target?.value ?? "").trim();
 }
 
-/** Rough number of enemies caught by an area. */
 /** A spell's area as the core takes it: how many it catches, and its shape and size where pf2e gives them. */
 function areaSpec(area, targets) {
   return area?.type ? { targets, shape: area.type === "cylinder" ? "burst" : area.type, feet: Number(area.value) || 5 } : { targets };
 }
 
+/** Rough number of enemies caught by an area. */
 function areaTargets(area, targetText) {
   if ( /1 or 2 creatures/i.test(targetText ?? "") ) return 2;
   const n = /up to (\d+) creatures/i.exec(targetText ?? "");
