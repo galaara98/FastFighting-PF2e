@@ -4,8 +4,12 @@
  * card's Apply buttons and its Apply menu entries, which would apply the damage a second time, are gone for everyone
  * (the GMs' and the players'); and a spell attack's critical hit, whose card PF2e doubles only as it's applied (its
  * Double button), applied doubled (`times`). The mark counts only on a card a GM made: anyone may put any flag on their
- * own card, and a player's would multiply the damage it's applied with, or hide its Apply buttons.
+ * own card, and a player's would multiply the damage it's applied with, or hide its Apply buttons. A card whose damage
+ * the live battle applied itself, whoever made it (a player's reaction rolled on their screen when FastFighting asks, a
+ * player's damage card applied for them), loses its Apply too in the browser of the GM who plays the battle: by the ids
+ * the core noted as it applied them (its damageApplied), never by the card's flags.
  */
+import { damageApplied } from "./core.js";
 import { t } from "./words.js";
 
 /** This module's id: its flags' scope. */
@@ -47,9 +51,12 @@ export function timesOf(message) {
   return n > 0 ? n : 1;
 }
 
+/** Is FastFighting's the say on this card's damage: its own mark on a GM's card, or a card the live battle applied? */
+export const handled = message => rolledHere(message) || damageApplied(message);
+
 /** A card of FastFighting's, rendered (renderChatMessageHTML): its Apply buttons gone, a line saying FastFighting does it. */
 export function hideApply(message, html) {
-  if ( !rolledHere(message) ) return;
+  if ( !handled(message) ) return;
   const sections = [...(html?.querySelectorAll?.(".damage-application") ?? [])];
   sections.forEach((section, i) => {
     const note = i === 0 && globalThis.document ? Object.assign(globalThis.document.createElement("span"), { textContent: t("DamageHandled") }) : null;
@@ -62,6 +69,6 @@ export function hideApplyMenu(app, options) {
   for ( const entry of Array.isArray(options) ? options : [] ) {
     if ( typeof entry?.label !== "string" || !entry.label.startsWith("PF2E.DamageButton.") || typeof entry.visible !== "function" ) continue;
     const visible = entry.visible;
-    entry.visible = li => !rolledHere(globalThis.game?.messages?.get?.(li?.dataset?.messageId)) && visible(li);
+    entry.visible = li => !handled(globalThis.game?.messages?.get?.(li?.dataset?.messageId)) && visible(li);
   }
 }

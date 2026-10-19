@@ -2,10 +2,12 @@
  * The damage cards FastFighting rolls and applies itself (rollStrike's, rollDamage's), marked as its own: their Apply
  * buttons gone as they're rendered, a line in their place, and PF2e's Apply entries off their chat menu, so no one
  * applies them a second time; other cards as PF2e has them. Only a GM's card is FastFighting's: a player may mark their
- * own card, and it stays theirs.
+ * own card, and it stays theirs. A player's card whose damage the live battle applied itself (by the ids the core noted)
+ * loses its Apply too.
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { hideApply, hideApplyMenu, timesOf } from "../scripts/cards.js";
+import { notedBy } from "../../FastFighting/scripts/foundry/applied-cards.js";
 
 /** An element as the DOM has one: its children, replaced. */
 const element = () => {
@@ -74,5 +76,37 @@ describe("a player's own card, marked as FastFighting's", () => {
     hideApplyMenu({}, [apply]);
     expect(apply.visible({ dataset: { messageId: "m3" } })).toBe(true);
     expect(apply.visible({ dataset: { messageId: "m1" } })).toBe(false);
+  });
+});
+
+describe("a player's card whose damage the live battle applied itself", () => {
+  // (A player's reaction strike, rolled on their screen when FastFighting asked, its damage applied by FastFighting.)
+  const reaction = { id: "m4", author: { isGM: false }, flags: { pf2e: {} } };
+  beforeEach(() => {
+    globalThis.game.messages.set("m4", reaction);
+    notedBy(id => id === "m4");
+  });
+  afterEach(() => notedBy(null));
+
+  test("loses its Apply buttons and menu entries in the GM's browser, applied once as rolled", () => {
+    const sections = [element()];
+    hideApply(reaction, rendered(sections));
+    expect(sections[0].children).toEqual([{ tag: "span", textContent: expect.any(String) }]);
+    const apply = { label: "PF2E.DamageButton.FullContext", visible: () => true };
+    hideApplyMenu({}, [apply]);
+    expect(apply.visible({ dataset: { messageId: "m4" } })).toBe(false);
+    expect(timesOf(reaction)).toBe(1);
+  });
+
+  test("only by the ids the core noted: a player's other cards, and one they flag as applied, keep theirs", () => {
+    const flagged = { id: "m5", author: { isGM: false }, flags: { "fast-fighting": { applied: true } } };
+    for ( const card of [theirs, forged(), flagged] ) {
+      const sections = [element()];
+      hideApply(card, rendered(sections));
+      expect(sections[0].children).toHaveLength(2);
+    }
+    const apply = { label: "PF2E.DamageButton.FullContext", visible: () => true };
+    hideApplyMenu({}, [apply]);
+    expect([apply.visible({ dataset: { messageId: "m2" } }), apply.visible({ dataset: { messageId: "m3" } })]).toEqual([true, true]);
   });
 });
