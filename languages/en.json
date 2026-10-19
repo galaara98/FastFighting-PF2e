@@ -101,6 +101,8 @@
     "Pushed": "pushed back",
     "Repositioned": "moved",
     "HoldKept": "hold kept",
+    "ReloadSpent": "{actor} spends an action reloading {weapon}.",
+    "ReloadSpentMany": "{actor} spends {n} actions reloading {weapon}.",
     "EffectManeuver": "{effect} ({maneuver})",
     "Why": {
       "NoLanguage": "No language",

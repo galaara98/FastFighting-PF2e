@@ -13,6 +13,7 @@
  * Each returns the undo record of what it changed (Rewind puts it back), its cards the turn's.
  */
 import { undoRecord, escapeHtml, inertHtml } from "./core.js";
+import { t } from "./words.js";
 import { strikesOf } from "./strike-roll.js";
 import { ammoOf, ammoState, ammoUndo, nextAmmo, loadedOf } from "./ammo.js";
 
@@ -124,11 +125,16 @@ async function retrieve(tokenDoc, actor, item, { secret = false } = {}) {
 
 /**
  * A Reload: one shot's rounds of the weapon's own ammunition loaded in it (its pick, else the stack with the most), as
- * the sheet's Reload does (its attach), with PF2e's Reload card. Nothing for a weapon whose ammunition PF2e doesn't
- * keep (a creature's attack), nor one with nothing to load.
+ * the sheet's Reload does (its attach), with PF2e's Reload card. A creature's attack, whose ammunition PF2e doesn't
+ * keep: nothing on its sheet, but a card saying it spent its actions reloading (npcReloadCard). Nothing for one with
+ * nothing to load.
  */
 async function reload(tokenDoc, actor, weapon, { secret = false } = {}) {
   const how = ammoOf(actor, weapon);
+  if ( !how && actor.type !== "character" ) {
+    await npcReloadCard(actor, tokenDoc, weapon, { secret });
+    return null;
+  }
   if ( !how || how.picked || typeof weapon.attach !== "function" ) return null;
   // (Full already: nothing to load.)
   const now = loadedOf(actor, weapon);
@@ -141,6 +147,26 @@ async function reload(tokenDoc, actor, weapon, { secret = false } = {}) {
   const glyph = (weapon.system?.traits?.value ?? []).includes("repeating") ? 3 : Number(weapon.system?.reload?.value) || 1;
   await interactCard(actor, tokenDoc, weapon, "Reload", { glyph, data: { ammo: stack.name }, secret });
   return ammoUndo(tokenDoc, actor, before);
+}
+
+/** The actions a creature's attack takes to reload: its reload-N trait (1 where it says none). */
+export function npcReloadActions(weapon) {
+  const trait = (weapon?.system?.traits?.value ?? []).find(v => /^reload-\d+$/.test(v));
+  return Math.max(1, Number(trait?.split("-")[1]) || 1);
+}
+
+/**
+ * A creature reloaded an attack PF2e keeps no ammunition for (an NPC's Crossbow): no Interact card of PF2e's to post,
+ * so FastFighting's own, saying it spent its actions on it, so the table sees why it could shoot again.
+ */
+async function npcReloadCard(actor, token, weapon, { secret = false } = {}) {
+  const n = npcReloadActions(weapon);
+  const text = t(n === 1 ? "ReloadSpent" : "ReloadSpentMany", { actor: actor.name, weapon: weapon.name, n });
+  const Message = ChatMessage.implementation;
+  return Message.create({
+    content: `<p>${inertHtml(escapeHtml(text))}</p>`, style: CONST.CHAT_MESSAGE_STYLES.EMOTE, speaker: Message.getSpeaker({ actor, token }),
+    ...(secret ? { whisper: Message.getWhisperRecipients("GM").map(u => u.id) } : {})
+  });
 }
 
 /** Up off the ground: PF2e's own Stand (its card; it takes prone off), else prone taken off. */

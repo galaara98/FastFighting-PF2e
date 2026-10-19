@@ -130,6 +130,20 @@ describe("in a live battle: getting ready on the sheet, the PF2e way", () => {
     expect(await readyPf2eGear(tokenOf(actor), { step: "reload", gear: "harsk.gear.xbow" })).toBeNull();
   });
 
+  test("a creature's attack PF2e keeps no ammunition for: nothing on its sheet, FastFighting's card saying it spent its actions reloading", async () => {
+    const crossbow = item("crossbow", "melee", { traits: { value: ["reload-1", "range-increment-120"] } });
+    const kobold = sheet([crossbow], { id: "kobold", name: "Kobold Scout", type: "npc" });
+    expect(await readyPf2eGear(tokenOf(kobold), { step: "reload", gear: "kobold.gear.crossbow" })).toBeNull();
+    expect(cards).toHaveLength(1);
+    expect(cards[0].content).toContain(game.i18n.format("FFPF2E.ReloadSpent", { actor: "Kobold Scout", weapon: "crossbow", n: 1 }));
+    expect(cards[0].speaker).toEqual({ alias: "Kobold Scout" });
+    // (Two actions to reload: said so. Hidden from the players: the GMs' alone.)
+    crossbow.system.traits.value = ["reload-2"];
+    await readyPf2eGear(tokenOf(kobold), { step: "reload", gear: "kobold.gear.crossbow", secret: true });
+    expect(cards[1].content).toContain(game.i18n.format("FFPF2E.ReloadSpentMany", { actor: "Kobold Scout", weapon: "crossbow", n: 2 }));
+    expect(cards[1].whisper).toEqual(["gm"]);
+  });
+
   test("a Stand: PF2e's own Stand action (its card takes prone off), the prone condition kept to put back", async () => {
     const prone = item("prone", "condition", {}, { slug: "prone", isLocked: false });
     const actor = sheet([prone]);
