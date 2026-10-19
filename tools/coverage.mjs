@@ -140,21 +140,22 @@ export const NOT_ABILITIES = new Set(["heal-animal", "heal-companion", "low-ligh
 
 /**
  * PF2e's basic actions the engine plays itself, by slug (the core's moves, and the helper's maneuvers.js, edges.js,
- * coverActions, check-roll.js ACTIONS and PURPOSES, read-turn.js MANEUVERS): a character's or creature's own copy of
- * one is understood.
+ * coverActions, check-roll.js ACTIONS, PURPOSES and TALK_ACTIONS, read-turn.js MANEUVERS and SOCIAL): a character's or
+ * creature's own copy of one is understood.
  */
 export const ENGINE_ACTIONS = Object.freeze(new Set([
   "strike", "stride", "step", "stand", "raise-a-shield", "take-cover", "hide", "aid", "demoralize", "trip", "grapple", "shove", "disarm",
   "feint", "reposition", "escape", "administer-first-aid", "tumble-through", "steal", "force-open", "pick-a-lock", "recall-knowledge",
-  "create-a-diversion", "sustain", "interact"
+  "create-a-diversion", "sustain", "interact", "request", "make-an-impression", "coerce", "lie"
 ]));
 
 /** Senses the helper leaves out on purpose (adapter.js NOT_SENSES): the core doesn't tell dim light from bright. */
 const NOT_SENSES = new Set(["vision", "low-light-vision", "see-invisibility"]);
 
 /**
- * Slugs read only for setting a character up (auto.js GUARD_SLUGS, SELF_GUARD_SLUGS, RESCUE_SLUGS, CONSUMABLE_FEATS,
- * SUBCLASS_STYLE and its other slugs; traits.js ITEM_LEANS): a hint, not something it plays. Noted, not counted.
+ * Slugs read only for setting a character up (auto.js FEATS, GUARD_SLUGS, SELF_GUARD_SLUGS, RESCUE_SLUGS,
+ * CONSUMABLE_FEATS, SUBCLASS_STYLE and its other slugs; traits.js ITEM_LEANS): a hint, not something it plays. Noted,
+ * not counted.
  */
 export const HINTS = Object.freeze(new Set([
   "intercept-attack", "retributive-strike", "glimpse-of-redemption", "liberating-step", "flash-of-grandeur", "guardians-deflection-fighter",
@@ -164,7 +165,7 @@ export const HINTS = Object.freeze(new Set([
   "aura-of-courage", "orc-ferocity", "reckless-abandon", "battle-medicine", "divine-font",
   "warpriest", "battle-creed", "cloistered-cleric", "untamed-order", "ruffian", "laughing-shadow", "starlit-span", "way-of-the-vanguard",
   "way-of-the-drifter", "way-of-the-triggerbrand", "way-of-the-pistolero", "way-of-the-sniper", "way-of-the-spellshot", "bomber", "mutagenist",
-  "weapon-innovation", "armor-innovation", "light-mortar-innovation"
+  "weapon-innovation", "armor-innovation", "light-mortar-innovation", "skirmish-strike", "running-reload", "ward-medic", "continual-recovery"
 ]));
 
 /** Rule elements that do nothing by themselves (they grant, choose, toggle or decorate). */
