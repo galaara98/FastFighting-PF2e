@@ -437,7 +437,7 @@
     {
       "name": "magic or an effect nearby",
       "trigger": "magicNearby",
-      "pattern": "\\b(?:healing|teleportation|teleport|[\\w-]+) (?:spell|effect)s?\\b[^.;]*\\b(?:within|in) \\d+ feet\\b|\\b(?:within|in) \\d+ feet\\b[^.;]*\\b(?:spell|effect|teleports?|heals?|restores? hit points)\\b|\\bhealing effect\\b|\\brestores? hit points\\b|\\bspell (?:comes into|takes) effect\\b|\\buses? an? (?:[\\w-]+ (?:or [\\w-]+ )?)?(?:spell|effect)\\b|\\bteleports?\\b"
+      "pattern": "(?= (?:spell|effect))(?<=\\w[\\w-]*) (?:spell|effect)s?\\b[^.;]*\\b(?:within|in) \\d+ feet\\b|\\b(?:within|in) \\d+ feet\\b[^.;]*\\b(?:spell|effect|teleports?|heals?|restores? hit points)\\b|\\bhealing effect\\b|\\brestores? hit points\\b|\\bspell (?:comes into|takes) effect\\b|\\buses? an? (?:[\\w-]+ (?:or [\\w-]+ )?)?(?:spell|effect)\\b|\\bteleports?\\b"
     },
     {
       "name": "pressed or threatened",
