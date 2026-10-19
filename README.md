@@ -73,7 +73,7 @@ Every perk a playstyle or tactics answer can switch on works here. Most play as 
 | Hard to spot (Chicken, Fragile, Wallflower) | Foes overlook it, and it **Avoids Notice** on the way in (Stealth for initiative, when better). Behind walls, it **Hides** (Stealth against foes' best Perception DC; hidden, attacks at it need a DC 11 flat check, and its next Strike finds the foe off-guard) and **Takes Cover** (standard cover becomes greater, +4, until it moves or attacks). |
 | Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Trip**, **Grapple**, **Disarm**, **Demoralize**, **Feint**, and spells that lay a condition, over a plain Strike. |
 | Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Aid**; healing and buff spells. |
-| In a hurry (Impatient, Speed-Runner) | Doesn't Raise a Shield or Step clear of a foe. |
+| In a hurry (Impatient) | Doesn't Raise a Shield or Step clear of a foe. |
 | Acting first (Instigator) | Its initiative. |
 | Lore-Collector | **Recall Knowledge**. |
 | Weak spots (Puzzle-Maniac) | Weaknesses. |
