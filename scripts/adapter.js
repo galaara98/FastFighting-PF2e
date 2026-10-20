@@ -10,7 +10,7 @@ import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf, animalisticOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName, IMPLIES } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName } from "./commit.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
@@ -23,7 +23,7 @@ import { t, actionName, traitName, featureName, coin, wordList, conditionLabel a
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction, AID_SKILLS } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { escapeOf } from "./holds.js";
+import { escapeOf, IMPLIES } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
 import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, bonMot } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
@@ -407,6 +407,15 @@ export class Pf2eAdapter extends SystemAdapter {
 
   get rules() {
     return pf2eRules;
+  }
+
+  /**
+   * The same rules for the planner's background workers (the core's API 22): rules.js imports nothing of Foundry's, and
+   * reads no setting as it plays (the Lore-Collector's advantage, loreBoost, is read as the spec is built: its
+   * sizeUp.boost), so there's no data to give them.
+   */
+  workerRules() {
+    return { url: new URL("./rules.js", import.meta.url).href, exportName: "pf2eRules" };
   }
 
   /** The real fight leaves a fallen creature's gear as loot: a lootable corpse, or a pile (that may take the body's place). */

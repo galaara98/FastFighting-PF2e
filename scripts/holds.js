@@ -13,7 +13,12 @@
  * The rules (rules.js) play it: escapeFrom, bondsDC, escapeCost (the bar after a critical failure) and breakFree; the
  * adapter puts escapeOf's numbers on each creature's spec.
  */
-import { IMPLIES } from "./commit.js";
+/**
+ * What a PF2e condition also means to the engine, by its key (each condition is read as its own key too): grabbed and
+ * restrained hold it in place, off guard; unconscious, unable to act and off guard; paralyzed, off guard. (Here, with
+ * the rules that need it, so they import nothing of the Foundry side: the planner's workers import them.)
+ */
+export const IMPLIES = Object.freeze({ grabbed: ["offGuard", "immobilized"], restrained: ["offGuard", "immobilized"], unconscious: ["incapacitated", "offGuard"], paralyzed: ["offGuard"] });
 
 /** The GM Core's DCs by level (0 to 25): the DC for a challenge of that level when nothing else sets one. */
 const LEVEL_DCS = Object.freeze([14, 15, 16, 18, 19, 20, 22, 23, 24, 26, 27, 28, 30, 31, 32, 34, 35, 36, 38, 39, 40, 42, 44, 46, 48, 50]);

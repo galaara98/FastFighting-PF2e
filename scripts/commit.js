@@ -80,12 +80,6 @@ async function setCondition(actor, slug, value, undo) {
  */
 const PF2E_SLUGS = { offGuard: "off-guard" };
 
-/**
- * What a PF2e condition also means to the engine, by its key (each condition is read as its own key too): grabbed and
- * restrained hold it in place, off guard; unconscious, unable to act and off guard; paralyzed, off guard.
- */
-export const IMPLIES = Object.freeze({ grabbed: ["offGuard", "immobilized"], restrained: ["offGuard", "immobilized"], unconscious: ["incapacitated", "offGuard"], paralyzed: ["offGuard"] });
-
 /** The engine's key for a PF2e condition slug ("off-guard": offGuard, "persistent-damage": persistentDamage). */
 export const engineKey = slug => (slug === "off-guard" ? "offGuard" : String(slug).replace(/-([a-z])/g, (m, c) => c.toUpperCase()));
 
