@@ -62,6 +62,8 @@ A creature's Tactical, Brave, Selfish and Loyal come from its data: mindless, an
 
 A player character starts as the usual hero, and its sheet moves it a little: Intelligence, Wisdom and Perception for Tactical; Will for its level and Constitution for Brave; class, ancestry and background (a champion selfless, a criminal less so, a gladiator bold); holy or unholy; feats by what their rules do (a fighter's Bravery bolder, Cooperative Nature more loyal); telling skills (Warfare Lore, Thievery, Medicine); and whether it's in a party. Each trait's tooltip in the planner lists what moved it.
 
+Its attribute modifiers also tell the core, hidden, how smart, strong, quick, wise and charismatic it is (+0 to +2 average; mindless, as dumb as it gets). Intelligence decides who focuses fire and who keeps near its team.
+
 Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities. A rarer creature has a slight edge for leader, boss or lieutenant.
 
 ## Playstyles in PF2e

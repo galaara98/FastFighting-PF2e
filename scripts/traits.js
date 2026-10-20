@@ -110,6 +110,32 @@ export function animalisticOf({ traits = [], int = 0, languages = [] } = {}) {
   return !speaks && Number(int) <= 0;
 }
 
+/** The core's aptitudes (its spec.aptitudes, API 23), each by the PF2e attribute modifier it's read from. */
+const APTITUDE_ATTRIBUTES = Object.freeze({ smart: "int", strong: "str", fast: "dex", wise: "wis", charismatic: "cha" });
+
+/**
+ * An attribute modifier on the core's aptitude scale (0 to 4, 2 average): -3 or lower 0, -2 to -1 1, +0 to +2 2, +3 to
+ * +4 3, +5 or higher 4. By the modifier as it is, not for the creature's level: a level 15 giant is stronger than a
+ * level 1 orc.
+ */
+export function aptitudeBand(mod) {
+  const m = Number(mod) || 0;
+  return m <= -3 ? 0 : m <= -1 ? 1 : m <= 2 ? 2 : m <= 4 ? 3 : 4;
+}
+
+/**
+ * A quick, hidden judgment of what it's like, for the core's Statistics Engine (spec.aptitudes: smart, strong, fast,
+ * wise, charismatic): its Intelligence, Strength, Dexterity, Wisdom and Charisma modifiers, each banded (aptitudeBand).
+ * A mindless creature is as dumb as it gets, whatever its Intelligence says.
+ * @param {{abilities?: Record<string, number>, traits?: string[]}} d   abilities: {str, dex, int, wis, cha} modifiers
+ */
+export function aptitudesOf({ abilities = {}, traits = [] } = {}) {
+  const out = {};
+  for ( const [k, a] of Object.entries(APTITUDE_ATTRIBUTES) ) out[k] = aptitudeBand(abilities[a]);
+  if ( traits.includes("mindless") ) out.smart = 0;
+  return out;
+}
+
 /**
  * What kind of creature, for grouping neutrals: its ancestry if it has one (goblin, human, kobold), else its creature
  * types (animal; dragon and elemental).
