@@ -116,7 +116,7 @@ describe("an Escape", () => {
     const live = answer => ({ playing: true, roll: (run, request) => { asked.push(request); return answer; } });
     expect(pf2eRules.breakFree({ ...table(1), live: live({ degree: 3, natural: 18, total: 23 }) }, unit(), { key: "grabbed", byId: null, dc: 15 }))
       .toEqual({ success: true, degree: 3, natural: 18, mod: 5, total: 23, dc: 15 });
-    expect(asked).toEqual([{ kind: "check", unitId: "u", targetId: null, purpose: "escape", skill: null, against: null, dc: 15, action: { id: null, name: "grabbed" } }]);
+    expect(asked).toEqual([{ kind: "check", unitId: "u", targetId: null, purpose: "escape", skill: null, against: null, dc: 15, advantage: 0, action: { id: null, name: "grabbed" } }]);
     // (No roll of the system's: the engine's, a natural 1.)
     expect(pf2eRules.breakFree({ ...table(1), live: live(null) }, unit(), { key: "grabbed", dc: 15 })).toMatchObject({ success: false, degree: 0, natural: 1 });
   });

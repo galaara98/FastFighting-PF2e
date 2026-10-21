@@ -129,8 +129,8 @@ describe("Administer First Aid on a friend's bleed", () => {
     expect(tryHold(run, medic, hold, { freeing: true, held: hero })).toMatchObject({ success: false, degree: 2, natural: 15, total: 17, dc: 18 });
     expect(hero.persistent).toHaveLength(1);
     expect(asked).toEqual([
-      { kind: "check", unitId: "medic", targetId: "hero", purpose: "firstAid", skill: null, against: null, dc: 18, action: { id: "medic.stop-bleeding", name: "bleeding" } },
-      { kind: "check", unitId: "hero", targetId: null, purpose: "flat", skill: null, against: null, dc: 10, action: { id: null, name: expect.any(String) } }
+      { kind: "check", unitId: "medic", targetId: "hero", purpose: "firstAid", skill: null, against: null, dc: 18, advantage: 0, action: { id: "medic.stop-bleeding", name: "bleeding" } },
+      { kind: "check", unitId: "hero", targetId: null, purpose: "flat", skill: null, against: null, dc: 10, advantage: 0, action: { id: null, name: expect.any(String) } }
     ]);
     // (The system's flat check made: the bleed ends.)
     answers.push({ degree: 2, natural: 15, total: 17 }, { degree: 2, natural: 10, total: 10 });
@@ -177,7 +177,7 @@ describe("retching while sickened", () => {
     run.rng.d20 = () => 1;
     expect(pf2eRules.retch(run, hero).success).toBe(true);
     expect(hero.conds.sickened).toBeUndefined();
-    expect(asked).toEqual([{ kind: "save", unitId: "hero", targetId: null, save: "fortitude", dc: 21, action: { id: null, name: pf2eRules.remedies(run, { conds: { sickened: 1 } })[0].label } }]);
+    expect(asked).toEqual([{ kind: "save", unitId: "hero", targetId: null, save: "fortitude", dc: 21, advantage: 0, action: { id: null, name: pf2eRules.remedies(run, { conds: { sickened: 1 } })[0].label } }]);
   });
 
   test("sickened, it can't drink a potion or an elixir (usable, which the core asks of heals); a healing spell, yes", () => {

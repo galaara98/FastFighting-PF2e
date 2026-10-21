@@ -29,7 +29,7 @@ const SPELL = { id: "witch.spell.s1", spellId: "s1", melee: false, range: { incr
 const hit = { natural: 15, total: 25, degree: 2 };
 
 /** A request as the core's systemRolled makes it for a flat check: its card titled with what it's for. */
-const flat = (unitId, dc, targetId = null) => ({ kind: "check", unitId, targetId, purpose: "flat", skill: null, against: null, dc, action: { id: null, name: expect.any(String) } });
+const flat = (unitId, dc, targetId = null) => ({ kind: "check", unitId, targetId, purpose: "flat", skill: null, against: null, dc, advantage: 0, action: { id: null, name: expect.any(String) } });
 
 describe("an attack's flat check, the system's", () => {
   test("against one hidden: PF2e's flat check, DC 11, the attacker's at its target; failed, a miss; made, the hit as it was", () => {
@@ -124,7 +124,7 @@ describe("Tumble Through, the system's", () => {
     const foe = unit("orc", {}, { defenses: { reflex: 7 } });
     const { run, asked } = table([{ degree: 1, natural: 12, total: 15 }]);
     expect(pf2eRules.tumbleThrough(run, mover, foe)).toEqual({ success: false, degree: 1, natural: 12, mod: 7, total: 15, dc: 17 });
-    expect(asked).toEqual([{ kind: "check", unitId: "pc", targetId: "orc", purpose: "tumble", skill: null, against: "reflex", dc: 17, action: { id: null, name: "" } }]);
+    expect(asked).toEqual([{ kind: "check", unitId: "pc", targetId: "orc", purpose: "tumble", skill: null, against: "reflex", dc: 17, advantage: 0, action: { id: null, name: "" } }]);
     // (No answer: the engine's own roll.)
     expect(pf2eRules.tumbleThrough(table([null], [10]).run, mover, foe)).toEqual({ success: true, degree: 2, natural: 10, mod: 7, total: 17, dc: 17 });
   });
