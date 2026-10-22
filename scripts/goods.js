@@ -2,7 +2,8 @@
  * Goods for the core's deals (API 26: behavior/deals.js, foundry/loot-drop.js): money and things taken off a sheet and
  * put on another (a creature's, a pile's), PF2e's way; what a pile holds; PF2e's own loot pile (a loot actor and its
  * token, as a corpse's pile is: commit.js); and, for a player's dialog, a character's skills and what it could hand
- * over. Goods are {items: [item data], coins: {pp, gp, sp, cp}} (null coins: none). Every change leaves undo records.
+ * over. Goods are {items: [item data], coins: {pp, gp, sp, cp}} (null coins: none), and on the way in, money (in copper:
+ * a team's purse's, on no sheet). Every change leaves undo records.
  */
 import { undoRecord, MODULE_ID } from "./core.js";
 import { t, coin } from "./words.js";
@@ -91,6 +92,13 @@ export async function putPf2eGoods(tokenDoc, goods) {
   const actor = tokenDoc?.actor;
   if ( !actor?.inventory || !goods ) return [];
   const records = [];
+  // (Money in the smallest coin, a team's purse's: the coins people hand over, added to any given.)
+  if ( Number(goods.money) > 0 ) {
+    const more = coinsFor(Math.round(Number(goods.money)));
+    const coins = { ...(goods.coins ?? {}) };
+    for ( const [k, n] of Object.entries(more) ) coins[k] = (Number(coins[k]) || 0) + n;
+    goods = { ...goods, coins };
+  }
   if ( goods.items?.length ) {
     const undo = emptyRecord(tokenDoc, actor);
     const made = await actor.createEmbeddedDocuments("Item", goods.items.map(d => loose(foundry.utils.deepClone(d))));

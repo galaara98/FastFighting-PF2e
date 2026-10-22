@@ -1922,6 +1922,11 @@ export class Pf2eAdapter extends SystemAdapter {
     return dropPf2eValuables(scene, at, goods, options);
   }
 
+  /** PF2e's main coin, the one prices are said in: gold (a team's purse in the planner). */
+  mainCoin() {
+    return { key: "gp", label: coin("gp"), value: 100 };
+  }
+
   /** Its skills, for a player's deal. */
   skillsOf(actor) {
     return pf2eSkillsOf(actor);
