@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => ({
     include: ["tests/**/*.test.js"],
     setupFiles: ["tests/setup.js"],
     env: { FASTFIGHTING_CORE: core, ...(mode === "reworded" ? { FASTFIGHTING_REWORD: "1" } : {}) },
-    environment: "node"
+    environment: "node",
+    // (Hundreds of simulated fights in some tests: a slower machine, a CI runner, takes several times as long.)
+    testTimeout: 20000
   }
 }));
