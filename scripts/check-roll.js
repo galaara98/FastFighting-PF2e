@@ -193,21 +193,23 @@ function talkAction(token, { skill, action, target, standoff }) {
 
 /**
  * A deal's check (DEALS): PF2e's action at the target's Will DC, where the target's token is drawn here; else the skill.
- * Without words, Intimidation with Demoralize's -4 (PF2e's own penalty, by its own label).
+ * Without words, Intimidation with Demoralize's -4 (PF2e's own penalty, by its own label). A skill of the player's own
+ * choosing (their deal dialog: `skill`, by its slug), not the deal's own: that skill, as its sheet rolls it.
  */
-async function rollDeal(token, { purpose, value, target, wordless, secret }) {
+async function rollDeal(token, { purpose, value, target, wordless, skill = null, secret }) {
   const how = DEALS[purpose];
   const at = target?.object && target !== token && !(target.id && target.id === token.id) ? target : null;
   const dc = at ? { value, slug: "will" } : { value };
-  const statistic = token.actor.skills?.[how.skill] ?? null;
+  const own = typeof skill === "string" && skill !== how.skill ? token.actor.skills?.[skill] ?? null : null;
+  const statistic = own ?? token.actor.skills?.[how.skill] ?? null;
   if ( wordless ) {
     const Modifier = game.pf2e?.Modifier;
     if ( !statistic || typeof Modifier !== "function" ) return null;
     const penalty = new Modifier({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" });
     return rolled(await statistic.roll({ dc, skipDialog: true, ...mode(secret), ...(at ? { target: at.actor } : {}), modifiers: [penalty] }));
   }
-  if ( at && pf2eAction(how.action) ) return useAction(token, { action: how.action }, { dc, at, attacks: null, secret });
-  return statistic ? rollStatistic(token, { statistic }, { dc, at: null, attacks: null, secret }) : null;
+  if ( at && !own && pf2eAction(how.action) ) return useAction(token, { action: how.action }, { dc, at, attacks: null, secret });
+  return statistic ? rollStatistic(token, { statistic }, { dc, at, attacks: null, secret }) : null;
 }
 
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
@@ -266,7 +268,7 @@ export async function rollPf2eCheck(token, { purpose = null, skill = null, again
   const value = dcOf(dc);
   if ( !actor || value === null ) return null;
   if ( purpose === "flat" ) return rollFlat(token, { value, label: typeof action?.name === "string" ? action.name : "", secret });
-  if ( DEALS[purpose] ) return rollDeal(token, { purpose, value, target, wordless: deal?.wordless === true, secret });
+  if ( DEALS[purpose] ) return rollDeal(token, { purpose, value, target, wordless: deal?.wordless === true, skill, secret });
   // (Talk at someone drawn here: PF2e's own action, its card the target's and its DC's. Else the skill, below.)
   const talk = purpose === "talk" ? talkAction(token, { skill, action, target, standoff: standoff === true }) : null;
   if ( talk ) return useAction(token, talk, { dc: { value, slug: against ?? talk.against }, at: target, attacks: null, secret });

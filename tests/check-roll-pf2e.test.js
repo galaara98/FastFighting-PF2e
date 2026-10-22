@@ -465,3 +465,15 @@ describe("a deal (the core's behavior/deals.js, API 26)", () => {
     expect(roll.modifiers).toEqual([expect.objectContaining({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" })]);
   });
 });
+
+describe("a player's own deal", () => {
+  test("a skill of their choosing rolls as itself, at the target's Will DC; the deal's own skill, as PF2e's action", async () => {
+    const goblin = creature("gob1");
+    const hero = creature("pc1");
+    await adapter.rollCheck(goblin, { purpose: "bribe", skill: "athletics", dc: 15, action: { id: null }, target: hero, deal: { kind: "bribe" } });
+    expect(asked.request).toBeUndefined();
+    expect(goblin.actor.skills.athletics.asked[0]).toMatchObject({ dc: { value: 15, slug: "will" }, target: hero.actor });
+    await adapter.rollCheck(goblin, { purpose: "bribe", skill: "diplomacy", dc: 15, action: { id: null }, target: hero, deal: { kind: "bribe" } });
+    expect(asked.request).toHaveLength(1);
+  });
+});
