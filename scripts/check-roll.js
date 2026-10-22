@@ -24,6 +24,10 @@
  *    Reflex DC).
  *  - A Seek (purpose "seek", the core's patrol: behavior/patrol.js): PF2e's own Seek action, its secret trait rolling it
  *    for the GMs, against the engine's DC (the hardest Stealth DC of those it may find); without the action, Perception.
+ *  - A deal (purposes "bribe", "extort", "scare": the core's behavior/deals.js, API 26): PF2e's own action at the
+ *    target's Will DC, a bribe a Request (Diplomacy), a demand (money, or only to go) a Coerce (Intimidation). Without
+ *    words (`deal.wordless`), neither will do (both are linguistic): Intimidation, with Demoralize's -4 for a target that
+ *    doesn't understand. Without the action or the target's token here, the skill alone.
  * Null where it can't tell what to roll (a spell check: PF2e has none; an Aid only a Strike would make: PF2e's Aid
  * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
@@ -46,6 +50,9 @@ const PURPOSES = Object.freeze({ __proto__: null, escape: ["escape"], theft: ["s
 
 /** The skill a feat or an ability rolls, by its slug: Bon Mot, Battle Medicine, Swallow Whole (gullet.js). */
 const ITEM_SKILLS = Object.freeze({ __proto__: null, "bon-mot": "diplomacy", "battle-medicine": "medicine", "swallow-whole": "athletics" });
+
+/** A deal, by what it's for: PF2e's action, and its skill. */
+const DEALS = Object.freeze({ __proto__: null, bribe: { action: "request", skill: "diplomacy" }, extort: { action: "coerce", skill: "intimidation" }, scare: { action: "coerce", skill: "intimidation" } });
 
 /** Talk, by the core's kind of pitch: its skill (adapter.js #social). */
 const TALK = Object.freeze({ __proto__: null, persuade: "diplomacy", intimidate: "intimidation", deceive: "deception" });
@@ -184,6 +191,25 @@ function talkAction(token, { skill, action, target, standoff }) {
   return pf2eAction(slug) ? { action: slug, against: how.against } : null;
 }
 
+/**
+ * A deal's check (DEALS): PF2e's action at the target's Will DC, where the target's token is drawn here; else the skill.
+ * Without words, Intimidation with Demoralize's -4 (PF2e's own penalty, by its own label).
+ */
+async function rollDeal(token, { purpose, value, target, wordless, secret }) {
+  const how = DEALS[purpose];
+  const at = target?.object && target !== token && !(target.id && target.id === token.id) ? target : null;
+  const dc = at ? { value, slug: "will" } : { value };
+  const statistic = token.actor.skills?.[how.skill] ?? null;
+  if ( wordless ) {
+    const Modifier = game.pf2e?.Modifier;
+    if ( !statistic || typeof Modifier !== "function" ) return null;
+    const penalty = new Modifier({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" });
+    return rolled(await statistic.roll({ dc, skipDialog: true, ...mode(secret), ...(at ? { target: at.actor } : {}), modifiers: [penalty] }));
+  }
+  if ( at && pf2eAction(how.action) ) return useAction(token, { action: how.action }, { dc, at, attacks: null, secret });
+  return statistic ? rollStatistic(token, { statistic }, { dc, at: null, attacks: null, secret }) : null;
+}
+
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
 async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, attacks, secret }) {
   const pf2e = pf2eAction(slug);
@@ -235,11 +261,12 @@ async function rollFlat(token, { value, label, secret }) {
  *                                 TokenDocument, or null; secret: for the GMs}
  * @returns {Promise<object|null>} {degree, natural, total}, or null (the engine rolls it)
  */
-export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, attackNumber = null, standoff = false, dc, action = null, target = null, secret = false } = {}) {
+export async function rollPf2eCheck(token, { purpose = null, skill = null, against = null, attackNumber = null, standoff = false, dc, action = null, target = null, secret = false, deal = null } = {}) {
   const actor = token?.actor;
   const value = dcOf(dc);
   if ( !actor || value === null ) return null;
   if ( purpose === "flat" ) return rollFlat(token, { value, label: typeof action?.name === "string" ? action.name : "", secret });
+  if ( DEALS[purpose] ) return rollDeal(token, { purpose, value, target, wordless: deal?.wordless === true, secret });
   // (Talk at someone drawn here: PF2e's own action, its card the target's and its DC's. Else the skill, below.)
   const talk = purpose === "talk" ? talkAction(token, { skill, action, target, standoff: standoff === true }) : null;
   if ( talk ) return useAction(token, talk, { dc: { value, slug: against ?? talk.against }, at: target, attacks: null, secret });

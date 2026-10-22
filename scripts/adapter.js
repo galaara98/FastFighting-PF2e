@@ -11,6 +11,7 @@ import { derivePf2eTraits, creatureKindOf, animalisticOf, aptitudesOf } from "./
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName } from "./commit.js";
+import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables } from "./goods.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
@@ -646,7 +647,7 @@ export class Pf2eAdapter extends SystemAdapter {
       if ( item.isOfType?.("treasure") && item.isCurrency ) continue;
       if ( item.type === "backpack" || !(item.quantity > 0) ) continue; // no containers (their contents would go too)
       const entry = {
-        id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)),
+        id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)), quantity: item.quantity,
         category: item.type, material: item.system.material?.type ?? "", rarity: item.system.traits?.rarity ?? ""
       };
       const carry = item.system.equipped?.carryType;
@@ -1895,6 +1896,40 @@ export class Pf2eAdapter extends SystemAdapter {
 
   async commitConcession(giverDoc, receiverDoc, concession) {
     return commitPf2eConcession(giverDoc, receiverDoc, concession);
+  }
+
+  /* -------------------------------------------- */
+  /*  Deals (API 26: goods.js)                    */
+  /* -------------------------------------------- */
+
+  /** Money and things off a sheet, as many as asked: {goods, records}. */
+  async takeGoods(tokenDoc, goods) {
+    return takePf2eGoods(tokenDoc, goods);
+  }
+
+  /** Goods onto a sheet (a creature's, a pile's): undo records. */
+  async putGoods(tokenDoc, goods) {
+    return putPf2eGoods(tokenDoc, goods);
+  }
+
+  /** Everything a pile holds. */
+  async goodsOf(tokenDoc) {
+    return pf2eGoodsOf(tokenDoc);
+  }
+
+  /** PF2e's own loot pile on the ground: a loot actor and its token, holding the goods. */
+  async dropValuables(scene, at, goods, options) {
+    return dropPf2eValuables(scene, at, goods, options);
+  }
+
+  /** Its skills, for a player's deal. */
+  skillsOf(actor) {
+    return pf2eSkillsOf(actor);
+  }
+
+  /** What a character could hand over in a deal. */
+  giveables(actor) {
+    return pf2eGiveables(actor);
   }
 }
 

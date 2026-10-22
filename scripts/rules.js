@@ -209,6 +209,11 @@ export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
   /**
+   * A threat without words (the core's deals: behavior/deals.js), where the two share no language: Demoralize's -4 for a
+   * target that doesn't understand. A bribe needs words.
+   */
+  wordlessIntimidation: -4,
+  /**
    * A playstyle's taunt: one action, as goading a foe with words is in the rules (Demoralize, Create a Diversion and
    * Feint are a single action each).
    */

@@ -7,7 +7,8 @@
  *     tokenUpdate, createdActors: [uuid], createdTokens: [uuid], deletedTokens: [data], statuses: [{id, active}] }
  *   A damage card's also: createdEffects: [id], statusesBefore: [id], combatant: {uuid, defeated}.
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord, handOverItem, escapeHtml, inertHtml } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, sideAfter, statusesOf, undoRecord, escapeHtml, inertHtml } from "./core.js";
+import { takePf2eGoods, putPf2eGoods } from "./goods.js";
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
@@ -592,61 +593,14 @@ function sinceThen(was, tokenDoc, undo) {
   if ( was.combatant ) undo.combatant = was.combatant;
 }
 
-/** Coin items as they are now, to work out what a coin transfer changed. */
-const coinSnapshot = actor => new Map(actor.itemTypes.treasure.filter(i => i.isCurrency).map(i => [i.id, i.toObject()]));
-
-/** An undo record for whatever happened to an actor's coins since `before`. */
-function coinUndo(tokenDoc, actor, before) {
-  const undo = emptyRecord(tokenDoc, actor);
-  const after = coinSnapshot(actor);
-  for ( const id of after.keys() ) if ( !before.has(id) ) undo.createdItems.push(id);
-  for ( const [id, data] of before ) {
-    if ( !after.has(id) ) undo.deletedItems.push(data);
-    else if ( after.get(id).system.quantity !== data.system.quantity ) undo.itemUpdates.push({ id, update: { "system.quantity": data.system.quantity } });
-  }
-  return undo;
-}
-
-/** Copper split into coins, largest first, without platinum (what people actually hand over). */
-function coinsFor(copper) {
-  const gp = Math.floor(copper / 100);
-  const sp = Math.floor((copper % 100) / 10);
-  return { gp, sp, cp: copper % 10 };
-}
-
 /**
- * Hand over what a creature was talked into giving up: coins (with change made) or one item, from the giver to
- * the talker. Returns undo records for both sides.
+ * Hand over what a creature gave up (talked out of it, robbed of it, a deal: the core's concession): coins (with change
+ * made), or a thing, as many as it says (its count, one if it doesn't), from the giver to the receiver (none: gone).
+ * Returns undo records for both sides.
  */
 export async function commitPf2eConcession(giverDoc, receiverDoc, concession) {
-  const giver = giverDoc?.actor;
-  if ( !giver?.inventory ) return [];
-  const receiver = receiverDoc?.actor?.inventory ? receiverDoc.actor : null;
-  const records = [];
-  if ( concession.kind === "money" ) {
-    const amount = Math.min(concession.amount, giver.inventory.currency.copperValue);
-    if ( amount <= 0 ) return [];
-    const coins = coinsFor(amount);
-    const before = coinSnapshot(giver);
-    const removed = await giver.inventory.removeCoins(coins, { byValue: true });
-    if ( removed === false ) return [];
-    records.push(coinUndo(giverDoc, giver, before));
-    if ( receiver ) {
-      const got = coinSnapshot(receiver);
-      await receiver.inventory.addCoins(coins);
-      records.push(coinUndo(receiverDoc, receiver, got));
-    }
-    return records;
-  }
-  // (An item: the core's handOverItem, one of it, worn and out of any container; no statuses kept from before.)
-  return handOverItem(giverDoc, receiver ? receiverDoc : null, concession.item?.id, { prepare: looseItem, statusesBefore: false });
-}
-
-/** An item handed over, the PF2e way: one of it, worn, held in no hand, out of any container. */
-function looseItem(data) {
-  data.system.quantity = 1;
-  data.system.containerId = null;
-  data.system.equipped = { carryType: "worn", handsHeld: 0, inSlot: false };
+  const taken = await takePf2eGoods(giverDoc, [concession]);
+  return [...taken.records, ...(receiverDoc?.actor?.inventory ? await putPf2eGoods(receiverDoc, taken.goods) : [])];
 }
 
 async function handleLoot(tokenDoc, actor, options, undo) {

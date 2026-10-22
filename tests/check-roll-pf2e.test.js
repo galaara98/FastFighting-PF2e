@@ -438,3 +438,30 @@ describe("the helper's own rules' checks", () => {
     expect(asked["tumble-through"][1]).not.toHaveProperty("target");
   });
 });
+
+describe("a deal (the core's behavior/deals.js, API 26)", () => {
+  test("a bribe is a Request, a demand a Coerce, at the target's Will DC, the target with it where it's drawn here", async () => {
+    const goblin = creature("gob1");
+    const hero = creature("pc1");
+    expect(await adapter.rollCheck(goblin, { purpose: "bribe", dc: 16, action: { id: null, name: "bribe" }, target: hero, deal: { kind: "bribe", ask: "leave" } })).toEqual({ degree: 2, natural: 11, total: 19 });
+    expect(asked.request).toEqual([{ actors: [goblin.actor], event: { shiftKey: true, ctrlKey: false, metaKey: false }, difficultyClass: { value: 16, slug: "will" }, target: hero.object }]);
+    await adapter.rollCheck(goblin, { purpose: "extort", dc: 18, action: { id: null, name: "extort" }, target: hero, deal: { kind: "extort" } });
+    await adapter.rollCheck(goblin, { purpose: "scare", dc: 17, action: { id: null, name: "scare" }, target: hero, deal: { kind: "scare" } });
+    expect(asked.coerce.map(a => a.difficultyClass)).toEqual([{ value: 18, slug: "will" }, { value: 17, slug: "will" }]);
+    expect(asked.demoralize).toBeUndefined();
+  });
+
+  test("not drawn here: the skill alone; without words, Intimidation with Demoralize's -4, by PF2e's own label", async () => {
+    const goblin = creature("gob1");
+    await adapter.rollCheck(goblin, { purpose: "bribe", dc: 16, action: { id: null }, target: creature("pc2", { drawn: false }), deal: { kind: "bribe" } });
+    expect(asked.request).toBeUndefined();
+    expect(goblin.actor.skills.diplomacy.asked).toEqual([{ dc: { value: 16 }, skipDialog: true }]);
+    game.pf2e.Modifier = class { constructor(data) { Object.assign(this, data); } };
+    const hero = creature("pc1");
+    await adapter.rollCheck(goblin, { purpose: "scare", dc: 17, action: { id: null }, target: hero, deal: { kind: "scare", wordless: true } });
+    expect(asked.coerce).toBeUndefined();
+    const roll = goblin.actor.skills.intimidation.asked[0];
+    expect(roll).toMatchObject({ dc: { value: 17, slug: "will" }, skipDialog: true, target: hero.actor });
+    expect(roll.modifiers).toEqual([expect.objectContaining({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" })]);
+  });
+});
