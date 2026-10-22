@@ -194,8 +194,7 @@ export function healsOthers(actions = []) {
 }
 
 /**
- * PF2e's own answers to the tactics questions, and what a character offers and expects to end an argument: what its
- * class and the choices it made in it, its feats and features, its kind and its stat block say, each with its reason
+ * PF2e's own answers to the tactics questions: what its class and the choices it made in it, its feats and features, its kind and its stat block say, each with its reason
  * (the system's own name for it). Questions its data says nothing about are left out (the core's reading stands).
  *
  * @param {object} f
@@ -222,7 +221,6 @@ export function healsOthers(actions = []) {
  * @param {string|null} [f.formation]  the name of an ability that has it fight in formation
  * @param {string|null} [f.bomb]       the name of a bomb it throws
  * @param {boolean} [f.shield]         a shield, ready
- * @param {{money: number, coin: number}} [f.purse]   its money (in the smallest coin), and its main coin's value
  * @returns {Record<string, {value: *, why: string}>}
  */
 export function pf2eTactics(f = {}) {
@@ -388,30 +386,6 @@ export function pf2eTactics(f = {}) {
   if ( has("pack-attack") ) say("beyond", "hunt", named("pack-attack"));
   for ( const why of [unthinking, summoned, trait("minion"), trait("animal")] ) if ( why ) say("beyond", "stay", why);
 
-  // What it offers and expects to end an argument.
-  const quiet = trait("mindless") ?? noWords ?? summoned;
-  if ( quiet ) {
-    say("offer", { kind: "" }, quiet);
-    say("expect", { kind: "" }, quiet);
-  }
-  const coin = Number(f.purse?.coin) || 0;
-  // (So much of its main coin by its level, as the core asks it: tens of gold.)
-  const price = () => (coin ? { kind: "money", amount: coin >= 100 ? 10 * Math.max(1, Number(f.level) || 1) : Math.max(1, Math.ceil((Number(f.level) || 1) / 2)), coin } : null);
-  // (A tenth of what it carries.)
-  const share = () => {
-    const amount = coin ? Math.floor((Number(f.purse?.money) || 0) / coin / 10) : 0;
-    return amount >= 1 ? { kind: "money", amount, coin } : null;
-  };
-  const devil = trait("devil");
-  if ( devil ) {
-    say("offer", { kind: "passage" }, devil);
-    say("expect", price(), devil);
-  }
-  const mercy = (cls === "champion" && has("redemption") ? named("redemption") : null) ?? trait("holy");
-  if ( mercy ) say("offer", { kind: "noHarm" }, mercy);
-  const background = f.background?.name || f.background?.slug;
-  if ( f.background?.slug === "merchant" ) say("offer", share(), background);
-  if ( f.background?.slug === "bandit" ) say("expect", price(), background);
   return out;
 }
 
