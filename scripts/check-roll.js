@@ -25,7 +25,7 @@
  *  - A Seek (purpose "seek", the core's patrol: behavior/patrol.js): PF2e's own Seek action, its secret trait rolling it
  *    for the GMs, against the engine's DC (the hardest Stealth DC of those it may find); without the action, Perception.
  *  - A deal (purposes "bribe", "extort", "scare": the core's behavior/deals.js, API 26): PF2e's own action at the
- *    target's Will DC, a bribe a Request (Diplomacy), a demand (money, or only to go) a Coerce (Intimidation). Without
+ *    target's Will DC, a bribe a Request (Diplomacy), a demand (money, or only to go; a toll) a Coerce (Intimidation). Without
  *    words (`deal.wordless`), neither will do (both are linguistic): Intimidation, with Demoralize's -4 for a target that
  *    doesn't understand. Without the action or the target's token here, the skill alone.
  * Null where it can't tell what to roll (a spell check: PF2e has none; an Aid only a Strike would make: PF2e's Aid
@@ -52,7 +52,7 @@ const PURPOSES = Object.freeze({ __proto__: null, escape: ["escape"], theft: ["s
 const ITEM_SKILLS = Object.freeze({ __proto__: null, "bon-mot": "diplomacy", "battle-medicine": "medicine", "swallow-whole": "athletics" });
 
 /** A deal, by what it's for: PF2e's action, and its skill. */
-const DEALS = Object.freeze({ __proto__: null, bribe: { action: "request", skill: "diplomacy" }, extort: { action: "coerce", skill: "intimidation" }, scare: { action: "coerce", skill: "intimidation" } });
+const DEALS = Object.freeze({ __proto__: null, bribe: { action: "request", skill: "diplomacy" }, extort: { action: "coerce", skill: "intimidation" }, scare: { action: "coerce", skill: "intimidation" }, toll: { action: "coerce", skill: "intimidation" } });
 
 /** Talk, by the core's kind of pitch: its skill (adapter.js #social). */
 const TALK = Object.freeze({ __proto__: null, persuade: "diplomacy", intimidate: "intimidation", deceive: "deception" });
