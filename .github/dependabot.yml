@@ -1,0 +1,20 @@
+# Dependabot version updates: a pull request a week for each kind, every update in it at once, so the Tests workflow
+# tries them together. Security updates are on in the repository's settings as well.
+version: 2
+updates:
+  # The test tools (package.json's devDependencies).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      test-tools:
+        patterns: ["*"]
+  # The actions the workflows use.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
