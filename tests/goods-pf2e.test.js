@@ -56,7 +56,8 @@ describe("taking goods off a sheet", () => {
   test("money in coins, change made; some of a stack, the rest left; a thing that's the last of its kind, gone", async () => {
     const giver = sheet("gob", { copper: 1234, items: [arrows, rope] });
     const [a, r] = giver.actor.items;
-    const { goods, records } = await takePf2eGoods(giver, [{ kind: "money", amount: 357 }, { kind: "item", item: { id: a.id }, count: 15 }, { kind: "item", item: { id: r.id }, count: 1 }]);
+    // (The rope's worn: it goes only off a fallen foe robbed.)
+    const { goods, records } = await takePf2eGoods(giver, [{ kind: "money", amount: 357 }, { kind: "item", item: { id: a.id }, count: 15 }, { kind: "item", item: { id: r.id }, count: 1, how: "loot" }]);
     expect(giver.actor.asked.removeCoins).toEqual([{ gp: 3, sp: 5, cp: 7 }]);
     expect(goods.coins).toEqual({ gp: 3, sp: 5, cp: 7 });
     expect(goods.items.map(i => [i.name, i.system.quantity, i.system.containerId])).toEqual([["Arrows", 15, null], ["Rope", 1, null]]);
@@ -70,10 +71,19 @@ describe("taking goods off a sheet", () => {
 
   test("more than it has: what it has; nothing at all: no goods", async () => {
     const poor = sheet("poor", { copper: 40, items: [rope] });
-    const { goods } = await takePf2eGoods(poor, [{ kind: "money", amount: 999 }, { kind: "item", item: { id: poor.actor.items[0].id }, count: 4 }]);
+    const { goods } = await takePf2eGoods(poor, [{ kind: "money", amount: 999 }, { kind: "item", item: { id: poor.actor.items[0].id }, count: 4, how: "loot" }]);
     expect(goods.coins).toEqual({ gp: 0, sp: 4, cp: 0 });
     expect(goods.items[0].system.quantity).toBe(1);
     expect((await takePf2eGoods(sheet("none"), [{ kind: "money", amount: 5 }])).goods).toBeNull();
+  });
+
+  test("in a deal or a theft, nothing held or worn: only what it carries put away", async () => {
+    const giver = sheet("gob", { items: [arrows, rope] });
+    const [a, r] = giver.actor.items;
+    const { goods } = await takePf2eGoods(giver, [{ kind: "item", item: { id: r.id }, how: "bribe" }, { kind: "item", item: { id: a.id }, count: 2, how: "bribe" }]);
+    expect(goods.items.map(i => [i.name, i.system.quantity])).toEqual([["Arrows", 2]]);
+    expect(giver.actor.items.map(i => [i.name, i.quantity])).toEqual([["Arrows", 18], ["Rope", 1]]);
+    expect((await takePf2eGoods(giver, [{ kind: "item", item: { id: r.id }, how: "theft" }])).goods).toBeNull();
   });
 });
 
@@ -104,11 +114,11 @@ describe("putting goods on a sheet, and what a pile holds", () => {
 });
 
 describe("for a player's deal", () => {
-  test("what it could hand over: its things with how many and each one's worth, not coins nor containers; its money", () => {
+  test("what it could hand over: its things put away with how many and each one's worth, not coins, containers, nor what it holds or wears; its money", () => {
     const hero = sheet("hero", { copper: 2500, items: [arrows, rope, pack] });
     const got = pf2eGiveables(hero.actor);
     expect(got.money).toBe(2500);
-    expect(got.items.map(i => [i.name, i.quantity, i.value])).toEqual([["Arrows", 20, 1], ["Rope", 1, 5]]);
+    expect(got.items.map(i => [i.name, i.quantity, i.value])).toEqual([["Arrows", 20, 1]]);
     expect(got.denominations.map(d => [d.key, d.value])).toEqual([["pp", 1000], ["gp", 100], ["sp", 10], ["cp", 1]]);
   });
 

@@ -36,6 +36,9 @@ export function coinsFor(copper) {
   return { gp, sp, cp: copper % 10 };
 }
 
+/** Carried put away (in a container), as PF2e has it: not held, not worn. Coins go however they're carried. */
+const stowed = item => (item.isOfType?.("treasure") && item.isCurrency) || item.system?.equipped?.carryType === "stowed";
+
 /** Any coins at all. */
 const anyCoins = coins => !!coins && ["pp", "gp", "sp", "cp"].some(k => (Number(coins[k]) || 0) > 0);
 
@@ -70,7 +73,8 @@ export async function takePf2eGoods(tokenDoc, goods = []) {
   }
   for ( const g of goods.filter(x => x?.kind === "item") ) {
     const item = actor.items.get(g.item?.id);
-    if ( !item || !PHYSICAL.has(item.type) ) continue;
+    // (Only what it carries put away: nothing held or worn changes hands, but off a fallen foe robbed.)
+    if ( !item || !PHYSICAL.has(item.type) || (g.how !== "loot" && !stowed(item)) ) continue;
     const have = Math.max(1, Number(item.system?.quantity ?? 1) || 1);
     const n = Math.max(1, Math.min(have, Number(g.count) || 1));
     const undo = emptyRecord(tokenDoc, actor);
@@ -153,7 +157,8 @@ export function pf2eSkillsOf(actor) {
 
 /**
  * What a character could hand over in a deal: its money (in copper; PF2e's coins, by what each is worth), and each thing
- * it carries that isn't coins or a container (its contents would go too), with how many and what each is worth (copper).
+ * it carries put away (stowed: never what it holds or wears) that isn't a container (its contents would go too), with
+ * how many and what each is worth (copper).
  */
 export function pf2eGiveables(actor) {
   const inventory = actor?.inventory;
@@ -161,7 +166,7 @@ export function pf2eGiveables(actor) {
   if ( !inventory ) return { money: 0, denominations, items: [] };
   const items = [];
   for ( const item of inventory.contents ?? [] ) {
-    if ( (item.isOfType?.("treasure") && item.isCurrency) || item.type === "backpack" || !(item.quantity > 0) ) continue;
+    if ( (item.isOfType?.("treasure") && item.isCurrency) || item.type === "backpack" || !(item.quantity > 0) || !stowed(item) ) continue;
     items.push({ id: item.id, name: item.name, img: item.img, quantity: item.quantity, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)) });
   }
   return { money: inventory.currency?.copperValue ?? 0, denominations, items };

@@ -637,12 +637,13 @@ export class Pf2eAdapter extends SystemAdapter {
     };
   }
 
-  /** Coins (in copper), and gear that could be handed over: stowed (not held or worn) and held. */
+  /** Coins (in copper), and gear that could be handed over: stowed (not held or worn), held, and worn. */
   #valuables(actor) {
     const inventory = actor.inventory;
     if ( !inventory ) return null;
     const stowed = [];
     const wielded = [];
+    const worn = [];
     for ( const item of inventory.contents ?? [] ) {
       if ( item.isOfType?.("treasure") && item.isCurrency ) continue;
       if ( item.type === "backpack" || !(item.quantity > 0) ) continue; // no containers (their contents would go too)
@@ -653,12 +654,14 @@ export class Pf2eAdapter extends SystemAdapter {
       const carry = item.system.equipped?.carryType;
       if ( carry === "held" ) wielded.push(entry);
       else if ( carry === "stowed" ) stowed.push(entry);
+      else if ( carry === "worn" ) worn.push(entry);
     }
     return {
       money: inventory.currency?.copperValue ?? 0,
       denominations: [{ label: coin("pp"), value: 1000 }, { label: coin("gp"), value: 100 }, { label: coin("sp"), value: 10 }, { label: coin("cp"), value: 1 }],
       stowed,
-      wielded
+      wielded,
+      worn
     };
   }
 
