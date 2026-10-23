@@ -129,13 +129,13 @@ export function pf2eGoodsOf(tokenDoc) {
 
 /**
  * PF2e's own loot pile on the ground: a loot actor (FastFighting's, so Rewind takes it away) and its token at x, y,
- * holding the goods. {tokenUuid, records}.
+ * holding the goods, named and looking as the core asks (a chest, a bag). {tokenUuid, records}.
  */
-export async function dropPf2eValuables(scene, { x, y }, goods, { name = "" } = {}) {
+export async function dropPf2eValuables(scene, { x, y }, goods, { name = "", img = null } = {}) {
   const pile = await Actor.create({
     name: name || t("DroppedGoods"),
     type: "loot",
-    img: "icons/containers/bags/sack-leather-brown.webp",
+    img: img || "icons/containers/bags/sack-leather-brown.webp",
     system: { lootSheetType: "Loot" },
     ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED },
     flags: { [MODULE_ID]: { pile: true } }
