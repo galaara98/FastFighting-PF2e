@@ -50,7 +50,7 @@ It finds features, feats and spells by slug, which stays the same in every langu
 
 **The map.** Speeds by movement type. A creature moves through a friend's or a fallen creature's space. Past a foe on its feet, it uses Tumble Through if trained in Acrobatics with at least even odds, and goes around otherwise. A Tiny creature or a swarm moves through others' spaces and may end its move in one. Doors are wooden (Hardness 5, 20 HP) with a simple lock: Force Open or Pick a Lock at DC 20.
 
-**Hazards.** A simple hazard fires once, a complex one each round on its Stealth initiative: its Strikes and what it does when set off, at whoever is in reach. With no alliance (PF2e's default for a hazard) it's against the party; the planner can change that.
+**Hazards.** A simple hazard fires once, a complex one each round on its Stealth initiative: its Strikes and what it does when set off, at whoever is in reach. With no alliance (PF2e's default for a hazard) it's against the Friendlies; the planner can change that.
 
 **Talking, theft and loot.** Languages (a constant tongues or truespeech understands everyone) and the Diplomacy, Intimidation, Deception, Will and Perception DCs for talking; Thievery against Perception DC for theft (Steal at −5 in combat). Coins and gear set what a creature can be talked out of, have stolen, or offer; PF2e's item types, precious materials and rarities set what a character can ask for.
 
@@ -96,7 +96,7 @@ For **Let this character decide**, PF2e's data answers the tactics questions whe
 
 ## Live battles
 
-Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stamina; dying, wounded, unconscious, prone and lingering conditions; persistent damage and afflictions (as effects, noting any onset to come); death, with lootable corpses or loot piles; spent slots, Focus Points, Hero Points and consumables; buffs and debuffs as their own Spell Effects, for the rounds they have; surrender and side changes (alliance and disposition: won over, the new side; talked out of the fight, Neutral; a neutral that turned on the party, Hostile); and coins and items handed over or stolen. A retreating PC stays on the map. A player's damage card at a creature FastFighting runs is applied, or put before the GM, through PF2e's own Apply Damage (resistances, shields, persistent damage, death at 0 HP). Reactions FastFighting rolls are PF2e's own Strikes, with their attack and damage cards in the chat; a critical Reactive Strike disrupts a manipulate action, and the player and GM are told.
+Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stamina; dying, wounded, unconscious, prone and lingering conditions; persistent damage and afflictions (as effects, noting any onset to come); death, with lootable corpses or loot piles; spent slots, Focus Points, Hero Points and consumables; buffs and debuffs as their own Spell Effects, for the rounds they have; surrender and side changes (alliance and disposition: won over, the new side; talked out of the fight, Neutral; a neutral that turned on the Friendlies, Hostile); and coins and items handed over or stolen. A retreating PC stays on the map. A player's damage card at a creature FastFighting runs is applied, or put before the GM, through PF2e's own Apply Damage (resistances, shields, persistent damage, death at 0 HP). Reactions FastFighting rolls are PF2e's own Strikes, with their attack and damage cards in the chat; a critical Reactive Strike disrupts a manipulate action, and the player and GM are told.
 
 ## Settings
 
