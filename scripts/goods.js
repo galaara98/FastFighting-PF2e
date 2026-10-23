@@ -149,6 +149,22 @@ export async function dropPf2eValuables(scene, { x, y }, goods, { name = "" } = 
   return { tokenUuid: token.uuid, records: [{ createdActors: [pile.uuid], createdTokens: [token.uuid] }] };
 }
 
+/**
+ * What a pile holds, for the core's engine (API 27: a thief's, a scavenger's, a hungry creature's to go for): its money
+ * (in copper) and each thing in it, coins and containers aside, with how many and what each is worth (copper). Whatever
+ * way it's carried: a pile's things are all there for the taking. {money, items: [{id, name, value, quantity}]}.
+ */
+export function pf2ePileContents(tokenDoc) {
+  const inventory = tokenDoc?.actor?.inventory;
+  if ( !inventory ) return null;
+  const items = [];
+  for ( const item of inventory.contents ?? [] ) {
+    if ( (item.isOfType?.("treasure") && item.isCurrency) || item.type === "backpack" || !(item.quantity > 0) ) continue;
+    items.push({ id: item.id, name: item.name, value: Math.round((item.assetValue?.copperValue ?? 0) / Math.max(1, item.quantity)), quantity: item.quantity });
+  }
+  return { money: inventory.currency?.copperValue ?? 0, items };
+}
+
 /** Its skills, for a player's deal: {key, label, mod, talk} (talk: the core's kind of pitch the skill makes, or null). */
 export function pf2eSkillsOf(actor) {
   const talk = { diplomacy: "persuade", deception: "deceive", intimidation: "intimidate" };

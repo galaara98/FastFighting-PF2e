@@ -11,7 +11,7 @@ import { derivePf2eTraits, creatureKindOf, animalisticOf, aptitudesOf } from "./
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName } from "./commit.js";
-import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables } from "./goods.js";
+import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables, pf2ePileContents } from "./goods.js";
 import { pf2eAppetite, pf2eMeatFor, pf2eIsFood } from "./food.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
@@ -1958,6 +1958,11 @@ export class Pf2eAdapter extends SystemAdapter {
   /** Whether a thing can be eaten. */
   isFood(item) {
     return pf2eIsFood(item);
+  }
+
+  /** What a pile holds, for the engine: its money and things, each with its worth. */
+  pileContents(tokenDoc) {
+    return pf2ePileContents(tokenDoc);
   }
 }
 

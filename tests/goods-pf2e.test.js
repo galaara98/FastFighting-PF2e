@@ -5,7 +5,7 @@
  * (no coins, no containers) and its skills, the talking ones marked.
  */
 import { beforeEach, describe, expect, test } from "vitest";
-import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, pf2eGiveables, pf2eSkillsOf, coinsFor } from "../scripts/goods.js";
+import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, pf2eGiveables, pf2eSkillsOf, pf2ePileContents, coinsFor } from "../scripts/goods.js";
 import { commitPf2eConcession } from "../scripts/commit.js";
 
 const clone = data => JSON.parse(JSON.stringify(data));
@@ -110,6 +110,17 @@ describe("putting goods on a sheet, and what a pile holds", () => {
     // (Nobody to have it: gone.)
     await commitPf2eConcession(giver, null, { kind: "item", item: { id: giver.actor.items[0].id } });
     expect(giver.actor.items[0].quantity).toBe(13);
+  });
+});
+
+describe("what a pile holds, for the engine", () => {
+  test("its money and every thing in it, however carried, with how many and each one's worth; not coins nor containers", () => {
+    const chest = sheet("chest", { copper: 357, items: [arrows, rope, pack] });
+    const held = pf2ePileContents(chest);
+    expect(held.money).toBe(357);
+    expect(held.items.map(i => [i.name, i.quantity, i.value])).toEqual([["Arrows", 20, 1], ["Rope", 1, 5]]);
+    expect(held.items.every(i => typeof i.id === "string")).toBe(true);
+    expect(pf2ePileContents(null)).toBeNull();
   });
 });
 
