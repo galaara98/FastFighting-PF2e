@@ -24,7 +24,6 @@ import { classActions, extraParts, strikeScore } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction, AID_SKILLS } from "./edges.js";
-import { loreBoost } from "./lore.js";
 import { escapeOf, IMPLIES } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
 import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, bonMot } from "./maneuvers.js";
@@ -413,8 +412,8 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /**
    * The same rules for the planner's background workers (the core's API 22): rules.js imports nothing of Foundry's, and
-   * reads no setting as it plays (the Lore-Collector's advantage, loreBoost, is read as the spec is built: its
-   * sizeUp.boost), so there's no data to give them.
+   * reads no setting as it plays (the Lore-Collector's advantage is the core's, on the spec's options), so there's no
+   * data to give them.
    */
   workerRules() {
     return { url: new URL("./rules.js", import.meta.url).href, exportName: "pf2eRules" };
@@ -610,7 +609,7 @@ export class Pf2eAdapter extends SystemAdapter {
     let best = null;
     for ( const [slug, s] of Object.entries(actor.skills ?? {}) ) {
       if ( !(RECALL_SKILLS.has(slug) || /-lore$/.test(slug)) || typeof s?.mod !== "number" ) continue;
-      if ( !best || s.mod > best.mod ) best = { mod: s.mod, label: game.i18n.localize("FFPF2E.RecallKnowledge"), boost: loreBoost() };
+      if ( !best || s.mod > best.mod ) best = { mod: s.mod, label: game.i18n.localize("FFPF2E.RecallKnowledge") };
     }
     return best ?? undefined;
   }
@@ -1926,9 +1925,16 @@ export class Pf2eAdapter extends SystemAdapter {
     return dropPf2eValuables(scene, at, goods, options);
   }
 
-  /** When a PF2e fight counts as a stalemate, in rounds: Max rounds' range, 6 to 16, and its default, 16 (API 28). */
-  stalemateRounds() {
-    return { min: 6, max: 16, default: 16 };
+  /**
+   * The core's settings as PF2e has them (API 28): a fight still going after 6 to 16 rounds is a stalemate (16 at
+   * first); and the Lore-Collector's advantage after Recall Knowledge, 2× at first, since it costs one action of three,
+   * in this module's words for it.
+   */
+  settingDefaults() {
+    return {
+      maxRounds: { min: 6, max: 16, default: 16 },
+      loreBoost: { default: 2, name: "FFPF2E.Settings.loreBoost.Name", hint: "FFPF2E.Settings.loreBoost.Hint" }
+    };
   }
 
   /** PF2e's main coin, the one prices are said in: gold (a team's purse in the planner). */

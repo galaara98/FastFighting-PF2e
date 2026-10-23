@@ -94,7 +94,7 @@ describe("this helper's rules for the planner's workers", () => {
     };
     walk(path.join(SCRIPTS, "rules.js"));
     const names = [...seen].map(f => path.basename(f)).sort();
-    for ( const foundrySide of ["adapter.js", "commit.js", "cards.js", "read-turn.js", "granted.js", "strike-roll.js", "check-roll.js", "action-roll.js", "table-cards.js", "ready.js", "ammo.js", "main.js", "lore.js"] ) {
+    for ( const foundrySide of ["adapter.js", "commit.js", "cards.js", "read-turn.js", "granted.js", "strike-roll.js", "check-roll.js", "action-roll.js", "table-cards.js", "ready.js", "ammo.js", "main.js"] ) {
       expect(names).not.toContain(foundrySide);
     }
   });

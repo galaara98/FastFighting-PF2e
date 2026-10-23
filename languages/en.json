@@ -18,8 +18,8 @@
     "RecallKnowledge": "Recall Knowledge",
     "Settings": {
       "loreBoost": {
-        "Name": "Lore-Collector advantage",
-        "Hint": "After a successful Recall Knowledge, how much likelier a Lore-Collector's rolls against that foe are to succeed for the rest of the turn. Default 2×."
+        "Name": "Lore-Collector advantage (×)",
+        "Hint": "After a successful Recall Knowledge, how much likelier a Lore-Collector's rolls against that foe are to succeed for the rest of the turn."
       }
     },
     "HeroPoint": "Hero Point",

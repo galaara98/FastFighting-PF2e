@@ -4,7 +4,7 @@
  * embeds).
  */
 import { afterEach, describe, expect, test } from "vitest";
-import { dyingOf, ferocityOf, resolvedText, selfOnlySpell } from "../scripts/adapter.js";
+import { Pf2eAdapter, dyingOf, ferocityOf, resolvedText, selfOnlySpell } from "../scripts/adapter.js";
 
 describe("its dying numbers, as PF2e works them out", () => {
   test("Diehard's dying 5 and Toughness's recovery DC 9; the doomed value PF2e took off goes back on", () => {
@@ -62,5 +62,14 @@ describe("working out an item's formulas", () => {
     expect(seen[0].options).toMatchObject({ rolls: false, embeds: false, documents: false, links: false, secrets: false, relativeTo: item });
     expect(seen[0].html).not.toMatch(/@UUID|@Embed/);
     expect(seen[0].html).toContain("Frightened");
+  });
+});
+
+describe("the core's settings as PF2e has them (API 28)", () => {
+  test("a stalemate after 6 to 16 rounds, 16 at first; the Lore-Collector's advantage 2×, in this module's words", () => {
+    expect(Pf2eAdapter.prototype.settingDefaults()).toEqual({
+      maxRounds: { min: 6, max: 16, default: 16 },
+      loreBoost: { default: 2, name: "FFPF2E.Settings.loreBoost.Name", hint: "FFPF2E.Settings.loreBoost.Hint" }
+    });
   });
 });

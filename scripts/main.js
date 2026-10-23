@@ -4,7 +4,6 @@
  * live battles) through the core's public API.
  */
 import { Pf2eAdapter } from "./adapter.js";
-import { registerLoreBoost } from "./lore.js";
 import { hideApply, hideApplyMenu } from "./cards.js";
 import { loadReading } from "./reading.js";
 
@@ -28,10 +27,18 @@ const KNOWN_TRANSLATIONS = {
 
 const MODULE_ID = "fast-fighting-pf2e";
 
-Hooks.once("init", () => {
-  // How much a Lore-Collector's sizing a foe up pays off (lore.js).
-  registerLoreBoost();
-});
+/**
+ * The Lore-Collector's advantage was this module's own setting (fast-fighting-pf2e.loreBoost) until the core's took
+ * its place (API 28): a value a GM set here goes to the core's, once, where the core's has none of its own yet.
+ */
+function moveLoreBoost() {
+  if ( !game.user.isGM ) return;
+  const world = game.settings.storage?.get?.("world");
+  const ours = world?.getSetting?.(`${MODULE_ID}.loreBoost`);
+  if ( !ours || world.getSetting("fast-fighting.loreBoost") ) return;
+  const value = Number(ours.value);
+  if ( Number.isFinite(value) ) game.settings.set("fast-fighting", "loreBoost", value);
+}
 
 // The damage cards FastFighting rolls and applies itself: no Apply on them, which would apply them again (cards.js).
 Hooks.on("renderChatMessageHTML", hideApply);
@@ -60,6 +67,7 @@ Hooks.once("fastFighting.init", api => {
 
 Hooks.once("ready", () => {
   if ( untested !== null && game.user.isGM ) ui.notifications.warn(game.i18n.format("FFPF2E.CoreUntested", { major: untested }));
+  moveLoreBoost();
   if ( !game.modules.get("fast-fighting")?.active && game.user.isGM ) {
     ui.notifications.warn(game.i18n.localize("FFPF2E.NeedsCore"));
   }
