@@ -100,7 +100,7 @@ Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stami
 
 ## Settings
 
-PF2e has no settings of its own. It gives two of FastFighting's their PF2e values: **Max rounds** runs from 6 to 16 and starts at 16, and **Lore-Collector advantage** (how much likelier a Lore-Collector's rolls against a foe are to succeed for the rest of the turn after a successful Recall Knowledge on it) starts at 2×, since Recall Knowledge costs one action of three.
+PF2e has no settings of its own. It gives two of FastFighting's their PF2e values: **Max rounds** runs from 6 to 16 and starts at 12, and **Lore-Collector advantage** (how much likelier a Lore-Collector's rolls against a foe are to succeed for the rest of the turn after a successful Recall Knowledge on it) starts at 2×, since Recall Knowledge costs one action of three.
 
 ## What isn't played
 

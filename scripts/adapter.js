@@ -1926,13 +1926,13 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
-   * The core's settings as PF2e has them (API 28): a fight still going after 6 to 16 rounds is a stalemate (16 at
+   * The core's settings as PF2e has them (API 28): a fight still going after 6 to 16 rounds is a stalemate (12 at
    * first); and the Lore-Collector's advantage after Recall Knowledge, 2× at first, since it costs one action of three,
    * in this module's words for it.
    */
   settingDefaults() {
     return {
-      maxRounds: { min: 6, max: 16, default: 16 },
+      maxRounds: { min: 6, max: 16, default: 12 },
       loreBoost: { default: 2, name: "FFPF2E.Settings.loreBoost.Name", hint: "FFPF2E.Settings.loreBoost.Hint" }
     };
   }

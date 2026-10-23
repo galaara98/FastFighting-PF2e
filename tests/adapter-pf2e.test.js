@@ -66,9 +66,9 @@ describe("working out an item's formulas", () => {
 });
 
 describe("the core's settings as PF2e has them (API 28)", () => {
-  test("a stalemate after 6 to 16 rounds, 16 at first; the Lore-Collector's advantage 2×, in this module's words", () => {
+  test("a stalemate after 6 to 16 rounds, 12 at first; the Lore-Collector's advantage 2×, in this module's words", () => {
     expect(Pf2eAdapter.prototype.settingDefaults()).toEqual({
-      maxRounds: { min: 6, max: 16, default: 16 },
+      maxRounds: { min: 6, max: 16, default: 12 },
       loreBoost: { default: 2, name: "FFPF2E.Settings.loreBoost.Name", hint: "FFPF2E.Settings.loreBoost.Hint" }
     });
   });
