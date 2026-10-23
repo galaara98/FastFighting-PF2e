@@ -94,7 +94,7 @@ When FastFighting sets a character up by itself, PF2e suggests playstyles by cla
 
 For **Let this character decide**, PF2e's data answers the tactics questions where it says something, and shows the GM each reason in the system's own words. A warpriest fights in front, a gunslinger's way sets how it fights, a champion or guardian protects its friends, a commander picks the most dangerous foe, a summoned creature spends everything, a devil talks first and lets you pass for a price, and a merchant buys its way out with a tenth of its coin. Where the data says nothing, the core's reading stands.
 
-## Do it For Real Now
+## Live battles
 
 Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stamina; dying, wounded, unconscious, prone and lingering conditions; persistent damage and afflictions (as effects, noting any onset to come); death, with lootable corpses or loot piles; spent slots, Focus Points, Hero Points and consumables; buffs and debuffs as their own Spell Effects, for the rounds they have; surrender and side changes (alliance and disposition: won over, the new side; talked out of the fight, Neutral; a neutral that turned on the party, Hostile); and coins and items handed over or stolen. A retreating PC stays on the map. A player's damage card at a creature FastFighting runs is applied, or put before the GM, through PF2e's own Apply Damage (resistances, shields, persistent damage, death at 0 HP). Reactions FastFighting rolls are PF2e's own Strikes, with their attack and damage cards in the chat; a critical Reactive Strike disrupts a manipulate action, and the player and GM are told.
 
