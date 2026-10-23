@@ -12,6 +12,7 @@ import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
 import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName } from "./commit.js";
 import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables } from "./goods.js";
+import { pf2eAppetite, pf2eMeatFor, pf2eIsFood } from "./food.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
 import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
@@ -1938,6 +1939,25 @@ export class Pf2eAdapter extends SystemAdapter {
   /** What a character could hand over in a deal. */
   giveables(actor) {
     return pf2eGiveables(actor);
+  }
+
+  /* -------------------------------------------- */
+  /*  Food (API 27: food.js)                      */
+  /* -------------------------------------------- */
+
+  /** What it eats, and how likely it comes to a fight hungry. */
+  appetite(actor) {
+    return pf2eAppetite(actor);
+  }
+
+  /** What its body leaves when it dies. */
+  meatFor(actor) {
+    return pf2eMeatFor(actor);
+  }
+
+  /** Whether a thing can be eaten. */
+  isFood(item) {
+    return pf2eIsFood(item);
   }
 }
 

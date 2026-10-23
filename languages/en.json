@@ -11,6 +11,8 @@
     "Remains": "Remains of {name}",
     "RemainsUnnamed": "Remains",
     "DroppedGoods": "Dropped goods",
+    "Meat": "Uncooked meat",
+    "MeatHint": "Meat from a fresh kill, raw. A hungry creature may well want it.",
     "HeroPoints": "Hero Points",
     "Aid": "Aid",
     "RecallKnowledge": "Recall Knowledge",

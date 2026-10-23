@@ -629,6 +629,8 @@ async function handleLoot(tokenDoc, actor, options, undo) {
     img: "icons/containers/bags/sack-leather-brown.webp",
     system: { lootSheetType: "Loot" },
     ownership: { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED },
+    // (FastFighting's: a Rewind takes it away with its token, and no battle takes it for a creature.)
+    flags: { [MODULE_ID]: { pile: true } },
     items
   });
   undo.createdActors.push(pileActor.uuid);
