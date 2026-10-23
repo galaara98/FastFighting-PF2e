@@ -1926,6 +1926,11 @@ export class Pf2eAdapter extends SystemAdapter {
     return dropPf2eValuables(scene, at, goods, options);
   }
 
+  /** When a PF2e fight counts as a stalemate, in rounds: Max rounds' range, 6 to 16, and its default, 16 (API 28). */
+  stalemateRounds() {
+    return { min: 6, max: 16, default: 16 };
+  }
+
   /** PF2e's main coin, the one prices are said in: gold (a team's purse in the planner). */
   mainCoin() {
     return { key: "gp", label: coin("gp"), value: 100 };
