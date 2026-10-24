@@ -124,7 +124,7 @@ async function damageOf(actor, roll, times = 1) {
  *                                 id, where it's found, records: the undo record of its ammunition, readied and spent,
  *                                 where it took any}; or null (the engine rolls it), {records} where it readied some
  */
-export async function rollPf2eStrike(token, { action, target, attackNumber = 0, secret = false } = {}) {
+export async function rollPf2eStrike(token, { action, target, attackNumber = 0, secret = false, pulled = false } = {}) {
   const actor = token?.actor;
   const map = Math.max(0, Math.min(2, Math.floor(Number(attackNumber) || 0)));
   const spell = spellAttackFor(actor, action?.id);
@@ -135,7 +135,9 @@ export async function rollPf2eStrike(token, { action, target, attackNumber = 0, 
   // (Its ammunition, as the sheet had it: readied as a player would, and spent by PF2e's Strike as it rolls.)
   const before = ammoOf(actor, strike.item) ? ammoState(actor, strike.item) : null;
   if ( before && await readyAmmo(actor, strike.item) ) strike = strikeFor(actor, action?.id) ?? strike;
-  const rolled = await variantOf(strike)?.roll?.({ event: click("showCheckDialogs", secret), target: asTarget(target) });
+  // (Struck to knock out, with a weapon that isn't nonlethal: PF2e's -2, on its own roll, core API 31.)
+  const modifiers = pulled && !(strike.item?.system?.traits?.value ?? []).includes("nonlethal") ? [nonlethalPenalty()] : [];
+  const rolled = await variantOf(strike)?.roll?.({ event: click("showCheckDialogs", secret), target: asTarget(target), ...(modifiers.length ? { modifiers } : {}) });
   const undo = before ? ammoUndo(token, actor, before) : null;
   const records = undo ? { records: [undo] } : {};
   const attack = attackOf(rolled);
@@ -144,6 +146,12 @@ export async function rollPf2eStrike(token, { action, target, attackNumber = 0, 
   if ( attack.degree < 2 || typeof strike[kind] !== "function" ) return { attack, damage: null, ...records };
   const checkContext = attackContext(actor, target);
   return { attack, ...(await damageOf(actor, () => strike[kind]({ event: click("showDamageDialogs", secret), target: asTarget(target), mapIncreases: map, checkContext }))), ...records };
+}
+
+/** The -2 circumstance penalty for a nonlethal Strike with a lethal weapon, named as PF2e names the trait. */
+function nonlethalPenalty() {
+  const label = game.i18n.has("PF2E.TraitNonlethal") ? game.i18n.localize("PF2E.TraitNonlethal") : game.i18n.localize("FFPF2E.Nonlethal");
+  return new game.pf2e.Modifier({ slug: "fast-fighting-nonlethal", label, modifier: -2, type: "circumstance" });
 }
 
 /**

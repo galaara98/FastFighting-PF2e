@@ -26,7 +26,7 @@ describe("keeping a low profile", () => {
 });
 
 describe("the fallen", () => {
-  test("one who spares the fallen knocks a foe out with a nonlethal attack (fists), not with a sword", () => {
+  test("one who spares the fallen knocks a foe out with any Strike, as PF2e lets it (a sword's at -2)", () => {
     const fate = (behavior, weapon) => {
       const monk = creature({ id: "monk", behavior, actions: [weapon] });
       const thug = creature({ id: "thug", side: "hostile", hp: { value: 4, max: 4 }, defenses: { ac: 5, fortitude: 0, reflex: 0, will: 0 }, flags: { fearless: true }, actions: [strike({ bonus: -20 })] });
@@ -36,7 +36,12 @@ describe("the fallen", () => {
     const sword = strike({ id: "sword", bonus: 30, damage: [parseFormula("20", "slashing")] });
     expect(fate({ spareDowned: 1 }, fist)).toBe(STATUS.DOWN);
     expect(fate({}, fist)).toBe(STATUS.DEAD);
-    expect(fate({ spareDowned: 1 }, sword)).toBe(STATUS.DEAD);
+    expect(fate({ spareDowned: 1 }, sword)).toBe(STATUS.DOWN);
+    expect(fate({}, sword)).toBe(STATUS.DEAD);
+    // (What pulling costs: a sword -2, fists nothing.)
+    expect(pf2eRules.pullPenalty({}, sword)).toBe(-2);
+    expect(pf2eRules.pullPenalty({}, fist)).toBe(0);
+    expect(pf2eRules.pullsBlow({}, { kind: "save", traits: [] })).toBe(false);
   });
 });
 

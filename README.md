@@ -84,7 +84,7 @@ Every perk a playstyle or tactics answer can switch on works here. Most play as 
 | Thief | **Steal** (Thievery, −5 in combat). |
 | Trap avoiders | Hazards, and any token the GM marks as one. |
 | Finishing the fallen (Cruel) | A blow on a dying creature raises its dying value. |
-| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | A **nonlethal** attack that would kill knocks out instead. |
+| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Its Strikes are nonlethal (a lethal weapon at −2), so a blow that would kill knocks out instead. |
 | Mending, healing, rescue | Healing spells, potions, elixirs, Battle Medicine; **Administer First Aid** for the dying, in the fight and after. |
 | Locked doors | Force Open and Pick a Lock. |
 
@@ -102,6 +102,8 @@ Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stami
 
 A creature that dies leaves its corpse with its gear: a **Fresh Corpse** (equipment, a creature's Bulk; food for the hungry, 1 to 32 portions by size), a **Rotten Corpse** for the undead, or a **Scrap Corpse** for one with the metal, clockwork or robot trait. Incorporeal creatures, oozes, plants, fungi, swarms, elementals and other constructs leave none.
 
+A creature that wants to avoid killing (its answer to Foes who fall) makes its Strikes nonlethal: a lethal weapon at −2, shown on PF2e's own roll as Nonlethal; fists and nonlethal weapons, which it reaches for first, at no cost. A foe it drops is knocked out. A spell without the nonlethal trait kills as usual.
+
 ## Settings
 
 PF2e has no settings of its own. It sets two of the core's: **Max rounds** (6 to 16, 12 at first) and **Lore-Collector advantage** (2× at first, since Recall Knowledge costs one action of three).
@@ -110,7 +112,6 @@ PF2e has no settings of its own. It sets two of the core's: **Max rounds** (6 to
 
 - A hazard doesn't move or think, nobody attacks it, and it doesn't keep its side in the fight.
 - Abilities whose Requirements line FastFighting can't read, and Hunt Prey's own action.
-- The −2 for making a lethal weapon nonlethal.
 - Swallow Whole and Engulf: holding one's breath, the engulfer's own move, a successful save's push aside, and several friends' actions added up at a corpse.
 - Grab and its kin: the body part holding a foe is still free to strike, and a grabbing creature moving away keeping its hold.
 - Skill actions: a failed Grapple releasing a foe already held, a critically failed Feint, Feint's off-guard applying only to melee, Disarm's −2 ending when the foe's turn starts, a weapon's shove, trip or disarm trait standing in for a free hand, the Stride after a Shove, and Demoralize's −4 against a foe without a shared language.

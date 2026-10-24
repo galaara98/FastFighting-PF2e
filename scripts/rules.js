@@ -246,9 +246,16 @@ export const pf2eRules = {
     }).map(u => u.id);
     return { stealthSides: [...new Set(sneaking.map(u => u.side))], hidden };
   },
-  /** A nonlethal attack (fists, a sap; the rules' -2 for a lethal weapon isn't played) knocks a foe out instead. */
+  /**
+   * A blow that can be made nonlethal, knocking a foe out instead: any Strike (a nonlethal weapon's as it is; a lethal
+   * one's at the rules' -2: pullPenalty), or anything else with the nonlethal trait. A spell without it kills.
+   */
   pullsBlow(u, action) {
-    return (action?.traits ?? []).includes("nonlethal");
+    return action?.kind === "strike" || (action?.traits ?? []).includes("nonlethal");
+  },
+  /** A pulled blow's cost (core API 31): a Strike without the nonlethal trait at -2; fists, a sap, nothing. */
+  pullPenalty(u, action) {
+    return action?.kind === "strike" && !(action.traits ?? []).includes("nonlethal") ? -2 : 0;
   },
   /** Three actions; a minion (a summoned creature) two, when its summoner Sustains it. */
   turn(u) {
