@@ -20,7 +20,7 @@ It finds features, feats and spells by slug, which stays the same in every langu
 
 **Maneuvers.** PF2e's skill actions are the core's maneuvers, with PF2e's results by degree: Trip, Grapple, Disarm, Shove and Reposition (Athletics), Feint (Deception) and Demoralize (Intimidation, once per foe), each against the DC the rules name. Trip, for example, rolls against Reflex DC: prone, plus 1d6 bludgeoning on a critical success, and a critical failure lands you prone. The Athletics ones are attacks, so they need a free hand and a target no more than one size larger. Only the trained try the Athletics maneuvers and Feint. Bon Mot is there for those with the feat. A creature's Grab, Knockdown, Push and Pull follow the Monster Core: an action straight after a hit with the Strike that lists them, a Grapple, Trip, Shove or Reposition toward it with its Athletics, no multiple attack penalty, and as far as the ability says. The Improved ones are free, at once. Grab can instead keep hold of a creature it already holds.
 
-**Edges.** Aid and Recall Knowledge are the core's ways to gain an edge. Aid is Prepare to Aid, then the reaction: a DC 15 check with the helper's best Strike or Diplomacy, Medicine, Intimidation or Deception, for +1 to a friend's next roll (+2 to +4 on a critical success, by rank; −1 on a critical failure). Aiding a Strike takes standing beside the foe. Recall Knowledge is how a Lore-Collector sizes up a foe: its best knowledge skill or Lore against the DC for the foe's level. On a success, its rolls against that foe are likelier to succeed for the rest of the turn (see Settings). A spell good for one roll (Guidance, Sure Strike) is spent by that roll.
+**Edges.** Aid and Recall Knowledge are the core's ways to gain an edge. Aid is Prepare to Aid, then the reaction: a DC 15 check with the helper's best Strike or Diplomacy, Medicine, Intimidation or Deception, for +1 to a friend's next roll (+2 to +4 on a critical success, by rank; −1 on a critical failure). Aiding a Strike takes standing beside the foe. Recall Knowledge is how a Lore-Collector sizes up a foe: its best knowledge skill or Lore against the DC for the foe's level. On a success, its rolls against foes of that kind are likelier to succeed for the rest of the turn (see Settings), and +1 after. A spell good for one roll (Guidance, Sure Strike) is spent by that roll.
 
 **Buffs and debuffs** come from the Spell Effect a spell links, read through its rule elements, so they give the numbers PF2e would, heightening included: Bless or Heroism on friends, Bane on foes who fail the save, Dirge of Doom's frightened aura. An action that puts an effect on its user reads the same way: Rage gives +2 to melee Strike damage and temporary HP of level + Constitution, and stays on after the fight for the time it has left. Spell Effects already on a creature count through PF2e's own totals.
 
@@ -100,15 +100,15 @@ Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stami
 
 ## Settings
 
-PF2e has no settings of its own. It gives two of FastFighting's their PF2e values: **Max rounds** runs from 6 to 16 and starts at 12, and **Lore-Collector advantage** (how much likelier a Lore-Collector's rolls against a foe are to succeed for the rest of the turn after a successful Recall Knowledge on it) starts at 2×, since Recall Knowledge costs one action of three.
+PF2e has no settings of its own. It sets two of the core's: **Max rounds** (6 to 16, 12 at first) and **Lore-Collector advantage** (2× at first, since Recall Knowledge costs one action of three).
 
 ## What isn't played
 
 - A hazard doesn't move or think, nobody attacks it, and it doesn't keep its side in the fight.
-- Abilities that need something first (Requirements), and Hunt Prey's own action.
+- Abilities whose Requirements line FastFighting can't read, and Hunt Prey's own action.
 - The −2 for making a lethal weapon nonlethal.
 - Swallow Whole and Engulf: holding one's breath, the engulfer's own move, a successful save's push aside, and several friends' actions added up at a corpse.
-- Grab and its kin: the body part holding a foe is still free to strike, Grab kept up on any foe the creature holds, and a grabbing creature moving away keeping its hold.
+- Grab and its kin: the body part holding a foe is still free to strike, and a grabbing creature moving away keeping its hold.
 - Skill actions: a failed Grapple releasing a foe already held, a critically failed Feint, Feint's off-guard applying only to melee, Disarm's −2 ending when the foe's turn starts, a weapon's shove, trip or disarm trait standing in for a free hand, the Stride after a Shove, and Demoralize's −4 against a foe without a shared language.
 - The 5-foot Stride after a critical success on an Escape, and the bleed a critically failed Administer First Aid causes.
 
