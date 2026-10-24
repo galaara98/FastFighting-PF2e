@@ -6,7 +6,6 @@
 import { Pf2eAdapter } from "./adapter.js";
 import { hideApply, hideApplyMenu } from "./cards.js";
 import { loadReading } from "./reading.js";
-import { moveLoreBoost } from "./lore-move.js";
 
 /**
  * The core API majors this helper is known to work with (the core's api.major). Its own call: the core never refuses a
@@ -56,7 +55,6 @@ Hooks.once("fastFighting.init", api => {
 
 Hooks.once("ready", () => {
   if ( untested !== null && game.user.isGM ) ui.notifications.warn(game.i18n.format("FFPF2E.CoreUntested", { major: untested }));
-  moveLoreBoost();
   if ( !game.modules.get("fast-fighting")?.active && game.user.isGM ) {
     ui.notifications.warn(game.i18n.localize("FFPF2E.NeedsCore"));
   }
