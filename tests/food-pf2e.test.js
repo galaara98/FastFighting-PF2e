@@ -3,7 +3,7 @@
  * the meat a body leaves, by size, none from a body of no flesh; and what counts as food.
  */
 import { describe, expect, test } from "vitest";
-import { pf2eAppetite, pf2eMeatFor, pf2eIsFood, HUNGER, MEAT_ICON } from "../scripts/food.js";
+import { pf2eAppetite, pf2eMeatFor, pf2eIsFood, pf2eCorpseKind, CORPSES, HUNGER, MEAT_ICON } from "../scripts/food.js";
 
 const creature = (traits = [], { size = "med", strikes = [], type = "npc" } = {}) => ({
   type, system: { traits: { value: traits, size: { value: size } } }, itemTypes: { melee: strikes.map(slug => ({ slug })) }
@@ -23,22 +23,39 @@ describe("what it eats", () => {
   });
 });
 
-describe("the meat a body leaves", () => {
-  test("by size, as our own uncooked meat, marked as meat", () => {
+describe("the corpse a body leaves", () => {
+  test("a Fresh Corpse: one item, equipment, a creature's Bulk, its portions by size, food", () => {
     const meat = pf2eMeatFor(creature(["animal"], { size: "lg" }));
     expect(meat.quantity).toBe(8);
-    expect(meat.item).toMatchObject({ type: "consumable", img: MEAT_ICON, system: { category: "other", quantity: 8 }, flags: { "fast-fighting": { food: "meat" } } });
+    expect(meat.item).toMatchObject({ type: "equipment", img: MEAT_ICON, system: { quantity: 1, bulk: { value: 12 } }, flags: { "fast-fighting": { corpse: "fresh", food: "meat", portions: 8 } } });
     expect(pf2eMeatFor(creature(["humanoid"], { size: "tiny" })).quantity).toBe(1);
     expect(pf2eMeatFor(creature(["dragon"], { size: "grg" })).quantity).toBe(32);
+    expect(pf2eIsFood(meat.item)).toEqual({ portions: 8, meat: true });
   });
 
-  test("none from a body of no flesh", () => {
-    for ( const t of ["construct", "elemental", "incorporeal", "ooze", "plant", "fungus", "undead", "swarm"] ) expect(pf2eMeatFor(creature([t]))).toBeNull();
+  test("an undead's a Rotten Corpse, a body of metal or a machine's a Scrap Corpse: never food", () => {
+    for ( const [traits, kind] of [[["undead"], "rotten"], [["undead", "mindless"], "rotten"], [["construct", "clockwork"], "scrap"], [["metal", "elemental"], "scrap"], [["robot"], "scrap"]] ) {
+      const corpse = pf2eMeatFor(creature(traits));
+      expect(pf2eCorpseKind(creature(traits))).toBe(kind);
+      expect(corpse.quantity).toBe(0);
+      expect(corpse.item).toMatchObject({ type: "equipment", img: CORPSES[kind].img, flags: { "fast-fighting": { corpse: kind } } });
+      expect(corpse.item.flags["fast-fighting"].food).toBeUndefined();
+      expect(pf2eIsFood(corpse.item)).toBeNull();
+    }
+  });
+
+  test("none from another body of no flesh, nor an incorporeal undead", () => {
+    for ( const t of ["construct", "elemental", "incorporeal", "ooze", "plant", "fungus", "swarm"] ) expect(pf2eMeatFor(creature([t]))).toBeNull();
+    expect(pf2eMeatFor(creature(["undead", "incorporeal"]))).toBeNull();
+  });
+
+  test("a fresh corpse eaten to its last portion is no food", () => {
+    expect(pf2eIsFood({ system: { quantity: 1 }, flags: { "fast-fighting": { corpse: "fresh", food: "meat", portions: 0 } } })).toBeNull();
   });
 });
 
 describe("what counts as food", () => {
-  test("our meat, rations, alchemical food: as many portions as there are", () => {
+  test("the meat of before, rations, alchemical food: as many portions as there are", () => {
     expect(pf2eIsFood({ system: { quantity: 3 }, flags: { "fast-fighting": { food: "meat" } } })).toEqual({ portions: 3, meat: true });
     expect(pf2eIsFood({ system: { slug: "rations", quantity: 2 } })).toEqual({ portions: 2, meat: false });
     expect(pf2eIsFood({ system: { quantity: 1, traits: { otherTags: ["alchemical-food"] } } })).toEqual({ portions: 1, meat: false });
