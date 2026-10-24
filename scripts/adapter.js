@@ -1937,6 +1937,12 @@ export class Pf2eAdapter extends SystemAdapter {
     };
   }
 
+  /** PF2e's own parties (its party actors' members): on the Friendly Team (core API 29). */
+  partyMembers() {
+    const parties = globalThis.game?.actors?.filter?.(a => a.type === "party") ?? [];
+    return parties.flatMap(p => [...(p.members ?? [])].map(m => m?.id)).filter(Boolean);
+  }
+
   /** PF2e's main coin, the one prices are said in: gold (a team's purse in the planner). */
   mainCoin() {
     return { key: "gp", label: coin("gp"), value: 100 };
