@@ -73,6 +73,10 @@ const CHECK_ON = Object.freeze({ theft: "dex", talk: "mind", goad: "mind", first
 const MANEUVER_ON = Object.freeze({ trip: "str", grapple: "str", disarm: "str", shove: "str", reposition: "str", drag: "str", demoralize: "mind", feint: "mind", distract: "mind", hide: "dex" });
 const checkOn = (purpose, action) => CHECK_ON[purpose] ?? MANEUVER_ON[action?.maneuver] ?? null;
 
+/** GM Core's simple DCs and DC adjustments (hearDC). */
+const SIMPLE_DC = Object.freeze({ untrained: 10, trained: 15, expert: 20, master: 30, legendary: 40 });
+const ADJUST = Object.freeze({ hard: 2, veryHard: 5, incrediblyHard: 10 });
+
 /** A potion or an elixir, drunk (a consumable's heal, PF2e's: the adapter's itemId on a heal of its own): what one sickened can't. */
 const ingested = action => action?.kind === "heal" && !!action.itemId && !!action.selfOnly;
 
@@ -547,6 +551,19 @@ export const pf2eRules = {
   },
   fallProne: true,
 
+  /**
+   * Hearing a fight, or only talk (core API 32): GM Core's simple DCs and DC adjustments. The din of a fight is an
+   * untrained DC (10), raised voices a trained one (15); hard (+2) past 30 feet, very hard (+5) past 60, incredibly hard
+   * (+10) past 120; a wall very hard (+5), two incredibly hard (+10), more not heard at all. Talk doesn't carry through
+   * a wall. The notice check leaves level out (modifiers.check), so these hold at any level.
+   */
+  hearDC({ feet, walls = 0, talk = false }) {
+    if ( walls > (talk ? 0 : 2) ) return null;
+    const far = feet <= 30 ? 0 : feet <= 60 ? ADJUST.hard : feet <= 120 ? ADJUST.veryHard : ADJUST.incrediblyHard;
+    const muffled = [0, ADJUST.veryHard, ADJUST.incrediblyHard][walls];
+    return (talk ? SIMPLE_DC.trained : SIMPLE_DC.untrained) + far + muffled;
+  },
+
   /** A wooden door (Hardness 5, 20 HP), a simple lock (DC 20 to Force Open or Pick a Lock). */
   door: { ac: 10, hp: 20, hardness: 5, forceDC: 20, pickDC: 20 },
   /** Opening a door is an Interact action; Force Open one action; Pick a Lock two. */
@@ -769,7 +786,9 @@ export const pf2eRules = {
      */
     check({ unit, purpose, action } = {}) {
       const on = checkOn(purpose, action);
-      return { bonus: unit ? 0 - statusPenalty(unit, "skill", ...(on ? [on] : [])) : 0, advantage: 0 };
+      // (Noticing a fight from afar, against hearDC's simple DCs: Perception without its level.)
+      const level = purpose === "notice" ? Math.max(0, Number(unit?.spec?.level) || 0) : 0;
+      return { bonus: (unit ? 0 - statusPenalty(unit, "skill", ...(on ? [on] : [])) : 0) - level, advantage: 0 };
     },
     /** Steal in combat: -5 to the Thievery check. */
     steal() {

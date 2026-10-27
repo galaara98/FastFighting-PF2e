@@ -57,6 +57,19 @@ describe("minions", () => {
   });
 });
 
+describe("hearing a fight", () => {
+  test("simple DCs and adjustments; talk stops at a wall; the notice check leaves level out", () => {
+    expect(pf2eRules.hearDC({ feet: 20, walls: 0 })).toBe(10);
+    expect(pf2eRules.hearDC({ feet: 65, walls: 2 })).toBe(25);
+    expect(pf2eRules.hearDC({ feet: 200, walls: 3 })).toBe(null);
+    expect(pf2eRules.hearDC({ feet: 50, walls: 0, talk: true })).toBe(17);
+    expect(pf2eRules.hearDC({ feet: 10, walls: 1, talk: true })).toBe(null);
+    const u = { spec: { level: 17 }, conds: {} };
+    expect(pf2eRules.modifiers.check({ unit: u, purpose: "notice" }).bonus).toBe(-17);
+    expect(pf2eRules.modifiers.check({ unit: u, purpose: "seek" }).bonus).toBe(0);
+  });
+});
+
 describe("Disarm", () => {
   test("only a weapon in hand can be knocked away: claws and jaws can't", () => {
     const disarm = { kind: "control", disarm: true, traits: ["attack"], onHit: [null, null, { mods: { attack: -2 }, rounds: 1 }, { mods: { attack: -2, actions: -1 }, rounds: 1 }] };
