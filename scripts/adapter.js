@@ -10,7 +10,7 @@ import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf, animalisticOf, aptitudesOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName, preparedIn } from "./commit.js";
 import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables, pf2ePileContents } from "./goods.js";
 import { pf2eAppetite, pf2eMeatFor, pf2eIsFood } from "./food.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
@@ -958,7 +958,7 @@ export class Pf2eAdapter extends SystemAdapter {
           let count = 0;
           for ( const [key, slot] of Object.entries(entry.system.slots ?? {}) ) {
             if ( key === "slot0" ) continue;
-            count += (slot.prepared ?? []).filter(p => p.id === spell.id && !p.expended).length;
+            count += preparedIn(slot).filter(p => p.id === spell.id && !p.expended).length;
           }
           if ( !count ) continue;
           resource = `prep:${entry.id}:${spell.id}`;
@@ -1734,7 +1734,7 @@ export class Pf2eAdapter extends SystemAdapter {
     if ( kind === "prep" ) {
       let count = 0;
       for ( const [slotKey, slot] of Object.entries(item?.system?.slots ?? {}) ) {
-        if ( slotKey !== "slot0" ) count += (slot.prepared ?? []).filter(p => p.id === more && !p.expended).length;
+        if ( slotKey !== "slot0" ) count += preparedIn(slot).filter(p => p.id === more && !p.expended).length;
       }
       return count;
     }

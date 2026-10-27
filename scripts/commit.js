@@ -355,6 +355,9 @@ async function liftSpellEffect(actor, e, undo) {
   }
 }
 
+/** A slot's prepared spells, as a list: pf2e keeps them as an array, or (as saved in some worlds) an object by index. */
+export const preparedIn = slot => Object.values(slot?.prepared ?? {}).filter(Boolean);
+
 async function commitSpellsAndItems(actor, spec, final, undo) {
   const entryUpdates = new Map();
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
@@ -369,7 +372,7 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
       let remaining = used;
       for ( const [slotKey, slot] of Object.entries(slots) ) {
         if ( slotKey === "slot0" ) continue;
-        for ( const p of slot.prepared ?? [] ) {
+        for ( const p of preparedIn(slot) ) {
           if ( remaining > 0 && p.id === b && !p.expended ) { p.expended = true; remaining -= 1; }
         }
       }

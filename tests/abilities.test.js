@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { abilityAction, checkParams, damageIn, templateIn, cooldownIn, areaFoes, saveIn, selectiveIn } from "../scripts/abilities.js";
 import { readFileSync } from "node:fs";
+import { setReading } from "../scripts/reading.js";
+
+// (The wordings it reads by: reading/en.json.)
+setReading(JSON.parse(readFileSync(new URL("../reading/en.json", import.meta.url), "utf8")));
 
 const dice = parts => parts.map(p => `${p.dice.map(d => `${d.n}d${d.faces}`).join("+")}${p.flat ? `+${p.flat}` : ""} ${p.persistent ? "persistent " : ""}${p.type}`);
 
@@ -26,6 +30,10 @@ describe("reading a creature's abilities", () => {
     expect(areaFoes({ shape: "burst", feet: 20 })).toBe(4);
     expect(cooldownIn("<p>It can't use Breath Weapon again for 1d4 rounds.</p>")).toEqual({ n: 1, faces: 4 });
     expect(cooldownIn("<p>It can’t use Spray again for 2 rounds.</p>")).toEqual({ n: 2, faces: 1 });
+    // (The older wording: "once every 1d4 rounds", its roll inline.)
+    expect(cooldownIn("<p>It can use this ability once every [[/gmr 1d4 #Recharge Frost Blast]]{1d4 rounds}.</p>")).toEqual({ n: 1, faces: 4 });
+    expect(cooldownIn("<p>It can use this once every 3 rounds.</p>")).toEqual({ n: 3, faces: 1 });
+    expect(cooldownIn("<p>It can use this once every 1d4 rounds.</p>", {})).toBe(null); // (no wordings: nothing read)
   });
 
   test("a breath weapon: a save for half, an area from the creature, waiting 1d4 rounds before the next", () => {

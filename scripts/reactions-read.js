@@ -409,7 +409,7 @@ export function readReaction({ id, label, html, actionType, frequency = null, tr
   // (Its effects that need someone to land on: on its own blow, the one it hit; a strike on a slain creature's way down
   // or at a caster, the one who set it off, as the core plays them.)
   const often = Number(frequency?.max);
-  if ( cooldownIn(text) ) r.uses = 1;
+  if ( cooldownIn(text, o.reading ?? undefined) ) r.uses = 1;
   else if ( often > 0 ) r.uses = often;
   return r;
 }

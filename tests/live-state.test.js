@@ -4,6 +4,7 @@
  */
 import { describe, expect, test } from "vitest";
 import { Pf2eAdapter } from "../scripts/adapter.js";
+import { preparedIn } from "../scripts/commit.js";
 
 const collection = list => Object.assign(list, { get: id => list.find(i => i.id === id) });
 const actorOf = (over = {}) => ({
@@ -58,5 +59,14 @@ describe("a sheet mid-fight", () => {
     expect((await read(actor, keys)).resources).toEqual({
       fate: 2, focus: 1, "item:potion": 2, "item:bomb": 3, "item:spent": 0, "item:gone": 0, "prep:arcane:missile": 2, "prep:arcane:fear": 1, "slots:arcane:2": 3
     });
+  });
+
+  test("prepared spells kept as an object by index (as some worlds save them) count as a list does", async () => {
+    const entry = { id: "arcane", type: "spellcastingEntry", system: { slots: { slot3: { prepared: { 0: { id: "fireball" }, 1: { id: "fireball", expended: true }, 2: { id: "haste" } } } } } };
+    const actor = actorOf({ items: collection([entry]) });
+    expect((await read(actor, { "prep:arcane:fireball": 1, "prep:arcane:haste": 1 })).resources).toEqual({ "prep:arcane:fireball": 1, "prep:arcane:haste": 1 });
+    expect(preparedIn(entry.system.slots.slot3).map(p => p.id)).toEqual(["fireball", "fireball", "haste"]);
+    expect(preparedIn({ prepared: [{ id: "a" }] })).toEqual([{ id: "a" }]);
+    expect(preparedIn({})).toEqual([]);
   });
 });

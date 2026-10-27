@@ -105,13 +105,24 @@ export function areaFoes({ shape, feet }) {
   return clamp(feet / 7 + 1, 2, 8); // burst, emanation
 }
 
-/** "Can't use Breath Weapon again for 1d4 rounds": {n, faces}; a fixed wait ("for 1 round") as so many d1. */
-export function cooldownIn(html) {
+/**
+ * "Can't use Breath Weapon again for 1d4 rounds", "once every 1d4 rounds": {n, faces}; a fixed wait ("for 1 round") as
+ * so many d1. The wordings are reading/<lang>.json's `cooldown` (named groups n and faces, or rounds).
+ */
+export function cooldownIn(html, words = currentReading()) {
   const text = plain(rollsWritten(html));
-  const dice = /can['’]?t [^.]{0,80}?again for (\d+)d(\d+) rounds?/i.exec(text);
-  if ( dice ) return { n: Number(dice[1]), faces: Number(dice[2]) };
-  const fixed = /can['’]?t [^.]{0,80}?again for (\d+) rounds?/i.exec(text);
-  return fixed ? { n: Number(fixed[1]), faces: 1 } : null;
+  for ( const { pattern } of words?.cooldown ?? [] ) {
+    let m = null;
+    try {
+      m = new RegExp(pattern, "i").exec(text);
+    } catch ( err ) {
+      continue;
+    }
+    const g = m?.groups ?? {};
+    if ( g.n && g.faces ) return { n: Number(g.n), faces: Number(g.faces) };
+    if ( g.rounds ) return { n: Number(g.rounds), faces: 1 };
+  }
+  return null;
 }
 
 /** Healing in an ability's damage is what it does for itself (a drain), not harm to its target. */
@@ -160,7 +171,7 @@ export function abilityAction({ id, name, html: whole, actions = 1, actionType =
   // for it (a check of its own, an action's link, a Strike: reading/en.json's "rolled").
   if ( !save ) {
     if ( !requires || !damage.length || /@Check\[|\[\[\/act\b/i.test(html) || rollsItself(html, words) ) return null;
-    const cooldown = cooldownIn(html);
+    const cooldown = cooldownIn(html, words);
     return { id, name, kind: "auto", cost: Math.max(1, Math.min(3, Number(actions) || 1)), traits, ability: true, damage: harmIn(firstDamage(html)), melee: true,
       reach: reachFor(requires, strikes), ...needs, ...(cooldown ? { uses: 1, cooldown } : {}) };
   }
@@ -191,7 +202,7 @@ export function abilityAction({ id, name, html: whole, actions = 1, actionType =
   const within = /within (\d+) feet/i.exec(text);
   // A cone, a line or an emanation starts from the creature; a burst lands where it's aimed.
   const feet = within ? Number(within[1]) : area && area.shape !== "burst" ? area.feet : null;
-  const cooldown = cooldownIn(html);
+  const cooldown = cooldownIn(html, words);
   const action = {
     id, name, kind: damage.length ? "save" : "control", cost: Math.max(1, Math.min(3, Number(actions) || 1)), traits,
     save, ability: true, ...needs,

@@ -618,6 +618,12 @@
     "degree2": { "pattern": "^success$" },
     "degree3": { "pattern": "^critical success$" }
   },
+  "cooldown": [
+    {"pattern": "can['’]?t [^.]{0,80}?again for (?<n>\\d+)d(?<faces>\\d+) rounds?"},
+    {"pattern": "can['’]?t [^.]{0,80}?again for (?<rounds>\\d+) rounds?"},
+    {"pattern": "once every (?<n>\\d+)d(?<faces>\\d+) rounds?"},
+    {"pattern": "once every (?<rounds>\\d+) rounds?"}
+  ],
   "areas": {
     "selective": { "pattern": "\\b(?:each|every|all) (?:enem(?:y|ies)|foes?)\\b|\\benem(?:y|ies) in the (?:area|burst|cone|line|emanation|cylinder)\\b|\\b(?:creatures?|targets?) of your choice\\b|\\byou (?:can )?choose (?:which|any number of|up to \\w+) (?:creatures|targets)\\b|\\b(?:you and )?(?:your )?allies (?:are|aren't) (?:not affected|unaffected)\\b" }
   }
