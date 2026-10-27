@@ -45,6 +45,18 @@ describe("the fallen", () => {
   });
 });
 
+describe("minions", () => {
+  test("a familiar or companion acts when its master spends an action; a summoned one is Sustained; a minion has no reactions", () => {
+    const of = traits => ({ spec: { creatureTraits: traits } });
+    expect(pf2eRules.minionCommand(of(["minion"]))).toEqual({ actions: 1 });
+    expect(pf2eRules.minionCommand(of(["minion", "summoned"]))).toBe(null);
+    expect(pf2eRules.minionCommand(of(["humanoid"]))).toBe(null);
+    expect(pf2eRules.turn(of(["minion"]))).toEqual({ actions: 2 });
+    expect(pf2eRules.reactions(of(["animal", "minion"]))).toBe(0);
+    expect(pf2eRules.reactions(of(["animal"]))).toBe(1);
+  });
+});
+
 describe("Disarm", () => {
   test("only a weapon in hand can be knocked away: claws and jaws can't", () => {
     const disarm = { kind: "control", disarm: true, traits: ["attack"], onHit: [null, null, { mods: { attack: -2 }, rounds: 1 }, { mods: { attack: -2, actions: -1 }, rounds: 1 }] };

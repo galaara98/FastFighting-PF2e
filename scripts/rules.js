@@ -257,9 +257,16 @@ export const pf2eRules = {
   pullPenalty(u, action) {
     return action?.kind === "strike" && !(action.traits ?? []).includes("nonlethal") ? -2 : 0;
   },
-  /** Three actions; a minion (a summoned creature) two, when its summoner Sustains it. */
+  /** Three actions; a minion two, when its master commands it (or its summoner Sustains it). */
   turn(u) {
     return { actions: u.spec.creatureTraits?.includes("minion") ? 2 : 3 };
+  },
+  /**
+   * A minion (a familiar, an animal companion) acts only when its master spends an action to command it (core API 32).
+   * A summoned one is Sustained instead (its summoning's sustain).
+   */
+  minionCommand(u) {
+    return u.spec.creatureTraits?.includes("minion") && !u.spec.creatureTraits.includes("summoned") ? { actions: 1 } : null;
   },
 
   /**
@@ -267,8 +274,8 @@ export const pf2eRules = {
    * uses a manipulate action, or stands up there (one reaction a round). A Step (an action, five feet) gets out of
    * reach without triggering it.
    */
-  reactions() {
-    return 1;
+  reactions(u) {
+    return u?.spec.creatureTraits?.includes("minion") ? 0 : 1; // (a minion has none)
   },
   opportunityOn: Object.freeze(["foeLeavesReach", "foeOpening", "foeMovesInReach"]),
   opportunity(reactor) {

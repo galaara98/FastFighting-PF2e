@@ -12,7 +12,7 @@ import { loadReading } from "./reading.js";
  * helper. Older than the oldest, it doesn't run (it uses what came since); any other it doesn't know, it runs, and the
  * GM is told it hasn't been tried with that core yet. Add a major once this helper has been tried with it.
  */
-const KNOWN_API = Object.freeze([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]);
+const KNOWN_API = Object.freeze([21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 
 /** The core's API major, when it's one this helper doesn't know: the GM is told when the world is ready. */
 let untested = null;
