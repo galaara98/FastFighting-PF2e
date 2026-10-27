@@ -326,6 +326,7 @@
     "strike-damage",
     "target-dc",
     "target-dc-result",
+    "turn-end",
     "turn-start"
   ],
   "ignore": {

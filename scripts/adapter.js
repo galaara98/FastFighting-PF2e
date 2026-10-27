@@ -22,7 +22,7 @@ import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, esc
 import { abilityAction, selectiveIn } from "./abilities.js";
 import { classActions, extraParts, strikeScore } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
-import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
+import { modsFromRules, spellRounds, spellReach, helps, effectRounds, effectThisTurn, spellThisTurn, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction, AID_SKILLS } from "./edges.js";
 import { escapeOf, IMPLIES } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
@@ -1139,11 +1139,14 @@ export class Pf2eAdapter extends SystemAdapter {
     let fastHealing = 0;
     let regen = null;
     const uuids = [];
+    // (Its effect lasting only to the end of the caster's turn: Sure Strike's.)
+    let thisTurn = spellThisTurn(sys.duration?.value);
     // (A bonus the spell's own roll option switches on, as its target uses it: Guidance's "guidance".)
     const own = new Set([spell.slug ?? slugOf(spell)].filter(Boolean));
     for ( const m of html.matchAll(/@UUID\[(Compendium\.pf2e\.spell-effects\.Item\.[^\]]+)\]/g) ) {
       const effect = await linkedEffect(m[1]);
       if ( effect ) uuids.push(m[1]);
+      if ( effectThisTurn(effect?.system?.duration) ) thisTurn = true;
       const read = modsFromRules(effect?.system?.rules ?? [], { rank: spell.rank ?? 1, options: own });
       Object.assign(mods, read.mods);
       tempHp = Math.max(tempHp, read.tempHp);
@@ -1153,7 +1156,7 @@ export class Pf2eAdapter extends SystemAdapter {
     }
     // Haste: quickened, an extra action each turn (for Strikes and Strides).
     if ( /\bquickened\b/i.test(text) ) mods.actions = Math.max(mods.actions ?? 0, 1);
-    const rounds = spellRounds(sys.duration?.value) ?? 10;
+    const rounds = thisTurn ? 1 : spellRounds(sys.duration?.value) ?? 10;
     const save = sys.defense?.save;
     const area = sys.area;
     const feet = parseFeet(sys.range?.value) ?? area?.value ?? 30;
@@ -1164,7 +1167,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const named = Object.keys(mods).length || tempHp;
       const outcome = {
         mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, fastHealing: fastHealing || undefined, regen: regen ?? undefined, rounds,
-        label: named ? describeMods(mods, { tempHp }) : spell.name
+        ...(thisTurn ? { thisTurn: true } : {}), label: named ? describeMods(mods, { tempHp }) : spell.name
       };
       // (Its Spell Effect, to leave on a creature still under it when the fight ends.)
       const effectRef = uuids.length ? { uuids: [...new Set(uuids)] } : undefined;
@@ -1220,7 +1223,9 @@ export class Pf2eAdapter extends SystemAdapter {
         id: `${actor.id}.self.${item.id}`, name: item.name, kind: "buff", targets: "self", itemId: item.id,
         cost: type === "free" ? 0 : (item.system.actions?.value ?? 1), economy: type === "free" ? "free" : undefined, traits: [...(item.system.traits?.value ?? [])],
         outcome: {
-          mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, fastHealing, regen, rounds: effectRounds(effect.system?.duration) ?? 10,
+          mods: Object.keys(mods).length ? mods : undefined, tempHp: tempHp || undefined, fastHealing, regen,
+          // (One lasting only to the end of this turn, as its effect says: worth only the actions left after it.)
+          ...(effectThisTurn(effect.system?.duration) ? { rounds: 1, thisTurn: true } : { rounds: effectRounds(effect.system?.duration) ?? 10 }),
           label: named ? describeMods(mods, { tempHp }) : item.name
         },
         effectRef: { uuids: [uuid] }

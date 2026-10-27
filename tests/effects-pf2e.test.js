@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { replay } from "../../fast-fighting/scripts/engine/simulator.js";
 import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
-import { ruleValue, modsFromRules, spellRounds, spellReach, helps, predicateHolds, effectRounds } from "../scripts/effects.js";
+import { ruleValue, modsFromRules, spellRounds, spellReach, helps, predicateHolds, effectRounds, effectThisTurn, spellThisTurn } from "../scripts/effects.js";
 import { parseControl } from "../scripts/control.js";
 
 // Rule elements as the PF2e 8.6 Spell Effect items carry them.
@@ -81,6 +81,12 @@ describe("reading PF2e spell effects", () => {
   test("durations and who it reaches", () => {
     expect(spellRounds("1 minute")).toBe(10);
     expect(spellRounds("10 minutes")).toBe(100);
+    // (To the end of this turn: Sure Strike's effect, 0 rounds expiring at turn end; a spell "until the end of your turn".)
+    expect(effectThisTurn({ unit: "rounds", value: 0, expiry: "turn-end" })).toBe(true);
+    expect(effectThisTurn({ unit: "rounds", value: 1, expiry: "turn-end" })).toBe(false);
+    expect(effectThisTurn({ unit: "rounds", value: 0, expiry: "turn-start" })).toBe(false);
+    expect(spellThisTurn("until the end of your turn")).toBe(true);
+    expect(spellThisTurn("until the end of your next turn")).toBe(false);
     expect(spellRounds("until the start of your next turn")).toBe(1);
     expect(spellReach({ area: { type: "emanation", value: 15 }, target: "you and allies in the area" })).toEqual({ aura: 15 });
     expect(spellReach({ area: { type: "emanation", value: 60 }, target: "" })).toEqual({ aura: 60 });

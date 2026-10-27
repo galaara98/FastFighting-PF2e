@@ -176,12 +176,18 @@ export function modsFromRules(rules, { rank = 1, actor = null, options = null, o
   return { mods, tempHp, oneRoll, ...(fastHealing ? { fastHealing } : {}), ...(regen ? { regen } : {}) };
 }
 
+/** Does an effect item last only to the end of the turn it's laid in (0 rounds, expiring at turn end: Sure Strike's)? */
+export const effectThisTurn = duration => duration?.unit === "rounds" && Number(duration?.value) === 0 && duration?.expiry === "turn-end";
+
 /** Rounds an effect item lasts ({value, unit}), or null when it doesn't say (unlimited, or until the encounter ends). */
 export function effectRounds(duration) {
   const v = Number(duration?.value);
   if ( !(v > 0) ) return null;
   return v * ({ rounds: 1, minutes: 10, hours: 600, days: 14400 }[duration.unit] ?? 1);
 }
+
+/** A spell's duration that ends with the caster's turn: "until the end of your turn" (not its next). */
+export const spellThisTurn = duration => /until the end of (?:your|its) turn\b/.test(String(duration ?? "").toLowerCase());
 
 /** Rounds from a PF2e duration ("1 minute" = 10, "10 minutes" = 100, "1 round", "until the start of your next turn"). */
 export function spellRounds(duration) {
