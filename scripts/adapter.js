@@ -133,6 +133,21 @@ export function selfOnlySpell(system) {
   return !String(system?.range?.value ?? "").trim() && !system?.area && !String(system?.target?.value ?? "").trim();
 }
 
+/**
+ * Is a signature spell worth its slot at this rank: its own, or one where it heightens, as PF2e's heightening data has
+ * it? An interval's every step (Fireball's +1), a fixed heightening's ranks, a damage formula that reads the rank it's
+ * cast at, or any rank for an incapacitation spell (its rank decides whom it works on). Not text-only heightening.
+ */
+export function heightensAt(spell, rank) {
+  const base = Number(spell.baseRank ?? spell.rank) || 1;
+  if ( rank === base ) return true;
+  if ( (spell.system.traits?.value ?? []).includes("incapacitation") ) return true;
+  const h = spell.system.heightening;
+  if ( h?.type === "interval" && Number(h.interval) > 0 && (rank - base) % Number(h.interval) === 0 ) return true;
+  if ( h?.type === "fixed" && Object.keys(h.levels ?? {}).map(Number).includes(rank) ) return true;
+  return Object.values(spell.system.damage ?? {}).some(d => /@(castRank|heighten|item\.(rank|level))\b/.test(d?.formula ?? ""));
+}
+
 /** A spell's area as the core takes it: how many it catches, and its shape and size where pf2e gives them. */
 function areaSpec(area, targets) {
   return area?.type ? { targets, shape: area.type === "cylinder" ? "burst" : area.type, feet: Number(area.value) || 5 } : { targets };
@@ -916,24 +931,26 @@ export class Pf2eAdapter extends SystemAdapter {
    * The ways a spell can be cast from its entry, each an action of its own: {spell (at the rank it's cast at, PF2e's
    * loadVariant), resource, pool, suffix (its id's, for a rank other than its own)}. A cantrip at will; a focus spell
    * from the focus pool; a prepared spell once for each of its slots not expended, at each rank it's prepared at; a
-   * spontaneous one from its rank's slots; a flexible caster's (PF2e's isFlexible) like a spontaneous one, its collection
-   * (the spells it marks signature) from the slots of each rank from its own up; an innate one as often as it has left
-   * today (`innate:<spell>`), at will or a constant one not counted, or not cast. [] for none castable now.
+   * spontaneous one from its rank's slots, a signature one (PF2e's location.signature) heightened into the slots of each
+   * rank from its own up where heightening changes it (heightensAt); a flexible caster's (PF2e's isFlexible) collection
+   * (the spells it marks signature) the same, and no other; an innate one as often as it has left today
+   * (`innate:<spell>`), at will or a constant one not counted, or not cast. [] for none castable now.
    */
   #castings(entry, spell, mode, focusPool) {
     const cast = (rank, resource, pool) => ({ spell: castAt(spell, rank), resource, pool, suffix: rank === spell.rank ? "" : `@${rank}` });
     if ( spell.isCantrip ) return [{ spell, resource: null, suffix: "" }];
     if ( spell.isFocusSpell ) return [{ spell, resource: "focus", pool: focusPool, suffix: "" }];
     const slots = entry.system?.slots ?? {};
-    if ( mode === "prepared" && entry.isFlexible ) {
-      if ( !spell.system.location?.signature ) return [];
+    const flexible = mode === "prepared" && entry.isFlexible;
+    if ( (flexible || mode === "spontaneous") && spell.system.location?.signature ) {
       const base = Number(spell.baseRank ?? spell.rank) || 1;
       const out = [];
       for ( let rank = base; rank <= 10; rank++ ) {
-        if ( Number(slots[`slot${rank}`]?.max) > 0 ) out.push(cast(rank, `slots:${entry.id}:${rank}`, Number(slots[`slot${rank}`].value) || 0));
+        if ( Number(slots[`slot${rank}`]?.max) > 0 && heightensAt(spell, rank) ) out.push(cast(rank, `slots:${entry.id}:${rank}`, Number(slots[`slot${rank}`].value) || 0));
       }
-      return out;
+      if ( out.length || flexible ) return out;
     }
+    if ( flexible ) return [];
     if ( mode === "prepared" ) {
       const base = Number(spell.baseRank ?? spell.rank) || 1;
       const out = [];

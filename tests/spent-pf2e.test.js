@@ -42,11 +42,11 @@ function updatable(item) {
  * A spell as PF2e has one on a sheet: its rank, its damage by the rank it's cast at (Fireball's 2d6 a rank), and
  * loadVariant, which heightens it.
  */
-function spell(id, { rank = 3, location = {}, name = id, perRank = 2 } = {}) {
+function spell(id, { rank = 3, location = {}, name = id, perRank = 2, heightening = { type: "interval", interval: 1, damage: { 0: `${perRank}d6` } }, traits = [] } = {}) {
   const make = castRank => {
     const s = {
       id, name, slug: id, type: "spell", rank: castRank, baseRank: rank, isCantrip: false, isFocusSpell: false, isAttack: false,
-      system: { time: { value: "2" }, traits: { value: ["fire", "manipulate"] }, range: { value: "500 feet" }, area: null, target: { value: "1 creature" },
+      system: { time: { value: "2" }, traits: { value: ["fire", "manipulate", ...traits] }, range: { value: "500 feet" }, area: null, target: { value: "1 creature" }, heightening,
         location, description: { value: "" }, defense: { save: { statistic: "reflex", basic: true } }, duration: { value: "" } },
       getDamage: async () => ({ template: { damage: { roll: { formula: `${perRank * castRank}d6 fire`, kinds: new Set(["damage"]) } } } })
     };
@@ -139,11 +139,64 @@ describe("a flexible caster: like a spontaneous one, its collection from each ra
     expect(spec.resources).toMatchObject({ "slots:flex:3": 2, "slots:flex:4": 0 });
   });
 
+  test("one whose heightening changes nothing at 4th only at its own rank", async () => {
+    const flex = entry();
+    flex.spells.contents = [spell("bolt", { location: { signature: true }, heightening: { type: "interval", interval: 2, damage: { 0: "2d6" } } })];
+    expect(spellActions(await build(caster({ entries: [flex] })), "bolt").map(a => a.rank)).toEqual([3]);
+  });
+
   test("a cast spends its rank's slot, as PF2e does (slots.slotN.value), nothing marked expended", async () => {
     const flex = entry();
     const actor = caster({ entries: [flex] });
     await commitPf2eChanges({ actor }, { kind: "pc", actions: [], resources: { "slots:flex:3": 2 } }, { resources: { "slots:flex:3": { from: 2, to: 1 } } }, { status: STATUS.STANDING, resources: { "slots:flex:3": 1 } });
     expect(flex.system.slots.slot3).toEqual({ max: 2, value: 1, prepared: [] });
+  });
+});
+
+describe("a spontaneous caster's signature spell: heightened into each rank's slots where that changes it", () => {
+  const entry = contents => updatable({
+    id: "sorc", type: "spellcastingEntry", statistic: stat, isFlexible: false, tradition: "arcane",
+    system: { prepared: { value: "spontaneous" }, slots: {
+      slot0: { max: 5, value: 0, prepared: [] },
+      slot3: { max: 3, value: 2, prepared: [] }, slot4: { max: 3, value: 1, prepared: [] },
+      slot5: { max: 2, value: 0, prepared: [] }, slot6: { max: 0, value: 0, prepared: [] }
+    } },
+    spells: { contents }
+  });
+  const signature = { signature: true };
+  const ranksOf = async (s) => spellActions(await build(caster({ entries: [entry([s])] })), s.id).map(a => a.rank);
+
+  test("Fireball (+1: 2d6 more) at 3rd, 4th and 5th, each from its own rank's slots; not a rank it has no slots of", async () => {
+    const spec = await build(caster({ entries: [entry([spell("fireball", { location: signature })])] }));
+    expect(spellActions(spec, "fireball").map(a => [a.id, a.rank, dice(a), a.resource])).toEqual([
+      ["ezren.spell.fireball", 3, "6d6", "slots:sorc:3"],
+      ["ezren.spell.fireball@4", 4, "8d6", "slots:sorc:4"],
+      ["ezren.spell.fireball@5", 5, "10d6", "slots:sorc:5"]
+    ]);
+    expect(spec.resources).toMatchObject({ "slots:sorc:3": 2, "slots:sorc:4": 1, "slots:sorc:5": 0 });
+  });
+
+  test("a spell that isn't signature only at its own rank", async () => {
+    expect(await ranksOf(spell("blaze"))).toEqual([3]);
+  });
+
+  test("only the ranks where its heightening changes something: every 2nd (+2), its fixed ranks; one that never does, its own", async () => {
+    expect(await ranksOf(spell("bolt", { location: signature, heightening: { type: "interval", interval: 2, damage: { 0: "2d6" } } }))).toEqual([3, 5]);
+    expect(await ranksOf(spell("ward", { location: signature, heightening: { type: "fixed", levels: { 5: { target: { value: "10 creatures" } } } } }))).toEqual([3, 5]);
+    expect(await ranksOf(spell("plain", { location: signature, heightening: null }))).toEqual([3]);
+  });
+
+  test("an incapacitation spell at every rank: its rank decides whom it works on", async () => {
+    expect(await ranksOf(spell("stun", { location: signature, heightening: null, traits: ["incapacitation"] }))).toEqual([3, 4, 5]);
+  });
+
+  test("the cast at 5th spends a 5th-rank slot (slots.slot5.value), the 3rd's untouched", async () => {
+    const sorc = entry([spell("fireball", { location: signature })]);
+    sorc.system.slots.slot5.value = 2;
+    const actor = caster({ entries: [sorc] });
+    await commitPf2eChanges({ actor }, { kind: "pc", actions: [], resources: { "slots:sorc:3": 2, "slots:sorc:5": 2 } }, { resources: { "slots:sorc:5": { from: 2, to: 1 } } }, { status: STATUS.STANDING, resources: { "slots:sorc:3": 2, "slots:sorc:5": 1 } });
+    expect(sorc.system.slots.slot5.value).toBe(1);
+    expect(sorc.system.slots.slot3.value).toBe(2);
   });
 });
 
