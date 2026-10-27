@@ -282,6 +282,14 @@ export const pf2eRules = {
     return u?.spec.creatureTraits?.includes("minion") ? 0 : 1; // (a minion has none)
   },
   opportunityOn: Object.freeze(["foeLeavesReach", "foeOpening", "foeMovesInReach"]),
+  /**
+   * Delay and Ready (core API 33), for one that would let its turn go by for nothing. Delay: as its turn begins it
+   * leaves the initiative order and comes back after another creature's turn, its initiative there from then on; no
+   * reactions until it's back. Ready: two actions to prepare a single action (a Strike) for a trigger (a foe coming
+   * within its reach), used as a reaction with the multiple attack penalty it had when it readied.
+   */
+  delay: Object.freeze({ reactions: false }),
+  ready: Object.freeze({ cost: Object.freeze({ actions: 2 }), most: 1 }),
   opportunity(reactor) {
     if ( !reactor.spec.flags?.reactiveStrike ) return null;
     const c = reactor.conds ?? {};

@@ -349,6 +349,7 @@
     "construct": "a trait, a damage type or a story word, not the item",
     "corpse": "a word of the engine's or the code's (a field, a value, a setting), not the item",
     "defeated": "a word of the engine's or the code's (a field, a value, a setting), not the item",
+    "delay": "a rules key of the core's (rules.js delay, core API 33: PF2e's Delay as the engine plays it), not the item",
     "disease": "a trait, a damage type or a story word, not the item",
     "door": "a word of the engine's or the code's (a field, a value, a setting), not the item",
     "drag": "the core's maneuver toward the one doing it (its engine/maneuvers.js), not the item",
