@@ -18,13 +18,15 @@ describe("its dying numbers, as PF2e works them out", () => {
 });
 
 describe("its Ferocity, by slug", () => {
-  const item = (slug, name, extra = {}) => ({ slug, name, system: { slug, ...extra } });
+  const item = (slug, name, extra = {}) => ({ id: `${slug}-id`, slug, name, system: { slug, ...extra } });
 
-  test("a character's Orc Ferocity: as often as its frequency has left today; Undying Ferocity adds its level", () => {
+  test("a character's Orc Ferocity: as often as its frequency has left today, kept on its sheet; Undying Ferocity adds its level", () => {
     expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day" } })], 5))
-      .toEqual({ label: "Orc Ferocity", uses: 1, untilWounded: null, temp: 0 });
-    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day", value: 0 } })], 5).uses).toBe(0);
+      .toEqual({ label: "Orc Ferocity", resource: "freq:orc-ferocity-id", pool: 1, uses: null, untilWounded: null, temp: 0 });
+    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day", value: 0 } })], 5).pool).toBe(0);
     expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "day" } }), item("undying-ferocity", "Undying Ferocity")], 5).temp).toBe(5);
+    // (Once a round: so many a fight, not kept.)
+    expect(ferocityOf([item("orc-ferocity", "Orc Ferocity", { frequency: { max: 1, per: "round", value: 0 } })], 5)).toMatchObject({ uses: 1 });
   });
 
   test("a creature's Ferocity: no frequency, until it's wounded 3; none without it", () => {

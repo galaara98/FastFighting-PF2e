@@ -94,6 +94,23 @@ describe("an action's own card", () => {
     expect(fireball.asked).toEqual([["toMessage", null, { actualCast: true, data: { castRank: 3 } }]]);
   });
 
+  test("a spell cast at a higher rank than its own (Fireball in a 5th-rank slot, `@5`): its card and damage at that rank", async () => {
+    const fireball = item("sp1", "spell");
+    const cast = [];
+    fireball.loadVariant = ({ castRank }) => {
+      if ( castRank === fireball.rank ) return null;
+      const variant = Object.assign(item("sp1", "spell", { rank: castRank, hit: [["fire", 35]] }), { asked: fireball.asked });
+      cast.push(castRank);
+      return variant;
+    };
+    const token = orc(fireball);
+    expect(await adapter.useAction(token, { action: { id: "orc1.spell.sp1@5", name: "Fireball", rank: 5 }, targets: [hero()] })).toEqual({ card: "m1" });
+    expect(fireball.asked).toEqual([["toMessage", null, { actualCast: true, data: { castRank: 5 } }]]);
+    const rolled = await adapter.rollDamage(token, { action: { id: "orc1.spell.sp1@5", name: "Fireball", rank: 5 }, card: "m1" });
+    expect(rolled.damage.byType).toEqual({ fire: 35 });
+    expect(cast).toEqual([5, 5]);
+  });
+
   test("an ability's (a breath weapon), a self-buff's (Rage), a consumable's (a potion), a heal spell's: the card its sheet posts", async () => {
     const breath = item("a1", "action");
     const rage = item("f1", "feat");

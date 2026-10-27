@@ -19,7 +19,7 @@
  * A champion's touch heal (Lay on Hands, Touch of the Void: touch-heals.js) is shown and rolled as its variant for the
  * use: its healing variant's card for the heal, its harming variant's card and damage for the harm (`.harm`).
  */
-import { click, damageByType, spellAttackFor, strikeFor, slugOf } from "./strike-roll.js";
+import { click, damageByType, spellAttackFor, strikeFor, slugOf, spellPart, castAt } from "./strike-roll.js";
 import { cardIds, damageCardSince, markRolled } from "./cards.js";
 import { damageRollOf } from "./read-turn.js";
 import { touchOverlay } from "./touch-heals.js";
@@ -56,15 +56,17 @@ const modeOf = secret => (secret ? { mode: game.user?.isGM ? "gm" : "blind" } : 
 /**
  * The item an action's id names among the actor's (the adapter's ids), of a kind it can be; else null. An ability's
  * other uses name it first, then the use (`<actor>.<item id>.grapple`: Grab's Grapple, maneuvers.js); a spell's, the
- * same (`<actor>.spell.<spell id>.harm`).
+ * same (`<actor>.spell.<spell id>.harm`), cast at another rank than its own as `<spell id>@<rank>`.
  */
 export function actionItem(actor, id) {
   const parts = typeof id === "string" ? id.split(".") : [];
   const spellUse = parts.length === 4 && parts[1] === "spell";
   if ( !actor?.items || parts[0] !== actor.id || parts.length < 2 || (parts.length > 3 && !spellUse) ) return null;
   const kind = (parts.length === 3 || spellUse) && KINDS[parts[1]] ? parts[1] : "";
-  const item = actor.items.get?.(kind ? parts[2] : parts[1]) ?? null;
-  return item && KINDS[kind].includes(item.type) ? item : null;
+  // (A spell's, at the rank it's cast at: `<spell id>@5`.)
+  const { itemId, rank } = kind === "spell" ? spellPart(parts[2]) : { itemId: kind ? parts[2] : parts[1], rank: null };
+  const item = actor.items.get?.(itemId) ?? null;
+  return item && KINDS[kind].includes(item.type) ? castAt(item, rank) : null;
 }
 
 /**

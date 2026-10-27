@@ -65,6 +65,19 @@ describe("pf2e dying", () => {
     expect(b.dying).toBe(3);
   });
 
+  test("stable at 0 and hit again: it gains dying anew, its wounded value added (Wounded: gaining dying while wounded)", () => {
+    const a = { ...pc(), status: STATUS.DOWN, stable: true, dying: 0, wounded: 1 };
+    pf2eRules.onDropped(a);
+    expect([a.status, a.dying, a.stable]).toEqual([STATUS.DOWN, 2, false]);
+    const b = { ...pc(), status: STATUS.DOWN, stable: true, dying: 0, wounded: 2 };
+    pf2eRules.onDropped(b, { crit: true });
+    expect(b.status).toBe(STATUS.DEAD);
+    // (Dying already: it goes up by 1, 2 for a critical, its wounded value not added again.)
+    const c = { ...pc(), status: STATUS.DOWN, dying: 2, wounded: 1 };
+    pf2eRules.onDropped(c);
+    expect(c.dying).toBe(3);
+  });
+
   test("dying 4 is death and doomed lowers the limit", () => {
     const a = { ...pc(), wounded: 2 };
     pf2eRules.onDropped(a, { crit: true });

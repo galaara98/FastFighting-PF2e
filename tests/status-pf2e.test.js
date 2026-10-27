@@ -135,6 +135,13 @@ describe("quickened, drained", () => {
     expect(m.actionsLost(unit({ quickened: 1, slowed: 1 }))).toBe(0);
   });
 
+  test("stunned and slowed: the actions stunned takes count toward slowed's (the remaster's Stunned)", () => {
+    expect(m.actionsLost(unit({ stunned: 1, slowed: 2 }))).toBe(2);
+    expect(m.actionsLost(unit({ stunned: 2, slowed: 1 }))).toBe(2);
+    expect(m.actionsLost(unit({ stunned: 1 }))).toBe(1);
+    expect(m.actionsLost(unit({ stunned: 1, slowed: 1, quickened: 1 }))).toBe(0);
+  });
+
   test("drained: its level in Hit Points a step, off its maximum too; eased, its maximum back but not what it lost", () => {
     const run = { units: [], byId: new Map() };
     const u = unit({ drained: 1 }, {}, { hp: 30, maxHp: 40, status: "standing" });

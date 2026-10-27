@@ -10,11 +10,11 @@ import { parseAffliction, spellAffliction } from "./afflictions.js";
 import { derivePf2eTraits, creatureKindOf, animalisticOf, aptitudesOf } from "./traits.js";
 import { pf2eHints, pf2eTactics, healsOthers, textOf } from "./auto.js";
 import { rankLeaders } from "./leadership.js";
-import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName, preparedIn } from "./commit.js";
+import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2eBound, applyPf2eDamageCard, conditionSlug, engineKey, resourceName, ammoName, preparedIn, prepSlots, innateLeft, usesIn, frequencyOf } from "./commit.js";
 import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables, pf2ePileContents } from "./goods.js";
 import { pf2eAppetite, pf2eMeatFor, pf2eIsFood } from "./food.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
-import { strikesOf, strikeId, rollPf2eStrike } from "./strike-roll.js";
+import { strikesOf, strikeId, rollPf2eStrike, castAt } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
 import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { showPf2eTableRoll } from "./table-cards.js";
@@ -261,10 +261,13 @@ export function ferocityOf(items, level) {
   const list = [...(items ?? [])];
   const item = list.find(i => FEROCITY.has(slugOf(i)));
   if ( !item ) return null;
+  // (Its frequency, a resource kept on its sheet: frequencyOf. Once a round, so many a fight.)
   const often = item.system?.frequency;
+  const kept = frequencyOf(item);
   return {
     label: item.name ?? "",
-    uses: Number(often?.max) > 0 ? Math.max(0, Number(often.value ?? often.max) || 0) : null,
+    ...(kept ?? {}),
+    uses: !kept && Number(often?.max) > 0 ? Math.max(0, Number(often.max) || 0) : null,
     untilWounded: slugOf(item) === "ferocity" ? 3 : null,
     temp: list.some(i => slugOf(i) === "undying-ferocity") ? Math.max(0, Number(level) || 0) : 0
   };
@@ -397,9 +400,6 @@ const SIGHTS = new Set([...NOT_SENSES, "darkvision", "greater-darkvision", "infr
 export const otherPrecise = senses => Array.from(senses ?? []).some(s => s?.acuity === "precise" && !SIGHTS.has(String(s?.type ?? "")));
 
 export class Pf2eAdapter extends SystemAdapter {
-  /** Building a summoned creature (which doesn't summon in turn). */
-  #summoning = false;
-
   static systemId = "pf2e";
 
   get label() {
@@ -430,7 +430,8 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /* -------------------------------------------- */
 
-  async toCombatantSpec(tokenDoc) {
+  /** `summoned`: a summoned creature's (which doesn't summon in turn). */
+  async toCombatantSpec(tokenDoc, { summoned = false } = {}) {
     const actor = tokenDoc.actor;
     if ( !this.canHandle(actor) ) return null;
     const sys = actor.system;
@@ -455,7 +456,7 @@ export class Pf2eAdapter extends SystemAdapter {
       ...own(variants),
       ...own(await this.#elementalBlasts(actor)),
       ...own(this.#marks(actor)),
-      ...await this.#spells(actor),
+      ...await this.#spells(actor, { summoned }),
       ...this.#consumables(actor),
       ...this.#poisons(actor, martial.strikes),
       ...own(this.#feats(actor)),
@@ -493,12 +494,16 @@ export class Pf2eAdapter extends SystemAdapter {
     const iwr = iwrOf(actor.attributes);
 
     const resources = {};
-    for ( const a of actions ) {
+    // (And its reactions' and its Ferocity's, by their frequency: once a day.)
+    const reactions = await this.#reactions(actor, actions);
+    const ferocity = ferocityOf(actor.items, level);
+    const pooled = [...actions, ...(reactions ?? []), ...(ferocity ? [ferocity] : [])];
+    for ( const a of pooled ) {
       if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
       // (A weapon's rounds: the pool its shots come from, the core's action.ammo.)
       if ( a.ammo && a.rounds !== undefined ) resources[a.ammo] = a.rounds;
     }
-    for ( const a of actions ) {
+    for ( const a of pooled ) {
       delete a.pool;
       delete a.rounds;
     }
@@ -551,7 +556,7 @@ export class Pf2eAdapter extends SystemAdapter {
       // and only void heals it (iwr.js).
       ...(hp.negativeHealing ? { voidHealing: true } : {}),
       resources,
-      reactions: await this.#reactions(actor, actions),
+      reactions,
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags, ...(hazard ? { fearless: true, mindless: true } : {}), masterActorId: actor.type === "familiar" ? sys.master?.id ?? null : null },
@@ -563,7 +568,7 @@ export class Pf2eAdapter extends SystemAdapter {
       // Toughness), as PF2e works them out from its feats' rules.
       ...dyingOf(sys.attributes),
       // Ferocity, Orc Ferocity: a reaction that keeps it up at 1 Hit Point (rules.onDropped).
-      ferocity: ferocityOf(actor.items, level),
+      ferocity,
       // A fight resumed mid-way starts from where things stand.
       conditions: withConditions(this.#conditions(actor), passives.conditions),
       persistent: this.#persistent(actor),
@@ -835,7 +840,7 @@ export class Pf2eAdapter extends SystemAdapter {
         // ghost touch weapon. iwr.js.)
         ...nonEmpty("materials", strikeMaterials(item, { materialKeys: Object.keys(CONFIG.PF2E?.materialDamageEffects ?? {}), adjustments: actor.synthetics?.strikeAdjustments })),
         ...nonEmpty("propertyRunes", propertyRunesOf(item)),
-        ...(consumable ? { resource: `item:${item.id}`, pool: quantity, itemId: item.id } : {})
+        ...(consumable ? { resource: `item:${item.id}`, pool: usesIn(item), itemId: item.id } : {})
       };
       out.push(strike);
       if ( follows.length ) listed.push({ id: strike.id, slugs: follows, reach });
@@ -907,7 +912,54 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /* -------------------------------------------- */
 
-  async #spells(actor) {
+  /**
+   * The ways a spell can be cast from its entry, each an action of its own: {spell (at the rank it's cast at, PF2e's
+   * loadVariant), resource, pool, suffix (its id's, for a rank other than its own)}. A cantrip at will; a focus spell
+   * from the focus pool; a prepared spell once for each of its slots not expended, at each rank it's prepared at; a
+   * spontaneous one from its rank's slots; a flexible caster's (PF2e's isFlexible) like a spontaneous one, its collection
+   * (the spells it marks signature) from the slots of each rank from its own up; an innate one as often as it has left
+   * today (`innate:<spell>`), at will or a constant one not counted, or not cast. [] for none castable now.
+   */
+  #castings(entry, spell, mode, focusPool) {
+    const cast = (rank, resource, pool) => ({ spell: castAt(spell, rank), resource, pool, suffix: rank === spell.rank ? "" : `@${rank}` });
+    if ( spell.isCantrip ) return [{ spell, resource: null, suffix: "" }];
+    if ( spell.isFocusSpell ) return [{ spell, resource: "focus", pool: focusPool, suffix: "" }];
+    const slots = entry.system?.slots ?? {};
+    if ( mode === "prepared" && entry.isFlexible ) {
+      if ( !spell.system.location?.signature ) return [];
+      const base = Number(spell.baseRank ?? spell.rank) || 1;
+      const out = [];
+      for ( let rank = base; rank <= 10; rank++ ) {
+        if ( Number(slots[`slot${rank}`]?.max) > 0 ) out.push(cast(rank, `slots:${entry.id}:${rank}`, Number(slots[`slot${rank}`].value) || 0));
+      }
+      return out;
+    }
+    if ( mode === "prepared" ) {
+      const base = Number(spell.baseRank ?? spell.rank) || 1;
+      const out = [];
+      for ( const [key, slot] of Object.entries(slots) ) {
+        const rank = Number(key.replace(/^slot/, ""));
+        if ( !(rank >= base) ) continue;
+        const count = preparedIn(slot).filter(p => p.id === spell.id && !p.expended).length;
+        if ( count ) out.push(cast(rank, `prep:${entry.id}:${spell.id}:${rank}`, count));
+      }
+      return out;
+    }
+    if ( mode === "spontaneous" ) return [{ spell, resource: `slots:${entry.id}:${spell.rank}`, pool: slots[`slot${spell.rank}`]?.value ?? 0, suffix: "" }];
+    if ( mode === "innate" ) {
+      // (PF2e says "at will" and "constant" only in brackets in the spell's name: "Translocate (At Will)", in the
+      // compendium's language. At will is as often as it likes; a constant one is always on, not cast. The words
+      // are FFPF2E.Innate's, in the reader's language and in English.)
+      const tags = new Set([...`${englishName(spell)} ${spell.name}`.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim().toLowerCase().replace(/\s+/g, " ")));
+      if ( wordList("Innate.Constant").some(w => tags.has(w)) ) return [];
+      if ( wordList("Innate.AtWill").some(w => tags.has(w)) ) return [{ spell, resource: null, suffix: "" }];
+      const left = innateLeft(spell);
+      return left > 0 ? [{ spell, resource: `innate:${spell.id}`, pool: left, suffix: "" }] : [];
+    }
+    return [{ spell, resource: null, suffix: "" }];
+  }
+
+  async #spells(actor, { summoned = false } = {}) {
     const out = [];
     const focusPool = actor.system.resources?.focus?.value ?? 0;
     const entries = actor.spellcasting?.regular ?? actor.spellcasting?.contents ?? [];
@@ -915,7 +967,7 @@ export class Pf2eAdapter extends SystemAdapter {
       const stat = entry.statistic;
       if ( !stat ) continue;
       const mode = entry.system?.prepared?.value;
-      for ( const spell of entry.spells?.contents ?? [] ) {
+      for ( const known of entry.spells?.contents ?? [] ) for ( const { spell, resource, pool, suffix } of this.#castings(entry, known, mode, focusPool) ) {
         const cost = parseActionCost(spell.system.time?.value);
         if ( !cost ) continue;
         let roll = null;
@@ -945,37 +997,9 @@ export class Pf2eAdapter extends SystemAdapter {
         // No damage and no conditions by degree: a buff for friends or a debuff for foes, from its Spell Effect.
         const support = !parts.length && !control && !afflicts && !touchSlug ? await this.#spellSupport(spell, stat) : null;
         // A summon spell: the creature it most likely calls, which must be Sustained.
-        const summon = traits.includes("summon") && !this.#summoning ? await this.#summon(spell) : null;
+        const summon = traits.includes("summon") && !summoned ? await this.#summon(spell) : null;
         if ( !parts.length && !control && !support && !summon && !afflicts && !touchSlug ) continue;
-
-        // Resource
-        let resource = null;
-        let pool;
-        let uses;
-        if ( spell.isCantrip ) resource = null;
-        else if ( spell.isFocusSpell ) { resource = "focus"; pool = focusPool; }
-        else if ( mode === "prepared" ) {
-          let count = 0;
-          for ( const [key, slot] of Object.entries(entry.system.slots ?? {}) ) {
-            if ( key === "slot0" ) continue;
-            count += preparedIn(slot).filter(p => p.id === spell.id && !p.expended).length;
-          }
-          if ( !count ) continue;
-          resource = `prep:${entry.id}:${spell.id}`;
-          pool = count;
-        } else if ( mode === "spontaneous" ) {
-          const rank = spell.rank;
-          resource = `slots:${entry.id}:${rank}`;
-          pool = entry.system.slots?.[`slot${rank}`]?.value ?? 0;
-        } else if ( mode === "innate" ) {
-          // (PF2e says "at will" and "constant" only in brackets in the spell's name: "Translocate (At Will)", in the
-          // compendium's language. At will is as often as it likes; a constant one is always on, not cast. The words
-          // are FFPF2E.Innate's, in the reader's language and in English.)
-          const tags = new Set([...`${englishName(spell)} ${spell.name}`.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim().toLowerCase().replace(/\s+/g, " ")));
-          if ( wordList("Innate.Constant").some(w => tags.has(w)) ) continue;
-          uses = wordList("Innate.AtWill").some(w => tags.has(w)) ? undefined : spell.system.location?.uses?.value ?? 1;
-        }
-        const id = `${actor.id}.spell.${spell.id}`;
+        const id = `${actor.id}.spell.${spell.id}${suffix}`;
         const rangeFeet = parseFeet(spell.system.range?.value);
         const area = spell.system.area;
         // (Healing: a spell with the healing trait, or one that harms some and heals others, Harm. One with a save that
@@ -987,15 +1011,15 @@ export class Pf2eAdapter extends SystemAdapter {
         // (A hand for one cast with gestures: the manipulate trait.)
         const hands = traitHands(traits);
         if ( touchSlug ) {
-          out.push(...await this.#touchHeal(spell, touchSlug, { id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands }, stat.dc?.value ?? 10 + levelOf(actor)));
+          out.push(...await this.#touchHeal(spell, touchSlug, { id, name: spell.name, cost, resource, pool, spellId: spell.id, rank: spell.rank, traits, hands }, stat.dc?.value ?? 10 + levelOf(actor)));
           continue;
         }
         if ( summon ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands, ...summon });
+          out.push({ id, name: spell.name, cost, resource, pool, spellId: spell.id, rank: spell.rank, traits, hands, ...summon });
           continue;
         }
         if ( support ) {
-          out.push({ id, name: spell.name, cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands, ...support });
+          out.push({ id, name: spell.name, cost, resource, pool, spellId: spell.id, rank: spell.rank, traits, hands, ...support });
           continue;
         }
 
@@ -1011,7 +1035,7 @@ export class Pf2eAdapter extends SystemAdapter {
           const feet = variable ? 30 : rangeFeet;
           const reach = touch ? { reach: 5 } : feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {};
           out.push({
-            id: healId, name: spell.name, kind: "heal", cost, heal, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands,
+            id: healId, name: spell.name, kind: "heal", cost, heal, resource, pool, spellId: spell.id, rank: spell.rank, traits, hands,
             targetTrait: animalOnly ? "animal" : null, ...reach, ...(selfOnlySpell(spell.system) ? { selfOnly: true } : {})
           });
           if ( !both ) continue;
@@ -1019,7 +1043,7 @@ export class Pf2eAdapter extends SystemAdapter {
         const defense = spell.system.defense;
         if ( control ) {
           const action = {
-            id, name: spell.name, kind: "control", cost, resource, pool, uses, spellId: spell.id, rank: spell.rank, traits, hands,
+            id, name: spell.name, kind: "control", cost, resource, pool, spellId: spell.id, rank: spell.rank, traits, hands,
             melee: false, range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
           };
           // (A hold it lays that an Escape breaks, Web's, Tangle Vine's: against the spell DC.)
@@ -1041,7 +1065,7 @@ export class Pf2eAdapter extends SystemAdapter {
         }
         if ( !kinds.has?.("damage") && !afflicts ) continue;
         const action = {
-          id: isHeal && healId === id ? `${id}.harm` : id, name: spell.name, cost, damage: parts, resource, pool, uses,
+          id: isHeal && healId === id ? `${id}.harm` : id, name: spell.name, cost, damage: parts, resource, pool,
           spellId: spell.id, rank: spell.rank, traits, hands, storyType: storyLook(traits, null, parts),
           melee: false,
           range: { increment: rangeFeet ?? area?.value ?? 30, max: rangeFeet ?? area?.value ?? 30, noPenalty: true }
@@ -1108,13 +1132,7 @@ export class Pf2eAdapter extends SystemAdapter {
     const trait = SUMMON_TRAITS[slug] ?? (/\b(animal|fey|undead|elemental|construct|plant|dragon|fiend|celestial|monitor|giant|aberration|beast)\b/i.exec(plain(englishDescription(spell)))?.[1]?.toLowerCase() ?? "animal");
     const src = await creatureFor(SUMMON_LEVEL[rank], trait);
     if ( !src ) return null;
-    this.#summoning = true;
-    let spec = null;
-    try {
-      spec = await this.toCombatantSpec({ actor: src, id: `summon-${src.id}`, name: src.name, texture: { src: src.img } });
-    } finally {
-      this.#summoning = false;
-    }
+    const spec = await this.toCombatantSpec({ actor: src, id: `summon-${src.id}`, name: src.name, texture: { src: src.img } }, { summoned: true });
     if ( !spec ) return null;
     spec.creatureTraits = [...new Set([...(spec.creatureTraits ?? []), "minion", "summoned"])];
     spec.sourceUuid = src.uuid; // (a live battle places it from here)
@@ -1276,8 +1294,11 @@ export class Pf2eAdapter extends SystemAdapter {
         actionType: actor.type === "hazard" && item.system.actionType?.value === "reaction" ? "action" : item.system.actionType?.value
       });
       if ( !action ) continue;
+      // (Once a day, an hour: what's left of it, kept on its sheet. Once a round: so many a fight.)
       const often = Number(item.system.frequency?.max);
-      if ( !action.cooldown && often > 0 ) action.uses = often;
+      const kept = frequencyOf(item);
+      if ( !action.cooldown && kept ) Object.assign(action, kept);
+      else if ( !action.cooldown && often > 0 ) action.uses = often;
       out.push({ ...action, itemId: item.id });
     }
     return out;
@@ -1410,7 +1431,7 @@ export class Pf2eAdapter extends SystemAdapter {
     for ( const item of actor.itemTypes?.consumable ?? [] ) {
       const dmg = item.system.damage;
       if ( dmg?.kind !== "healing" || !dmg.formula ) continue;
-      const quantity = (item.system.quantity ?? 1) * Math.max(1, item.system.uses?.max ?? 1);
+      const quantity = usesIn(item);
       if ( quantity <= 0 ) continue;
       out.push({
         id: `${actor.id}.item.${item.id}`,
@@ -1449,7 +1470,7 @@ export class Pf2eAdapter extends SystemAdapter {
     const out = [];
     for ( const item of actor.itemTypes?.consumable ?? [] ) {
       const traits = item.system.traits?.value ?? [];
-      const quantity = Number(item.system.quantity ?? 1);
+      const quantity = usesIn(item);
       if ( !traits.includes("injury") || !traits.includes("poison") || !(quantity > 0) ) continue;
       const html = englishDescription(item);
       const poison = parseAffliction({ id: `${actor.id}.poison.${item.id}`, name: item.name, slug: slugOf(item), description: html, traits });
@@ -1730,20 +1751,16 @@ export class Pf2eAdapter extends SystemAdapter {
     const item = actor.items.get(id);
     // (A weapon's rounds, loaded and carried: ammo.js.)
     if ( kind === "ammo" ) return item ? roundsOf(actor, item) ?? 0 : 0;
-    if ( kind === "item" ) {
-      if ( !item ) return 0;
-      // (A healing potion counts each of its uses, as #consumables does; a bomb, its quantity.)
-      const healing = item.type === "consumable" && item.system.damage?.kind === "healing";
-      return Math.max(0, (Number(item.system.quantity ?? 1) || 0) * (healing ? Math.max(1, item.system.uses?.max ?? 1) : 1));
-    }
+    // (An item's uses, as #consumables counts them: a potion's each, a bomb its quantity.)
+    if ( kind === "item" ) return item ? usesIn(item) : 0;
     if ( kind === "prep" ) {
       let count = 0;
-      for ( const [slotKey, slot] of Object.entries(item?.system?.slots ?? {}) ) {
-        if ( slotKey !== "slot0" ) count += preparedIn(slot).filter(p => p.id === more && !p.expended).length;
-      }
+      for ( const [, slot] of prepSlots(item?.system?.slots, key.split(":")[3]) ) count += preparedIn(slot).filter(p => p.id === more && !p.expended).length;
       return count;
     }
     if ( kind === "slots" ) return item?.system?.slots?.[`slot${more}`]?.value ?? 0;
+    if ( kind === "innate" ) return item ? innateLeft(item) : 0;
+    if ( kind === "freq" ) return frequencyOf(item)?.pool ?? 0;
     return undefined;
   }
 

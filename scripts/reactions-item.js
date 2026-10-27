@@ -6,6 +6,7 @@
 import { readReaction } from "./reactions-read.js";
 import { reading } from "./reading.js";
 import { linkedEffect, theirsToOpen, linksIn } from "./granted.js";
+import { frequencyOf } from "./commit.js";
 
 /** PF2e's conditions by the uuid a text links them with: their slugs, fetched once a session. */
 const CONDITION_SLUGS = new Map();
@@ -59,7 +60,8 @@ export async function itemReactions(actor, items, { actions = [], resolve, slugO
   for ( const item of items ) {
     const html = await resolve(item, { keepLinks: true });
     const { conditionOf, effectOf } = await linksOf(actor, html);
-    const r = readReaction({ id: `${actor.id}.${item.id}`, label: item.name, html, actionType: item.system?.actionType?.value, frequency: item.system?.frequency ?? null,
+    const frequency = item.system?.frequency ? { ...item.system.frequency, ...(frequencyOf(item) ?? {}) } : null;
+    const r = readReaction({ id: `${actor.id}.${item.id}`, label: item.name, html, actionType: item.system?.actionType?.value, frequency,
       traits: [...(item.system?.traits?.value ?? [])] }, { reading: words, name: actor.name, kinds, level, strikes, actions: own, conditionOf, effectOf });
     if ( r ) out.push(r);
   }

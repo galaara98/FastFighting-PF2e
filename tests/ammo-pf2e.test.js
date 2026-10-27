@@ -417,6 +417,30 @@ describe("rounds the engine's own shots spent, run down on the sheet", () => {
     expect(undo.deletedItems.map(d => d._id)).toEqual(["bolts", "few"]);
   });
 
+  test("what's loaded spent first, as PF2e's Strike shoots it: a bolt used up gone from the crossbow, a magazine run down", async () => {
+    const bolt = { _id: "loaded", type: "ammo", sort: 0, system: { quantity: 1, baseItem: "bolts", uses: { value: 1, max: 1, autoDestroy: true }, rules: [] } };
+    const bow = weapon("heavy-crossbow", { loaded: [bolt] });
+    const bolts = ammo("bolts", { quantity: 10 });
+    const actor = sheet(bow, bolts);
+    const undo = { itemUpdates: [], deletedItems: [] };
+    await spendRounds(actor, "heavy-crossbow", { start: 11, spent: 1 }, undo);
+    expect(bow.system.subitems).toEqual([]);
+    expect(bolts.system.quantity).toBe(10);
+    expect(undo.itemUpdates).toEqual([{ id: "heavy-crossbow", update: { "system.subitems": [bolt] } }]);
+    // (More than's loaded: the rest from what it carries.)
+    const again = weapon("heavy-crossbow", { loaded: [bolt] });
+    const carried = ammo("bolts", { quantity: 10 });
+    await spendRounds(sheet(again, carried), "heavy-crossbow", { start: 11, spent: 3 }, { itemUpdates: [], deletedItems: [] });
+    expect([again.system.subitems.length, carried.system.quantity]).toEqual([0, 8]);
+    // (A magazine: its uses run down, left in it empty.)
+    const magazine = { _id: "mag", type: "ammo", sort: 0, system: { quantity: 1, baseItem: "bolts", uses: { value: 5, max: 5, autoDestroy: false }, rules: [] } };
+    const repeating = weapon("repeating-crossbow", { loaded: [magazine], capacity: 5, traits: ["repeating"] });
+    await spendRounds(sheet(repeating), "repeating-crossbow", { start: 5, spent: 2 }, { itemUpdates: [], deletedItems: [] });
+    expect(repeating.system.subitems[0].system).toMatchObject({ quantity: 1, uses: { value: 3, max: 5 } });
+    await spendRounds(sheet(repeating), "repeating-crossbow", { start: 3, spent: 3 }, { itemUpdates: [], deletedItems: [] });
+    expect(repeating.system.subitems[0].system).toMatchObject({ quantity: 1, uses: { value: 0 } });
+  });
+
   test("through a turn's changes (commit.js): the engine's resource spent beyond the sheet's", async () => {
     const bow = weapon("heavy-crossbow");
     const bolts = ammo("bolts", { quantity: 20 });

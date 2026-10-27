@@ -44,9 +44,29 @@ export function strikeFor(actor, id) {
 export function spellAttackFor(actor, id) {
   const parts = typeof id === "string" ? id.split(".") : [];
   if ( !actor?.items || parts.length !== 3 || parts[0] !== actor.id || parts[1] !== "spell" ) return null;
-  const spell = actor.items.get?.(parts[2]);
+  const { itemId, rank } = spellPart(parts[2]);
+  const spell = actor.items.get?.(itemId);
   const damaging = Object.keys(spell?.system?.damage ?? {}).length > 0;
-  return spell?.type === "spell" && spell.isAttack && damaging && typeof spell.rollAttack === "function" && spell.spellcasting?.statistic ? spell : null;
+  return spell?.type === "spell" && spell.isAttack && damaging && typeof spell.rollAttack === "function" && spell.spellcasting?.statistic ? castAt(spell, rank) : null;
+}
+
+/**
+ * A spell's part of an action's id (the adapter's #spells): its id, and the rank it's cast at where that isn't its own
+ * (`<spell id>@5`: Fireball prepared in a 5th-rank slot), else null.
+ */
+export function spellPart(part) {
+  const m = /^(.*)@(\d+)$/.exec(String(part ?? ""));
+  return m ? { itemId: m[1], rank: Number(m[2]) } : { itemId: String(part ?? ""), rank: null };
+}
+
+/** A spell as it's cast at a rank (PF2e's loadVariant: heightened), or as it is for its own rank, none, or no spell. */
+export function castAt(spell, rank) {
+  if ( spell?.type !== "spell" || !(rank > 0) || rank === spell.rank || typeof spell.loadVariant !== "function" ) return spell;
+  try {
+    return spell.loadVariant({ castRank: rank }) ?? spell;
+  } catch ( err ) {
+    return spell;
+  }
 }
 
 /**

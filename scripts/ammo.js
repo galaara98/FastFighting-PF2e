@@ -207,15 +207,17 @@ export function ammoUndo(tokenDoc, actor, state) {
 
 /**
  * The rounds a turn's shots spent that the sheet didn't (the engine's own dice, where PF2e's Strike didn't roll: PF2e
- * spends its own as it rolls), taken from the weapon's compatible ammunition, the stack with the most first, as PF2e's
- * own spending leaves it (one of no use left, gone); what was there kept in `undo`. `start`: the rounds the sheet had
- * as the turn began; `spent`: the rounds the engine counts spent since.
+ * spends its own as it rolls), taken from what's loaded in it first (spendLoaded), then from its compatible
+ * ammunition, the stack with the most first, as PF2e's own spending leaves it (one of no use left, gone); what was
+ * there kept in `undo`. `start`: the rounds the sheet had as the turn began; `spent`: the rounds the engine counts spent
+ * since.
  */
 export async function spendRounds(actor, weaponId, { start, spent }, undo) {
   const weapon = actor?.items?.get?.(weaponId);
   const now = roundsOf(actor, weapon);
   if ( now === null ) return;
   let owed = spent - Math.max(0, start - now);
+  if ( owed > 0 ) owed = await spendLoaded(weapon, owed, undo);
   for ( const stack of ammoStacks(actor, weapon).sort((a, b) => roundsIn(b) - roundsIn(a)) ) {
     if ( owed <= 0 ) break;
     const has = roundsIn(stack);
@@ -236,4 +238,40 @@ export async function spendRounds(actor, weaponId, { start, spent }, undo) {
     undo.itemUpdates.push({ id: stack.id, update: Object.fromEntries(Object.keys(update).map(k => [k, valueAt(dataOf(stack) ?? stack, k)])) });
     await stack.update(update);
   }
+}
+
+/**
+ * Rounds spent from what's loaded in the weapon first (a crossbow's bolt, a firearm's magazine), as PF2e's own Strike
+ * spends them: a magazine left in it empty, a round used up gone (uses.autoDestroy), else left at 0. Written as the
+ * weapon's subitems (PF2e keeps what's loaded there), as they were kept in `undo`. What's still owed is returned.
+ */
+async function spendLoaded(weapon, owed, undo) {
+  const loaded = loadedIn(weapon);
+  if ( !loaded.length || typeof weapon.update !== "function" ) return owed;
+  const before = JSON.parse(JSON.stringify(weapon._source?.system?.subitems ?? weapon.system?.subitems ?? []));
+  let next = JSON.parse(JSON.stringify(before));
+  for ( const round of loaded ) {
+    if ( owed <= 0 ) break;
+    const data = next.find(d => d?._id === round.id);
+    const has = roundsIn(round);
+    const take = Math.min(owed, has);
+    if ( !data || take <= 0 ) continue;
+    owed -= take;
+    const left = has - take;
+    const uses = data.system?.uses;
+    const max = Number(uses?.max) || 1;
+    const magazine = data.type === "ammo" && max > 1;
+    if ( magazine ) {
+      const quantity = Math.max(1, Math.ceil(left / max));
+      Object.assign(data.system, { quantity, uses: { ...uses, value: left > 0 ? left - (quantity - 1) * max : 0 } });
+    } else if ( left <= 0 && data.type === "ammo" && uses?.autoDestroy && !(data.system?.rules?.length) ) {
+      next = next.filter(d => d !== data);
+    } else {
+      data.system.quantity = left;
+    }
+  }
+  if ( JSON.stringify(next) === JSON.stringify(before) ) return owed;
+  undo.itemUpdates.push({ id: weapon.id, update: { "system.subitems": before } });
+  await weapon.update({ "system.subitems": next });
+  return owed;
 }

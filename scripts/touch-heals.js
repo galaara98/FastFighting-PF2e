@@ -84,7 +84,7 @@ export function touchOverlay(spell, actionId) {
  * @param {string} t.slug
  * @param {object} t.system       the spell's system data
  * @param {number} t.rank         the rank it's cast at
- * @param {object} t.base         what every action of the spell carries: {id, name, cost, resource, pool, uses, spellId,
+ * @param {object} t.base         what every action of the spell carries: {id, name, cost, resource, pool, spellId,
  *                                rank, traits, hands}
  * @param {number} t.dc           the spell DC
  * @param {object} [t.ward]       the linked effect's bonuses ({mods}), for another it heals (Lay on Hands), or null

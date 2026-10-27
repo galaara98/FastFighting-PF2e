@@ -371,7 +371,7 @@ export function readEffects(html, { trigger, reading = {}, name = "", kinds = []
  * @param {string} d.label
  * @param {string} d.html        its description, @Damage and @Check worked out, its links kept
  * @param {string} d.actionType  "reaction" or "free"
- * @param {object} [d.frequency] PF2e's {max, per}
+ * @param {object} [d.frequency] PF2e's {max, per}; with {resource, pool} where its sheet keeps it (commit.js frequencyOf)
  * @param {string[]} [d.traits]  its traits (immunity)
  * @param {object} o             readEffects' options (reading, name, kinds, level, strikes, actions, conditionOf, effectOf)
  */
@@ -408,8 +408,10 @@ export function readReaction({ id, label, html, actionType, frequency = null, tr
   }
   // (Its effects that need someone to land on: on its own blow, the one it hit; a strike on a slain creature's way down
   // or at a caster, the one who set it off, as the core plays them.)
+  // (A frequency its sheet keeps, once a day: frequency.resource, its uses left the pool.)
   const often = Number(frequency?.max);
   if ( cooldownIn(text, o.reading ?? undefined) ) r.uses = 1;
+  else if ( frequency?.resource ) Object.assign(r, { resource: frequency.resource, pool: frequency.pool });
   else if ( often > 0 ) r.uses = often;
   return r;
 }

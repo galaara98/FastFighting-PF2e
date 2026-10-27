@@ -32,7 +32,7 @@
  * rolls a skill) or PF2e rolled nothing: the engine rolls it.
  */
 import { naturalOf } from "./read-turn.js";
-import { click, strikesOf, slugOf } from "./strike-roll.js";
+import { click, strikesOf, slugOf, spellPart, castAt } from "./strike-roll.js";
 import { AID_SKILLS } from "./edges.js";
 import { t } from "./words.js";
 
@@ -96,8 +96,10 @@ function rolled(roll) {
 function itemIn(actor, id) {
   const parts = typeof id === "string" ? id.split(".") : [];
   if ( !actor?.items || parts.length < 2 || parts[0] !== actor.id ) return null;
-  const rest = parts.slice(1);
-  const item = rest.map(p => actor.items.get?.(p)).find(Boolean) ?? actor.items.find?.(i => rest.includes(slugOf(i))) ?? null;
+  // (A spell's at the rank it's cast at: `<spell id>@5`.)
+  const rest = parts.slice(1).map(spellPart);
+  const found = rest.map(p => ({ item: actor.items.get?.(p.itemId), rank: p.rank })).find(p => p.item);
+  const item = found ? castAt(found.item, found.rank) : actor.items.find?.(i => rest.some(p => p.itemId === slugOf(i))) ?? null;
   return item && !traitsOf(item).includes("incapacitation") ? item : null;
 }
 

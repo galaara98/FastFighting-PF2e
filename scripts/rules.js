@@ -180,7 +180,7 @@ const sharesRoom = u => Number(u.spec?.size) === 0 || (u.spec?.creatureTraits ??
 const grabbing = (e, id = null) => !!e.sourceId && (id === null || e.sourceId === id) && !!(e.conditions?.grabbed || e.conditions?.restrained);
 
 /**
- * Ferocity (spec.ferocity {label, uses, untilWounded, temp}), as it would fall: with its reaction to spend (and able to
+ * Ferocity (spec.ferocity {label, resource or uses, untilWounded, temp}), as it would fall: with its reaction to spend (and able to
  * react), it stays up at 1 Hit Point and its wounded value goes up by 1. A character's Orc Ferocity as often as it has
  * left today; a creature's until it's wounded 3. Undying Ferocity: temporary Hit Points too.
  * @returns {boolean} whether it stayed up
@@ -189,10 +189,12 @@ function holdsOn(c) {
   const f = c.spec?.ferocity;
   const k = c.conds ?? {};
   if ( !f || (c.reactionsLeft ?? 0) <= 0 || k.incapacitated || k.paralyzed || k.stunned ) return false;
-  if ( Number.isFinite(f.uses) && (c.ferocityUsed ?? 0) >= f.uses ) return false;
+  // (Its uses left today, a resource the sheet keeps: f.resource. Else so many a fight.)
+  if ( f.resource ? !((c.resources?.[f.resource] ?? 0) >= 1) : Number.isFinite(f.uses) && (c.ferocityUsed ?? 0) >= f.uses ) return false;
   if ( Number.isFinite(f.untilWounded) && (c.wounded ?? 0) >= f.untilWounded ) return false;
   c.reactionsLeft -= 1;
-  c.ferocityUsed = (c.ferocityUsed ?? 0) + 1;
+  if ( f.resource ) c.resources[f.resource] -= 1;
+  else c.ferocityUsed = (c.ferocityUsed ?? 0) + 1;
   c.hp = 1;
   c.wounded = (c.wounded ?? 0) + 1;
   if ( f.temp > 0 ) c.temp = Math.max(c.temp ?? 0, f.temp);
@@ -804,8 +806,9 @@ export const pf2eRules = {
     },
     actionsLost(u) {
       if ( u.conds.paralyzed || u.conds.fleeing ) return 99; // fleeing spends every action getting away
-      // (Inside a gullet: slowed 1. Quickened: an action more.)
-      return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0) + (u.conds.stunned ?? 0) - (Number(u.conds.quickened) > 0 ? 1 : 0);
+      // (Inside a gullet: slowed 1. The actions stunned takes count toward those slowed takes, the remaster's Stunned.
+      // Quickened: an action more.)
+      return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0, u.conds.stunned ?? 0) - (Number(u.conds.quickened) > 0 ? 1 : 0);
     }
   },
 
@@ -843,9 +846,10 @@ export const pf2eRules = {
       c.status = STATUS.DOWN;
       return c.status;
     }
+    // (Dying already: it goes up. Not dying, down and stable or standing: it gains dying, its wounded value added.)
     const increase = crit ? 2 : 1;
-    if ( c.status === STATUS.DOWN ) c.dying += increase;
-    else c.dying = increase + c.wounded;
+    if ( c.status === STATUS.DOWN && c.dying > 0 ) c.dying += increase;
+    else c.dying = increase + (c.wounded ?? 0);
     c.status = STATUS.DOWN;
     c.stable = false;
     if ( c.dying >= this.dyingLimit(c) ) c.status = STATUS.DEAD;

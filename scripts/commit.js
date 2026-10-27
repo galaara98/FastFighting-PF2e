@@ -12,8 +12,9 @@ import { takePf2eGoods, putPf2eGoods } from "./goods.js";
 import { t, traitName, conditionLabel } from "./words.js";
 import { damageRollOf, heals, itemOf, listOf } from "./read-turn.js";
 import { timesOf } from "./cards.js";
-import { grantedResistance } from "./granted.js";
+import { grantedResistance, linkedEffect } from "./granted.js";
 import { spendRounds } from "./ammo.js";
+import { castAt } from "./strike-roll.js";
 
 const PHYSICAL = new Set(["weapon", "armor", "equipment", "consumable", "treasure", "backpack", "shield", "ammo", "book"]);
 const LINGERING = { clumsy: "clumsy", enfeebled: "enfeebled", drained: "drained", sickened: "sickened", stupefied: "stupefied", fatigued: "fatigued", doomed: "doomed", controlled: "controlled" };
@@ -39,7 +40,10 @@ export function describePf2eOutcome(spec, final) {
   for ( const e of final.effects ?? [] ) lines.push(stillLine(e));
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceName(key, { one: true }) ?? ammoName(key, spec) ?? spec.actions.find(a => a.resource === key)?.name ?? key }));
+    // (A reaction's or Ferocity's frequency: its own name.)
+    const what = resourceName(key, { one: true }) ?? ammoName(key, spec) ?? spec.actions.find(a => a.resource === key)?.name
+      ?? (spec.reactions ?? []).find(r => r.resource === key)?.label ?? (spec.ferocity?.resource === key ? spec.ferocity.label : null) ?? key;
+    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what }));
   }
   return lines;
 }
@@ -218,7 +222,7 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
     }
   }
   if ( !dead ) {
-    for ( const e of changes.effects?.added ?? [] ) await laySpellEffect(actor, e, options, undo);
+    for ( const e of changes.effects?.added ?? [] ) await laySpellEffect(tokenDoc, actor, e, options, undo);
     // (Who got what, where no card of PF2e's names it.)
     await tellGiven(tokenDoc, spec, changes, options);
   }
@@ -267,24 +271,55 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
 /**
  * A buff or debuff laid this turn (Bless, Bane, Rage): its PF2e effect, from the action that laid it (options.effectSource),
  * for the rounds it has; marked with which it is, so it comes off when the engine's ends (liftSpellEffect). Only an
- * effect Item is copied (the link is item data a player can write).
+ * effect Item is copied (the link is item data a player can write). With whom it's from (effectContext), as PF2e's
+ * own drop of it from a card has it: its rounds counted on its giver's turn, its rules reading its giver's item.
  */
-async function laySpellEffect(actor, e, options, undo) {
+async function laySpellEffect(tokenDoc, actor, e, options, undo) {
   const source = options?.effectSource?.(e.key);
   for ( const uuid of source?.action?.effectRef?.uuids ?? [] ) {
-    let effect = null;
-    try {
-      effect = await fromUuid(uuid);
-    } catch ( err ) { /* gone */ }
+    // (Fetched once a session: granted.js.)
+    const effect = await linkedEffect(uuid);
     if ( effect?.documentName !== "Item" || effect.type !== "effect" ) continue;
     const data = effect.toObject();
     delete data._id;
     data.system = { ...data.system, duration: { value: Math.max(1, Number.isFinite(e.rounds) ? e.rounds : 10), unit: "rounds", expiry: "turn-start", sustained: false } };
     if ( source.action.rank ) data.system.level = { ...(data.system.level ?? {}), value: source.action.rank };
+    const context = effectContext(tokenDoc, actor, e, source, options);
+    if ( context ) data.system.context = context;
     data.flags = { ...(data.flags ?? {}), [MODULE_ID]: { laid: { key: e.key, sourceId: e.sourceId ?? null } } };
     const [created] = await actor.createEmbeddedDocuments("Item", [data]);
     if ( created ) undo.createdItems.push(created.id);
   }
+}
+
+/**
+ * An effect's system.context, as PF2e gives one dragged from a card: its origin (whose it is, their token, the item that
+ * laid it, a spell's spellcasting, its roll options) and its target. Null where its giver isn't known.
+ */
+function effectContext(tokenDoc, actor, e, source, options) {
+  const by = options?.tokenOf?.(e.sourceId) ?? null;
+  const origin = by?.actor ?? null;
+  const actorUuid = origin?.uuid ?? source?.spec?.actorUuid ?? null;
+  if ( typeof actorUuid !== "string" || !actorUuid ) return null;
+  const action = source.action ?? {};
+  const own = origin?.items?.get?.(action.spellId ?? action.itemId ?? "") ?? null;
+  const item = own?.type === "spell" ? castAt(own, action.rank) : own;
+  const casting = item?.type === "spell" ? item.spellcasting : null;
+  let rollOptions = [];
+  try {
+    rollOptions = item?.getOriginData?.()?.rollOptions ?? [];
+  } catch ( err ) { /* none */ }
+  return {
+    origin: {
+      actor: actorUuid,
+      token: by?.uuid ?? null,
+      item: item?.uuid ?? null,
+      spellcasting: casting && item.attribute ? { attribute: { type: item.attribute, mod: Number(casting.statistic?.attributeModifier?.value) || 0 }, tradition: casting.tradition ?? null } : null,
+      rollOptions: Array.isArray(rollOptions) ? [...rollOptions] : []
+    },
+    target: actor?.uuid ? { actor: actor.uuid, token: tokenDoc?.uuid ?? null } : null,
+    roll: null
+  };
 }
 
 /** Does a roll of PF2e's own name whom an action's effect went to: a save's card, a check's or an attack's target? */
@@ -337,10 +372,7 @@ async function tellGiven(tokenDoc, spec, changes, options) {
 /** The effect an action lays, as a link to drag (PF2e's own anchor), or "" (none, or none found). */
 async function effectLink(action) {
   for ( const uuid of action?.effectRef?.uuids ?? [] ) {
-    let effect = null;
-    try {
-      effect = await fromUuid(uuid);
-    } catch ( err ) { /* gone */ }
+    const effect = await linkedEffect(uuid);
     if ( effect?.documentName === "Item" && effect.type === "effect" && typeof effect.toAnchor === "function" ) return effect.toAnchor({ attrs: { draggable: "true" } }).outerHTML;
   }
   return "";
@@ -358,20 +390,59 @@ async function liftSpellEffect(actor, e, undo) {
 /** A slot's prepared spells, as a list: pf2e keeps them as an array, or (as saved in some worlds) an object by index. */
 export const preparedIn = slot => Object.values(slot?.prepared ?? {}).filter(Boolean);
 
+/** The slots a `prep:` resource counts: its rank's (`prep:<entry>:<spell>:<rank>`), or every rank's but cantrips'. */
+export const prepSlots = (slots, rank) => Object.entries(slots ?? {}).filter(([key]) => (rank ? key === `slot${rank}` : key !== "slot0"));
+
+/** An innate spell's casts left today (PF2e's location.uses), 1 where it keeps no count. */
+export function innateLeft(spell) {
+  const uses = spell?.system?.location?.uses;
+  return uses && typeof uses === "object" ? Math.max(0, Number(uses.value) || 0) : 1;
+}
+
+/** The uses an item has left, as PF2e spends them: a stack's (the first as it stands, the rest full), else its quantity. */
+export function usesIn(item) {
+  const quantity = Math.max(0, Number(item?.system?.quantity ?? 1) || 0);
+  const max = Number(item?.system?.uses?.max) || 1;
+  if ( max <= 1 || quantity <= 0 ) return quantity;
+  const value = Math.max(0, Math.min(max, Number(item.system.uses.value ?? max) || 0));
+  return (quantity - 1) * max + value;
+}
+
+/** PF2e's frequencies a fight gets back (once a turn, once a round): counted afresh each fight, never kept. */
+const PER_FIGHT = new Set(["turn", "round"]);
+
+/**
+ * An ability's frequency (once a day, once an hour) as a resource kept on its sheet: `freq:<item id>`, with the uses
+ * it has left (PF2e's frequency.value, its max where it has none yet). Null for none, or one a fight gets back.
+ */
+export function frequencyOf(item) {
+  const often = item?.system?.frequency;
+  const max = Number(often?.max);
+  if ( !item?.id || !(max > 0) || PER_FIGHT.has(often.per) ) return null;
+  return { resource: `freq:${item.id}`, pool: Math.max(0, Number(often.value ?? max) || 0) };
+}
+
+/** An item's `system.<path>` changed to `value`, its value before kept in `undo`. */
+async function updateItem(item, path, value, undo) {
+  const before = path.split(".").reduce((x, k) => x?.[k], item);
+  if ( before === value ) return;
+  undo.itemUpdates.push({ id: item.id, update: { [path]: before } });
+  await item.update({ [path]: value });
+}
+
 async function commitSpellsAndItems(actor, spec, final, undo) {
   const entryUpdates = new Map();
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const left = final.resources?.[key] ?? start;
     const used = start - left;
     if ( used <= 0 ) continue;
-    const [kind, a, b] = key.split(":");
+    const [kind, a, b, rank] = key.split(":");
     if ( kind === "prep" ) {
       const entry = actor.items.get(a);
       if ( !entry ) continue;
       const slots = foundry.utils.deepClone(entryUpdates.get(a) ?? entry._source.system.slots);
       let remaining = used;
-      for ( const [slotKey, slot] of Object.entries(slots) ) {
-        if ( slotKey === "slot0" ) continue;
+      for ( const [, slot] of prepSlots(slots, rank) ) {
         for ( const p of preparedIn(slot) ) {
           if ( remaining > 0 && p.id === b && !p.expended ) { p.expended = true; remaining -= 1; }
         }
@@ -384,17 +455,29 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
       if ( slots[`slot${b}`] ) slots[`slot${b}`].value = left;
       entryUpdates.set(a, slots);
     } else if ( kind === "item" ) {
+      // (As PF2e's consume leaves it: the first of a stack with the uses it has left, the rest full; none left, gone
+      // where it's used up then (uses.autoDestroy), else kept at 0, its uses full again.)
       const item = actor.items.get(a);
       if ( !item ) continue;
-      const perItem = Math.max(1, item.system.uses?.max ?? 1);
-      const quantity = Math.max(0, Math.ceil(left / perItem));
-      if ( quantity <= 0 ) {
+      const uses = item.system.uses;
+      const max = Math.max(1, Number(uses?.max) || 1);
+      const quantity = Math.max(0, Math.ceil(Math.max(0, left) / max));
+      if ( quantity <= 0 && uses?.autoDestroy !== false ) {
         undo.deletedItems.push(item.toObject());
         await item.delete();
-      } else {
-        undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
-        await item.update({ "system.quantity": quantity });
+        continue;
       }
+      const update = { "system.quantity": quantity, ...(max > 1 ? { "system.uses.value": quantity > 0 ? left - (quantity - 1) * max : max } : {}) };
+      undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity, ...(max > 1 ? { "system.uses.value": uses.value ?? max } : {}) } });
+      await item.update(update);
+    } else if ( kind === "innate" ) {
+      // (An innate spell's casts today.)
+      const spell = actor.items.get(a);
+      if ( spell?.system?.location?.uses && typeof spell.system.location.uses === "object" ) await updateItem(spell, "system.location.uses.value", Math.max(0, left), undo);
+    } else if ( kind === "freq" ) {
+      // (An ability's uses left, by its frequency: once a day.)
+      const item = actor.items.get(a);
+      if ( item?.system?.frequency ) await updateItem(item, "system.frequency.value", Math.max(0, left), undo);
     } else if ( kind === "ammo" ) {
       // (A weapon's rounds: PF2e's Strike spends its own as it rolls; only what the engine's own dice shot, beyond that.)
       await spendRounds(actor, a, { start, spent: used }, undo);
