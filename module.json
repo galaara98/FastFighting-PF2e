@@ -2,7 +2,7 @@
   "id": "fast-fighting-pf2e",
   "title": "FastFighting PF2e",
   "description": "Pathfinder Second Edition support for FastFighting Core: reads PF2e actors, plays PF2e's rules, and writes live battles back onto PF2e sheets.",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "authors": [
     { "name": "galaara98", "url": "https://github.com/galaara98" }
   ],
@@ -15,7 +15,7 @@
       { "id": "pf2e", "type": "system", "compatibility": { "minimum": "8.0.0" } }
     ],
     "requires": [
-      { "id": "fast-fighting", "type": "module", "manifest": "https://github.com/galaara98/FastFighting/releases/latest/download/module.json", "compatibility": { "minimum": "0.13.0", "verified": "0.14.0" } }
+      { "id": "fast-fighting", "type": "module", "manifest": "https://github.com/galaara98/FastFighting/releases/latest/download/module.json", "compatibility": { "minimum": "0.13.0", "verified": "0.15.0" } }
     ]
   },
   "esmodules": ["scripts/main.js"],
