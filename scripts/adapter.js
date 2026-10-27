@@ -19,7 +19,7 @@ import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
 import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { showPf2eTableRoll } from "./table-cards.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
-import { abilityAction } from "./abilities.js";
+import { abilityAction, selectiveIn } from "./abilities.js";
 import { classActions, extraParts, strikeScore } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, ruleValue, ONE_ROLL } from "./effects.js";
@@ -473,6 +473,13 @@ export class Pf2eAdapter extends SystemAdapter {
     const passives = glossarySpec({ abilities: glossed, bright: !!tokenDoc.parent?.isBright, constant: constantSpells(actor) });
     // The free hands each needs (hands.js): what hasn't said already (a Strike by its weapon's grip), by its traits.
     for ( const a of actions ) a.hands ??= traitHands(a.traits);
+    // An area catches everyone in it, its maker's friends too, unless its text spares whom its maker chooses.
+    const areaWords = await reading();
+    for ( const a of actions ) {
+      if ( !a.area?.shape ) continue;
+      const item = actor.items.get(a.spellId) ?? actor.items.get(a.itemId) ?? actor.items.get(String(a.id ?? "").split(".")[0]);
+      if ( item && selectiveIn(item.system?.description?.value, areaWords) ) a.area = { ...a.area, selective: true };
+    }
 
     const speeds = {};
     for ( const [key, value] of Object.entries(sys.movement?.speeds ?? {}) ) {

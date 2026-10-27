@@ -77,9 +77,24 @@ export function damageIn(html) {
 export function templateIn(html) {
   const text = String(html ?? "");
   const tpl = /@Template\[(?:type:)?(\w+)\|distance:(\d+)/i.exec(text);
-  if ( tpl ) return { shape: tpl[1].toLowerCase(), feet: Number(tpl[2]) };
+  // (A cylinder, "10 feet in diameter" (distance 5, its radius), lands where it's aimed: a burst, as spells' areas are.)
+  if ( tpl ) return { shape: tpl[1].toLowerCase() === "cylinder" ? "burst" : tpl[1].toLowerCase(), feet: Number(tpl[2]) };
   const words = /(\d+)-foot (cone|line|burst|emanation)/i.exec(plain(text));
   return words ? { shape: words[2].toLowerCase(), feet: Number(words[1]) } : null;
+}
+
+/**
+ * Does an area spare whom its maker chooses (the core's area.selective): its text says it catches only enemies, or
+ * creatures of one's choice (reading/<lang>.json areas.selective)? Else it catches everyone in it, friends too.
+ */
+export function selectiveIn(html, words) {
+  const p = words?.areas?.selective?.pattern;
+  if ( typeof p !== "string" ) return false;
+  try {
+    return new RegExp(p, "i").test(plain(html));
+  } catch ( err ) {
+    return false;
+  }
 }
 
 /** About how many foes an area of this shape and size catches. (Not adapter.js areaTargets, a spell's: they differ.) */

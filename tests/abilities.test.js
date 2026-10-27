@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { abilityAction, checkParams, damageIn, templateIn, cooldownIn, areaFoes, saveIn } from "../scripts/abilities.js";
+import { abilityAction, checkParams, damageIn, templateIn, cooldownIn, areaFoes, saveIn, selectiveIn } from "../scripts/abilities.js";
+import { readFileSync } from "node:fs";
 
 const dice = parts => parts.map(p => `${p.dice.map(d => `${d.n}d${d.faces}`).join("+")}${p.flat ? `+${p.flat}` : ""} ${p.persistent ? "persistent " : ""}${p.type}`);
 
@@ -13,6 +14,14 @@ describe("reading a creature's abilities", () => {
     expect(dice(damageIn("deals [[/r {6d6}[cold]]] damage"))).toEqual(["6d6 cold"]);
     expect(templateIn("@Template[cone|distance:40]")).toEqual({ shape: "cone", feet: 40 });
     expect(templateIn("<p>in a 60-foot line</p>")).toEqual({ shape: "line", feet: 60 });
+    // (A column 10 feet across: a burst of 5, from a corner.)
+    expect(templateIn("@Template[cylinder|distance:5]{10 feet in diameter}")).toEqual({ shape: "burst", feet: 5 });
+    // An area catches everyone in it, unless its text says it spares whom its maker chooses.
+    const words = JSON.parse(readFileSync(new URL("../reading/en.json", import.meta.url), "utf8"));
+    expect(selectiveIn("<p>Each creature in the area takes fire damage.</p>", words)).toBe(false);
+    expect(selectiveIn("<p>Each enemy in the burst takes fire damage.</p>", words)).toBe(true);
+    expect(selectiveIn("<p>Any number of creatures of your choice in the area are healed.</p>", words)).toBe(true);
+    expect(selectiveIn("<p>Each enemy in the burst takes fire damage.</p>", {})).toBe(false);
     expect(areaFoes({ shape: "cone", feet: 40 })).toBe(3);
     expect(areaFoes({ shape: "burst", feet: 20 })).toBe(4);
     expect(cooldownIn("<p>It can't use Breath Weapon again for 1d4 rounds.</p>")).toEqual({ n: 1, faces: 4 });
