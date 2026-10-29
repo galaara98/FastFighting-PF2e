@@ -13,7 +13,7 @@ const build = (slugs, strikes, level = 5) => classActions({ actorId: "a", slugs:
 describe("martial class actions", () => {
   test("Vicious Swing: two actions, one more weapon die (two at 10th), counting as two attacks", () => {
     const [swing] = build(["vicious-swing"], [greataxe, shortsword]).actions;
-    expect(swing).toMatchObject({ name: `${text("FFPF2E.Feature.vicious-swing")} (Greataxe)`, cost: 2, attacks: 2 });
+    expect(swing).toMatchObject({ name: `${text("FFPF2E.Feature.vicious-swing")} (Greataxe)`, cost: 2, attacks: 2, oncePerTurn: "flourish" });
     expect(swing.damage.at(-1).dice).toEqual([{ n: 1, faces: 12 }]);
     expect(build(["power-attack"], [greataxe], 10).actions[0].damage.at(-1).dice).toEqual([{ n: 2, faces: 12 }]);
   });
@@ -26,12 +26,12 @@ describe("martial class actions", () => {
   });
 
   test("Sudden Charge: two Strides and a Strike", () => {
-    expect(build(["sudden-charge"], [greataxe]).actions[0]).toMatchObject({ cost: 2, charge: 2 });
+    expect(build(["sudden-charge"], [greataxe]).actions[0]).toMatchObject({ cost: 2, charge: 2, oncePerTurn: "flourish" });
   });
 
   test("Flurry of Blows: two unarmed Strikes for one action, once a turn", () => {
     const [flurry] = build(["flurry-of-blows"], [greataxe, fist]).actions;
-    expect(flurry).toMatchObject({ name: text("FFPF2E.Feature.flurry-of-blows"), cost: 1, oncePerTurn: true });
+    expect(flurry).toMatchObject({ name: text("FFPF2E.Feature.flurry-of-blows"), cost: 1, oncePerTurn: "flourish" });
     expect(flurry.sequence.map(s => s.name)).toEqual(["Fist", "Fist"]);
   });
 

@@ -90,6 +90,10 @@ describe("sharing a space", () => {
 });
 
 describe("Tumble Through", () => {
+  test("one enemy a Tumble Through: a second in the way stops the move short of it", () => {
+    expect(pf2eRules.tumblesPerMove).toBe(1);
+  });
+
   test("Acrobatics against the foe's Reflex DC (10 + its Reflex): through on a success, not on a failure", () => {
     expect(pf2eRules.tumbleThrough(table(10), mover(7), foe(7))).toEqual({ success: true, degree: 2, natural: 10, mod: 7, total: 17, dc: 17 });
     expect(pf2eRules.tumbleThrough(table(9), mover(7), foe(7))).toMatchObject({ success: false, degree: 1, total: 16 });

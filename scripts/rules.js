@@ -321,10 +321,12 @@ export const pf2eRules = {
     if ( !run.prep?.sides?.[u.side]?.enemies?.has?.(o.side) ) return null;
     return u.spec?.acrobatics && tumbleMod(u) + 10 >= reflexDC(o) ? "tumble" : "around";
   },
+  /** Tumble Through gets it past one enemy: a second in the way stops the move short of it (the core's passing). */
+  tumblesPerMove: 1,
   /**
    * Tumble Through: Acrobatics against the foe's Reflex DC. Through its space on a success; on a failure the move ends
    * short of it (the core's). Not played: its space as difficult terrain on the way through (the core charges a tumble
-   * nothing more), one foe a Tumble Through, and the reactions a failure draws as if it had left where it started. In a
+   * nothing more), and the reactions a failure draws as if it had left where it started. In a
    * live battle, the system's own roll where it makes checks (systemRolled, purpose "tumble": PF2e's Tumble Through).
    */
   tumbleThrough(run, u, o) {

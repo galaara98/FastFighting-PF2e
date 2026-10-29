@@ -57,6 +57,9 @@ export function extraParts(base, more, category = null) {
   return out;
 }
 
+/** The flourish trait: one action with it a turn (the core's oncePerTurn key, shared by every flourish). */
+export const FLOURISH = "flourish";
+
 /**
  * @param {object} d
  * @param {string} d.actorId
@@ -82,12 +85,12 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   }
   const melee = changed.filter(s => s.kind === "strike" && s.melee && s.damage?.length && !s.sequence);
   // Vicious Swing (Power Attack): two actions, an extra weapon die (two from 10th level, three from 18th), and it
-  // counts as two attacks for the multiple attack penalty.
+  // counts as two attacks for the multiple attack penalty. A flourish, as Sudden Charge and Flurry of Blows are.
   const swing = has("vicious-swing") || has("power-attack") ? bestStrike(melee.filter(s => !s.traits?.includes("unarmed")).length ? melee.filter(s => !s.traits?.includes("unarmed")) : melee) : null;
   if ( swing ) {
     const extra = weaponDice(swing, level >= 18 ? 3 : level >= 10 ? 2 : 1);
     if ( extra ) out.push({ ...swing, id: `${swing.id}.vicious-swing`, name: `${has("vicious-swing") ? named("vicious-swing") : named("power-attack")} (${swing.name})`, cost: 2, attacks: 2,
-      damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, ...doubled([extra])] : null, classAction: "vicious-swing" });
+      damage: [...swing.damage, extra], critDamage: swing.critDamage ? [...swing.critDamage, ...doubled([extra])] : null, classAction: "vicious-swing", oncePerTurn: FLOURISH });
   }
   // Double Slice: a Strike with each of two melee weapons, both at the current penalty (one in each hand: both hands).
   if ( has("double-slice") ) {
@@ -105,13 +108,13 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   // Sudden Charge: two Strides, then a Strike.
   if ( has("sudden-charge") && melee.length ) {
     const s = bestStrike(melee);
-    out.push({ ...s, id: `${s.id}.sudden-charge`, name: `${named("sudden-charge")} (${s.name})`, cost: 2, charge: 2, classAction: "sudden-charge" });
+    out.push({ ...s, id: `${s.id}.sudden-charge`, name: `${named("sudden-charge")} (${s.name})`, cost: 2, charge: 2, classAction: "sudden-charge", oncePerTurn: FLOURISH });
   }
   // Flurry of Blows: two unarmed Strikes for one action, once a turn.
   if ( has("flurry-of-blows") ) {
     const unarmed = melee.filter(s => s.traits?.includes("unarmed"));
     const s = bestStrike(unarmed.length ? unarmed : melee);
-    if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: named("flurry-of-blows"), cost: 1, oncePerTurn: true,
+    if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: named("flurry-of-blows"), cost: 1, oncePerTurn: FLOURISH,
       sequence: [0, 1].map(i => ({ ...s, id: `${s.id}.flurry-of-blows.${i}` })), classAction: "flurry-of-blows" });
   }
   return { actions: out, strikes: changed };

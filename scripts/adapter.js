@@ -20,7 +20,7 @@ import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { showPf2eTableRoll } from "./table-cards.js";
 import { parseControl, parseCritRider, conditionsIn, conditionsLabel, plain, escapeAt, failureRiders } from "./control.js";
 import { abilityAction, selectiveIn } from "./abilities.js";
-import { classActions, extraParts, strikeScore } from "./class-actions.js";
+import { classActions, extraParts, strikeScore, FLOURISH } from "./class-actions.js";
 import { t, actionName, traitName, featureName, coin, wordList, conditionLabel as conditionName } from "./words.js";
 import { modsFromRules, spellRounds, spellReach, helps, effectRounds, effectThisTurn, spellThisTurn, ruleValue, ONE_ROLL } from "./effects.js";
 import { aidAction, AID_SKILLS } from "./edges.js";
@@ -489,6 +489,8 @@ export class Pf2eAdapter extends SystemAdapter {
     const passives = glossarySpec({ abilities: glossed, bright: !!tokenDoc.parent?.isBright, constant: constantSpells(actor) });
     // The free hands each needs (hands.js): what hasn't said already (a Strike by its weapon's grip), by its traits.
     for ( const a of actions ) a.hands ??= traitHands(a.traits);
+    // (A flourish: one of them a turn, whichever.)
+    for ( const a of actions ) if ( (a.traits ?? []).includes(FLOURISH) ) a.oncePerTurn = FLOURISH;
     // An area catches everyone in it, its maker's friends too, unless its text spares whom its maker chooses.
     const areaWords = await reading();
     for ( const a of actions ) {
@@ -1856,6 +1858,22 @@ export class Pf2eAdapter extends SystemAdapter {
    */
   async useAction(token, options) {
     return usePf2eAction(token, options);
+  }
+
+  /**
+   * A live battle's summons, placed as the core places them, then on the summoner's side the PF2e way: its alliance
+   * (PF2e draws a token's disposition from it) and the summoned and minion traits, on each token's own actor. (Made by
+   * the battle: Rewind deletes the tokens, so there's nothing more to take back.)
+   */
+  async placeSummons(scene, summonerDoc, action, creatures, places) {
+    const placed = await super.placeSummons(scene, summonerDoc, action, creatures, places);
+    const alliance = summonerDoc.actor?.system?.details?.alliance ?? null;
+    const updates = placed.tokens.filter(t => t.actor?.type === "npc").map(t => ({
+      _id: t.id, "delta.system.details.alliance": alliance,
+      "delta.system.traits.value": [...new Set([...(t.actor.system.traits?.value ?? []), "minion", "summoned"])]
+    }));
+    if ( updates.length ) await scene.updateEmbeddedDocuments("Token", updates);
+    return placed;
   }
 
   /**
