@@ -98,12 +98,28 @@ export function conditionSlug(key) {
   }
 }
 
+/**
+ * Items off a sheet, kept for Rewind: those still on it. Taking one off, PF2e may take others with it (what a condition
+ * or an effect grants, dying's wounded), so a list read before can name one gone since.
+ */
+async function dropItems(actor, items, undo) {
+  for ( const item of items ) {
+    if ( !actor.items.get(item.id) ) continue;
+    const data = item.toObject();
+    try {
+      await item.delete();
+    } catch ( err ) {
+      // (PF2e took it off as we asked: gone all the same.)
+      if ( actor.items.get(item.id) ) throw err;
+      continue;
+    }
+    undo.deletedItems.push(data);
+  }
+}
+
 /** Take a condition off (its own item, not one another condition or effect holds in place). */
 async function removeCondition(actor, slug, undo) {
-  for ( const c of actor.itemTypes.condition.filter(i => i.slug === slug && !i.isLocked) ) {
-    undo.deletedItems.push(c.toObject());
-    await c.delete();
-  }
+  await dropItems(actor, actor.itemTypes.condition.filter(i => i.slug === slug && !i.isLocked), undo);
 }
 
 /**
@@ -216,10 +232,7 @@ export async function commitPf2eChanges(tokenDoc, spec, changes, final, options 
     }
   }
   for ( const id of changes.afflictions?.ended ?? [] ) {
-    for ( const item of actor.itemTypes.effect.filter(i => i.getFlag(MODULE_ID, "affliction")?.id === id) ) {
-      undo.deletedItems.push(item.toObject());
-      await item.delete();
-    }
+    await dropItems(actor, actor.itemTypes.effect.filter(i => i.getFlag(MODULE_ID, "affliction")?.id === id), undo);
   }
   if ( !dead ) {
     for ( const e of changes.effects?.added ?? [] ) await laySpellEffect(tokenDoc, actor, e, options, undo);
@@ -381,10 +394,7 @@ async function effectLink(action) {
 /** A buff or debuff the engine ended (its time up, its caster's concentration broken): the effect it laid comes off. */
 async function liftSpellEffect(actor, e, undo) {
   const ours = i => { const laid = i.getFlag(MODULE_ID, "laid"); return laid?.key === e.key && (laid.sourceId ?? null) === (e.sourceId ?? null); };
-  for ( const item of actor.itemTypes.effect.filter(ours) ) {
-    undo.deletedItems.push(item.toObject());
-    await item.delete();
-  }
+  await dropItems(actor, actor.itemTypes.effect.filter(ours), undo);
 }
 
 /** A slot's prepared spells, as a list: pf2e keeps them as an array, or (as saved in some worlds) an object by index. */
@@ -463,8 +473,7 @@ async function commitSpellsAndItems(actor, spec, final, undo) {
       const max = Math.max(1, Number(uses?.max) || 1);
       const quantity = Math.max(0, Math.ceil(Math.max(0, left) / max));
       if ( quantity <= 0 && uses?.autoDestroy !== false ) {
-        undo.deletedItems.push(item.toObject());
-        await item.delete();
+        await dropItems(actor, [item], undo);
         continue;
       }
       const update = { "system.quantity": quantity, ...(max > 1 ? { "system.uses.value": quantity > 0 ? left - (quantity - 1) * max : max } : {}) };
@@ -507,8 +516,7 @@ export async function commitPf2eBound(tokenDoc, bound) {
     const made = await actor.increaseCondition("restrained");
     if ( made ) undo.createdItems.push(made.id);
   } else if ( !bound && held.length ) {
-    undo.deletedItems.push(...held.map(c => c.toObject()));
-    await actor.deleteEmbeddedDocuments("Item", held.map(c => c.id));
+    await dropItems(actor, held, undo);
   }
   return undo.createdItems.length || undo.deletedItems.length ? undo : null;
 }
@@ -727,8 +735,7 @@ async function handleLoot(tokenDoc, actor, options, undo) {
     disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL
   }]);
   undo.createdTokens.push(pileToken.uuid);
-  undo.deletedItems.push(...gear.map(i => i.toObject()));
-  await actor.deleteEmbeddedDocuments("Item", gear.map(i => i.id));
+  await dropItems(actor, gear, undo);
   if ( options.corpseMode === "remove" ) {
     undo.deletedTokens.push({ parentUuid: tokenDoc.parent.uuid, data: tokenDoc.toObject() });
     await tokenDoc.delete();

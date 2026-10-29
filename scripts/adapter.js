@@ -1143,7 +1143,8 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /**
    * A summon spell as the engine's: a creature of the trait it calls, at the highest level its rank allows, read like
-   * any creature, as a minion (two actions a turn) that its summoner must Sustain each turn or lose.
+   * any creature, as a minion (two actions a turn) that its summoner must Sustain each turn or lose. It acts in its
+   * summoner's turn, right after it (the core's withSummoner): no turn of its own on the tracker.
    */
   async #summon(spell) {
     const rank = Math.min(10, Number(spell.rank) || 1);
@@ -1157,7 +1158,7 @@ export class Pf2eAdapter extends SystemAdapter {
     spec.sourceUuid = src.uuid; // (a live battle places it from here)
     // (How far off it appears: the spell's range, 30 feet for most; the core's, where it gives none.)
     const feet = parseFeet(spell.system.range?.value);
-    return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true, ...(feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {}) };
+    return { kind: "summon", creatures: [spec], rounds: spellRounds(spell.system.duration?.value) ?? 10, sustain: { actions: 1 }, sustainOrEnd: true, withSummoner: true, ...(feet ? { range: { increment: feet, max: feet, noPenalty: true } } : {}) };
   }
 
   /**
@@ -1862,11 +1863,13 @@ export class Pf2eAdapter extends SystemAdapter {
 
   /**
    * A live battle's summons, placed as the core places them, then on the summoner's side the PF2e way: its alliance
-   * (PF2e draws a token's disposition from it) and the summoned and minion traits, on each token's own actor. (Made by
-   * the battle: Rewind deletes the tokens, so there's nothing more to take back.)
+   * (PF2e draws a token's disposition from it) and the summoned and minion traits, on each token's own actor. Only a
+   * summon spell's (its `creatures`, #summon): a team's reinforcements come this way too, as themselves. (Made by the
+   * battle: Rewind deletes the tokens, so there's nothing more to take back.)
    */
   async placeSummons(scene, summonerDoc, action, creatures, places) {
     const placed = await super.placeSummons(scene, summonerDoc, action, creatures, places);
+    if ( !Array.isArray(action?.creatures) ) return placed;
     const alliance = summonerDoc.actor?.system?.details?.alliance ?? null;
     const updates = placed.tokens.filter(t => t.actor?.type === "npc").map(t => ({
       _id: t.id, "delta.system.details.alliance": alliance,

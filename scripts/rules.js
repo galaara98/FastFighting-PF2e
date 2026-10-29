@@ -811,6 +811,10 @@ export const pf2eRules = {
       // (Inside a gullet: slowed 1. The actions stunned takes count toward those slowed takes, the remaster's Stunned.
       // Quickened: an action more.)
       return Math.max(u.conds.slowed ?? 0, holderId(u) ? 1 : 0, u.conds.stunned ?? 0) - (Number(u.conds.quickened) > 0 ? 1 : 0);
+    },
+    /** Quickened's action more is for a Strike or a Stride (Haste's), never part of an activity: the core's Turn. */
+    limitedActions(u) {
+      return Number(u.conds.quickened) > 0 ? { n: 1, for: ["strike", "stride"] } : null;
     }
   },
 

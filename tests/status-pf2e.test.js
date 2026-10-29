@@ -135,6 +135,11 @@ describe("quickened, drained", () => {
     expect(m.actionsLost(unit({ quickened: 1, slowed: 1 }))).toBe(0);
   });
 
+  test("quickened's action is for a Strike or a Stride only (the core's limited actions)", () => {
+    expect(m.limitedActions(unit({ quickened: 1 }))).toEqual({ n: 1, for: ["strike", "stride"] });
+    expect(m.limitedActions(unit({}))).toBeNull();
+  });
+
   test("stunned and slowed: the actions stunned takes count toward slowed's (the remaster's Stunned)", () => {
     expect(m.actionsLost(unit({ stunned: 1, slowed: 2 }))).toBe(2);
     expect(m.actionsLost(unit({ stunned: 2, slowed: 1 }))).toBe(2);

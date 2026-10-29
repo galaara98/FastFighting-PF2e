@@ -177,7 +177,7 @@ async function stand(tokenDoc, actor, { secret = false } = {}) {
   record.deletedItems.push(...prone.map(c => c.toObject()));
   const action = game.pf2e?.actions?.get?.("stand");
   if ( action && !secret ) await action.use({ actors: [actor] });
-  else for ( const c of prone ) await c.delete();
+  else for ( const c of prone ) if ( actor.items.get(c.id) ) await c.delete();
   return record;
 }
 
