@@ -6,139 +6,93 @@
 
 Pathfinder Second Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT battle estimator, storyteller and resolver.
 
-FastFighting Core plays every game system with one large but fixed set of options: conditions, maneuvers, holds, buffs and debuffs, reactions, resources, outcomes and more. Each system helper maps its system into those options. This one reads PF2e actors into them, plays PF2e's rules where they differ from the core's defaults, and writes live battles back onto PF2e sheets.
+The core plays every system with one fixed set of options: conditions, maneuvers, holds, buffs, reactions, resources and outcomes. This module maps PF2e onto them, plays PF2e's rules where they differ, and writes live battles back onto PF2e sheets. It finds features by slug, so a translated game plays the same.
 
-It finds features, feats and spells by slug, which stays the same in every language, so a translated game plays the same.
+## What plays
 
-## How PF2e maps into the core
+**Turns and checks.** Three actions, the multiple attack penalty, four degrees of success, range increments, reload, drawing a weapon, and the ammunition a character carries. Flourish actions are once a turn. Quickened's extra action is only for a Strike or a Stride.
 
-**Checks and turns.** PF2e's four degrees of success, natural 20s and 1s, basic saves, three actions a turn and the multiple attack penalty replace the core's defaults; a hit deals at least 1 damage. Strikes keep agile, reach, reload (each shot pays it) and drawing an unready weapon, and ranged attacks take range increments. A character's weapon shoots only the compatible ammunition it carries; in a live battle FastFighting loads it (or picks a bow's arrows) before PF2e rolls the Strike, as a player would, and Rewind puts it back.
+**Conditions.** PF2e's conditions and status penalties, applied to the rolls they affect. A penalty already in a sheet's numbers isn't counted twice. Frightened is only a penalty; fleeing spends every action getting away.
 
-**Conditions** become the core's penalties, so a creature weighs one by what it costs before it inflicts it: frightened 1 is −1 to everything. Off-guard, frightened, sickened, clumsy, enfeebled, stupefied, drained, encumbered, prone, slowed, quickened, stunned, paralyzed and fleeing all play. Status penalties stack as in PF2e, the worst counting on rolls based on the attribute it affects (clumsy and encumbered on AC, Reflex, ranged attacks and Dexterity skills; stupefied on Will, spell attacks, words, Medicine, Recall Knowledge and Perception). A penalty already in a sheet's numbers isn't counted twice, so a fight resumed mid-way or a live battle doesn't double it. Drained costs Hit Points, off the maximum too; quickened adds an action; a stupefied caster's spell DCs drop, and a failed DC 5 + stupefied flat check loses the spell. Fear stays PF2e's: frightened is a status penalty and nothing more (unlike the core's default, it doesn't keep a creature away from the source), and fleeing spends every action getting away.
+**Maneuvers and holds.** Trip, Grapple, Shove, Reposition, Disarm, Feint and Demoralize, by degree, for the trained.
+- A grab ends when the grabber moves. A failed Grapple lets go of a foe already held.
+- Escape counts toward the multiple attack penalty. A critical success Strides 5 feet clear, if that draws no Reactive Strike.
+- Disarm's −2 lasts until the foe spends an Interact to change its grip.
+- Demoralize takes −4 against a foe that shares no language.
+- Grab, Knockdown, Push and Pull follow the Monster Core. Web, Tangle Vine and the like are holds, broken by Escape.
 
-**Holds.** Grabbed and restrained are the core's holds: Escape rolls the creature's best of its unarmed attack, Acrobatics or Athletics against the grabber's Athletics DC. Escape is an attack for the multiple attack penalty, and a critical success lets the creature Stride 5 feet clear of the grabber when that draws no Reactive Strike. A grab ends when the grabber moves. A spell or ability whose text says an Escape breaks it (Web, Tangle Vine, a creature's web) is a hold too, broken against its DC; what came with it, such as off-guard, ends with it.
+**Spells and resources.** Spell attacks and saves, prepared and spontaneous slots (signature spells heightened), innate uses, Focus Points, and every bomb and consumable carried. Buffs and debuffs come from the Spell Effect a spell links, so the numbers are PF2e's. Crowd-control spells are read degree by degree.
 
-**Maneuvers.** PF2e's skill actions are the core's maneuvers, with PF2e's results by degree: Trip, Grapple, Disarm, Shove and Reposition (Athletics), Feint (Deception) and Demoralize (Intimidation, once per foe), each against the DC the rules name. Trip, for example, rolls against Reflex DC: prone, plus 1d6 bludgeoning on a critical success, and a critical failure lands you prone. The Athletics ones are attacks, so they need a free hand and a target no more than one size larger. Only the trained try the Athletics maneuvers and Feint. Bon Mot is there for those with the feat. A failed Grapple against a foe already held lets it go. Disarm's −2 lasts until the foe spends an Interact to change its grip. Demoralize takes −4 against a foe that shares no language with you. A creature's Grab, Knockdown, Push and Pull follow the Monster Core: an action straight after a hit with the Strike that lists them, a Grapple, Trip, Shove or Reposition toward it with its Athletics, no multiple attack penalty, and as far as the ability says. The Improved ones are free, at once. Grab can instead keep hold of a creature it already holds.
+**Summons and companions.** A summon spell calls the highest-level creature of its trait the rank allows, from the installed bestiaries. It has the minion and summoned traits, acts in its summoner's turn, and lasts while sustained. Familiars and animal companions act when commanded.
 
-**Edges.** Aid and Recall Knowledge are the core's ways to gain an edge. Aid is Prepare to Aid, then the reaction: a DC 15 check with the helper's best Strike or Diplomacy, Medicine, Intimidation or Deception, for +1 to a friend's next roll (+2 to +4 on a critical success, by rank; −1 on a critical failure). Aiding a Strike takes standing beside the foe. Recall Knowledge is how a Lore-Collector sizes up a foe: its best knowledge skill or Lore against the DC for the foe's level. On a success, its rolls against foes of that kind are likelier to succeed for the rest of the turn (see Settings), and +1 after. A spell good for one roll (Guidance, Sure Strike) is spent by that roll.
+**Class features.** Vicious Swing, Double Slice, Sudden Charge, Flurry of Blows, Exploit Vulnerability, Intercept Attack, Elemental Blast and impulses. Hunt Prey takes its action before a Strike at a new prey; Flurry and Precision count only against the prey. Extra Strike damage comes from PF2e's own formula, so Sneak Attack, a stratagem or a finisher counts from any source.
 
-**Buffs and debuffs** come from the Spell Effect a spell links, read through its rule elements, so they give the numbers PF2e would, heightening included: Bless or Heroism on friends, Bane on foes who fail the save, Dirge of Doom's frightened aura. An action that puts an effect on its user reads the same way: Rage gives +2 to melee Strike damage and temporary HP of level + Constitution, and stays on after the fight for the time it has left. Spell Effects already on a creature count through PF2e's own totals.
+**Creature abilities.** Breath weapons, roars and other save abilities are read from their inline checks, recharge included: about nine in ten of the Monster Core's. An ability with a Requirements line plays when FastFighting can tell it's met. Rend, Pounce, Constrict, Ferocity, regeneration, fast healing, Swallow Whole and Engulf play as written.
 
-**Control.** Crowd-control spells (Fear, Slow, Sleep, Paralyze, Command ...) are read degree by degree from their text, and so are damage spells' riders (Daze's stunned 1 on a critical failure). Dominate is the core's controlled: the target fights for its new master, with a Will save at the end of each of its turns.
+**Reactions.** Reactive Strike for those who have it, with a weapon in hand. Shield Block, Reactive Shield, Nimble Dodge and the champion's reactions. Other reactions are read from their Trigger and effect text. A creature that would waste its turn Delays or Readies a Strike or a shot instead.
 
-**Spells and resources.** Spell attacks, basic and non-basic saves, auto-hit spells (Force Barrage), prepared slots (a spell at each rank it's prepared at), flexible and spontaneous slots (a signature spell heightened into higher slots, at each rank where heightening changes it), innate spells' uses per day, Focus Points, and bombs and other consumables, as many as there are. A summon spell calls a creature of the trait it names, at the highest level its rank allows, from the installed bestiaries (the Monster Core first): a minion with two actions that its summoner must Sustain each turn. A familiar or animal companion acts only when its master spends an action to command it. Minions have no reactions.
+**Healing and dying.** Temporary HP, Stamina, heal reach (one-action Heal is a touch), Lay on Hands and Touch of the Void. Dying, wounded and doomed, with recovery DCs and the dying limit from feats. Hero Points save a life or buy Heroic Recovery. Persistent damage ends on flat checks, with assisted recovery and Administer First Aid. A critically failed First Aid deals the bleed again.
 
-**Class features.** Martial class actions are found by slug: Vicious Swing (or Power Attack), Double Slice, Sudden Charge, Flurry of Blows, a ranger's Hunt Prey and Hunter's Edge. Hunt Prey takes its action before a Strike at a new prey, and Flurry and Precision count only against the prey; in a live battle the prey is marked as PF2e marks it. What a class or archetype adds to a Strike comes from PF2e's own damage formula rather than a list of names, so any source counts: Sneak Attack against an off-guard foe, a thaumaturge's Implement's Empowerment, an investigator's stratagem, a swashbuckler's finisher. A kineticist's Elemental Blast and impulses, a thaumaturge's Exploit Vulnerability and a guardian's Intercept Attack (it takes a physical blow meant for an ally within 10 feet) play too. A feat that is an action with a save (Dragon's Rage Breath) reads like a monster's ability.
+**Defenses and senses.** Immunities, weaknesses, resistances and incapacitation. Auras such as Frightful Presence and Stench. Situational save bonuses (Trap Finder, +1 vs. magic). Hidden and concealed flat checks; darkvision, scent and tremorsense.
 
-**Reactions** are the core's answering reactions: Shield Block (the shield's Hardness off a physical blow), Reactive Shield, Nimble Dodge (+2 AC), and a champion's reactions (a friend within 15 feet takes 2 + level less; Retributive Strike also strikes the attacker in reach). Reactive Strike is the core's opportunity attack, but only for creatures that have it (Attack of Opportunity, before the remaster), once a round. A careful creature Steps out of reach first. A creature that would waste its turn Delays (for a foe to come to it, a friend's help, or a standoff to break: it moves down the tracker in a live battle) or spends two actions to Ready a Strike for the first foe that comes within reach, or a shot (loaded, with ammunition) for the first that comes into sight and range. Any other reaction, or free action with a trigger, is read from its own text where the helper can read all of it: the moment from its Trigger line, and what it does from its damage, saves, conditions and effects (harm to the attacker, a condition on it, a buff, healing, a Strike back, +AC, an ability ready again).
+**The map.** Speeds, Tumble Through past one foe, Tiny creatures and swarms sharing spaces, doors (Force Open, Pick a Lock), and areas that spare whom their text spares. A simple hazard fires once, a complex one each round.
 
-**Creature abilities.** An ability that calls for a save (Breath Weapon, Trample, a frightening roar) is read from the inline checks PF2e writes into its text: the save, DC, damage, area, what a failure lays, and how soon it comes back ("can't use it again for 1d4 rounds", "once every 1d4 rounds") or how often (once per day). That covers about nine in ten of the Monster Core's. An ability with a Requirements line plays once it's met, where FastFighting can tell (a creature it has grabbed, its last action a hit with the Strike it names, a condition on its target, being hidden); one it can't tell isn't used. Draconic Frenzy, Rend, Pounce, Constrict (only on a creature it holds), Draconic Momentum, Swarm Mind, Camouflage, Slow, Surprise Attack and Light Blindness (in a brightly lit scene) are known by slug. Regeneration (stopped by the damage it names) and fast healing come from their rule elements, including those a spell lends (Regenerate). Evasion, Juggernaut and Resolve turn a success on that save into a critical success. Bonuses to saves against traps (Trap Finder) count against any hazard, one the GM marked in FastFighting's tab too.
-
-**Swallow Whole and Engulf** are the core's swallowed and engulfed holds, played as the Monster Core describes them. Inside, a creature takes the listed damage at once and at the end of each of its turns, is slowed 1, and attacks only its holder. It gets out by Escaping, or by cutting free with one piercing or slashing blow of the Rupture value or more. A dead swallower's corpse still has to be cut open (three actions by a friend beside it); a dead engulfer lets go.
-
-**Afflictions.** Poisons and diseases are read stage by stage from their text: a creature's on its Strikes, a spell's (Goblin Pox: the failed save is the exposure, with no second roll), and the injury poisons a character carries (applied to its best piercing or slashing Strike, a dose a use).
-
-**Persistent damage** ends on flat checks, with assisted recovery: two actions buy another flat check where something would help (dropping and rolling against fire at DC 10, pressing a bleed at DC 15). A friend trained in Medicine can Administer First Aid on a bleed (two actions; a success allows the DC 10 flat check; a critical failure deals the bleed damage again at once). A sickened creature can retch (a Fortitude save: 1 lower, 2 on a critical success), and drinks no potion or elixir while sickened.
-
-**Hit points, healing and dying.** Damage takes temporary HP first, then HP; in a world playing the Stamina variant, Stamina Points come between, and healing restores HP only. Healing has reach: one-action Heal and Battle Medicine are a touch, so the healer walks over first; two-action Heal reaches 30 feet. Lay on Hands and Touch of the Void are a heal by touch at the rank cast (Lay on Hands' +2 AC only on someone other than the champion) or, on the other kind of creature, damage with a basic Fortitude save. In a live battle a heal is posted as PF2e's healing card naming whom it heals and how much, then applied; an effect FastFighting lays gets a short card saying who got it. Dying, wounded and doomed come with recovery checks and Administer First Aid (DC 15 + dying). The dying value a creature dies at and its recovery DC come from its feats, as PF2e works them out (Diehard's dying 5, Toughness's DC 9 + dying). Hero Points buy a reroll to keep someone from dying, or, all of them, Heroic Recovery. Ferocity and Orc Ferocity keep a creature at 1 HP as it would fall, wounded 1 higher: a creature's until wounded 3, a character's as often as its frequency allows (Undying Ferocity adds temporary HP).
-
-**Immunities.** Immunities, weaknesses and resistances; immunity by trait (mental, fear, sleep ...; the mindless shrug off mental effects); incapacitation.
-
-**Auras and situational saves.** An aura that calls for a save goes off as PF2e says: Frightful Presence frightens a foe that first comes into it (Will: frightened 1, 2 or 4 by degree; immune for a minute after any save), Stench sickens one that comes in or starts its turn there (Fortitude; immune to every stench after a success), and others are read from their rule element, check and condition links. Foes weigh what walking into one would cost them. Bonuses to saves against some effects only (+1 status to all saves vs. magic; against fear, poison or a tradition) count against those effects, as their rule elements say. In a live battle PF2e rolls these saves; a player's character starting its turn in an aura saves at the table, as usual.
-
-**Senses and flat checks.** PF2e's senses sort into the core's: darkvision, infrared vision and truesight see in the dark; scent is smell; tremorsense, lifesense and any other sense of a creature's own are feel. Low-light vision and see invisibility don't count. An attack at a hidden creature needs a DC 11 flat check, at a concealed one DC 5, and so does every attack by a dazzled creature without a precise sense besides sight. A spell aimed at such a creature takes the caster's flat check too; an area spell doesn't.
-
-**The map.** Speeds by movement type. A creature moves through a friend's or a fallen creature's space. Past a foe on its feet, it uses Tumble Through if trained in Acrobatics with at least even odds, and goes around otherwise. A Tiny creature or a swarm moves through others' spaces and may end its move in one. Doors are wooden (Hardness 5, 20 HP) with a simple lock: Force Open or Pick a Lock at DC 20.
-
-**Hazards.** A simple hazard fires once, a complex one each round on its Stealth initiative: its Strikes and what it does when set off, at whoever is in reach. With no alliance (PF2e's default for a hazard) it's against the Friendlies; the planner can change that.
-
-**Talking, theft and loot.** Languages (a constant tongues or truespeech understands everyone) and the Diplomacy, Intimidation, Deception, Will and Perception DCs for talking; Thievery against Perception DC for theft (Steal at −5 in combat). Coins and gear set what a creature can be talked out of, have stolen, or offer; PF2e's item types, precious materials and rarities set what a character can ask for.
-
-**Companions** made on character sheets (animal and construct) are companions, not player characters.
-
-**Areas.** A cylinder is a burst of its radius, from a grid corner: a 10-foot-diameter column covers four squares. An area hits everyone in it, friends too, unless its text says it catches only enemies or creatures of your choice.
-
-**Hearing a fight.** A bystander hears a fight at an untrained DC (10), talk with no blow struck at a trained one (15); +2 past 30 feet, +5 past 60, +10 past 120; a wall +5, two +10, more not at all, and talk not through any wall. Its Perception counts without its level.
+**Talking, theft and loot.** Languages, the social DCs, Steal at −5 in combat, and coins and gear for deals and loot.
 
 ## Personality and leadership
 
-A creature's Tactical, Brave, Selfish and Loyal come from its data: mindless, animal, undead, construct or minion; Intelligence, Wisdom and Will; its kind's loyalty (a devil's hierarchy, a demon's chaos); holy or unholy; and what its abilities' rules do.
-
-A player character starts as the usual hero, and its sheet moves it a little: Intelligence, Wisdom and Perception for Tactical; Will for its level and Constitution for Brave; class, ancestry and background (a champion selfless, a criminal less so, a gladiator bold); holy or unholy; feats by what their rules do (a fighter's Bravery bolder, Cooperative Nature more loyal); telling skills (Warfare Lore, Thievery, Medicine); and whether it's in a party. Each trait's tooltip in the planner lists what moved it.
-
-Its attribute modifiers also tell the core, hidden, how smart, strong, quick, wise and charismatic it is (+0 to +2 average; mindless, as dumb as it gets). Intelligence decides who focuses fire and who keeps near its team.
-
-The members of the world's party actors start on the Friendly Team, unless their token is Hostile.
-
-Leadership comes from Diplomacy, Intimidation and Warfare Lore, the Commander class and its tactics, and rallying abilities. A rarer creature has a slight edge for leader, boss or lieutenant.
+Tactical, Brave, Selfish and Loyal come from a creature's data: mindless, animal or undead, its mental attributes and Will, holy or unholy. A player character starts as a hero, and its sheet nudges it; each trait's tooltip lists why. Leadership comes from Diplomacy, Intimidation, Warfare Lore and the Commander class. The world's party starts on the Friendly Team.
 
 ## Playstyles in PF2e
 
-Every perk a playstyle or tactics answer can switch on works here. Most play as in any system; these use PF2e's own actions:
-
-| Perk (playstyles) | In PF2e |
+| Perk | In PF2e |
 | --- | --- |
-| Hard to spot (Chicken, Fragile, Wallflower) | Foes overlook it, and it **Avoids Notice** on the way in (Stealth for initiative, when better). Behind walls, it **Hides** (Stealth against foes' best Perception DC; hidden, attacks at it need a DC 11 flat check, and its next Strike finds the foe off-guard) and **Takes Cover** (standard cover becomes greater, +4, until it moves or attacks). |
-| Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Trip**, **Grapple**, **Disarm**, **Demoralize**, **Feint**, and spells that lay a condition, over a plain Strike. |
-| Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Aid**; healing and buff spells. |
-| In a hurry (Impatient) | Doesn't Raise a Shield or Step clear of a foe. |
-| Acting first (Instigator) | Its initiative. |
+| Hard to spot | **Avoid Notice**, **Hide**, **Take Cover**. |
+| Spoiling | **Trip**, **Grapple**, **Disarm**, **Demoralize**, **Feint**, condition spells. |
+| Helping | **Aid**, healing and buffs. |
 | Lore-Collector | **Recall Knowledge**. |
-| Weak spots (Puzzle-Maniac) | Weaknesses. |
-| Thief | **Steal** (Thievery, −5 in combat). |
-| Trap avoiders | Hazards, and any token the GM marks as one. |
-| Finishing the fallen (Cruel) | A blow on a dying creature raises its dying value. |
-| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Its Strikes are nonlethal (a lethal weapon at −2), so a blow that would kill knocks out instead. |
-| Mending, healing, rescue | Healing spells, potions, elixirs, Battle Medicine; **Administer First Aid** for the dying, in the fight and after. |
-| Locked doors | Force Open and Pick a Lock. |
+| Thief | **Steal**. |
+| Sparing the fallen | Nonlethal Strikes (−2 with a lethal weapon). |
+| Mending | Potions, Battle Medicine, **Administer First Aid**. |
+| Locked doors | Force Open, Pick a Lock. |
 
-Magic and specialties (an Un-Mundane character leans on them) are spells, class actions, a kineticist's blasts, feat actions such as Battle Medicine, self-effects such as Rage, and a creature's abilities. Strikes, the skill actions, bombs and potions are what anyone could do.
+Un-Mundane characters lean on spells, class actions and feat actions; Strikes, skill actions and consumables are what anyone can do.
 
 ## Set up by itself
 
-When FastFighting sets a character up by itself, PF2e suggests playstyles by class (a Champion a Tank and a Martyr, a Rogue a Thief, a Wizard a Lore-Collector, the spellcasters Un-Mundane), by ancestry where its abilities lean somewhere (an orc's ferocity), by creature trait (the undead and constructs Relentless, fiends Cruel, fey Wildcards), and by gear (a shield or heavy armor makes a Tank likelier). Keywords come from a character's biography and a creature's notes.
-
-For **Let this character decide**, PF2e's data answers the tactics questions where it says something, and shows the GM each reason in the system's own words. A warpriest fights in front, a gunslinger's way sets how it fights, a champion or guardian protects its friends, a commander picks the most dangerous foe, a summoned creature spends everything, a devil talks first and lets you pass for a price, and a merchant buys its way out with a tenth of its coin. Where the data says nothing, the core's reading stands.
+FastFighting suggests playstyles from class, ancestry, creature traits and gear (a Champion a Tank, a Rogue a Thief), and keywords from a biography. **Let this character decide** answers the tactics questions from the sheet and shows each reason.
 
 ## Live battles
 
-Each turn of a live battle writes to the PF2e sheets: HP, temporary HP and Stamina; dying, wounded, unconscious, prone and lingering conditions; persistent damage and afflictions (as effects, noting any onset to come); death, with lootable corpses or loot piles; spent slots, innate spells' and abilities' uses for the day, Focus Points, Hero Points and consumables' uses; buffs and debuffs as their own Spell Effects, for the rounds they have; surrender and side changes (alliance and disposition: won over, the new side; talked out of the fight, Neutral; a neutral that turned on the Friendlies, Hostile); and coins and items handed over or stolen. A retreating PC stays on the map. A player's damage card at a creature FastFighting runs is applied, or put before the GM, through PF2e's own Apply Damage (resistances, shields, persistent damage, death at 0 HP). Reactions FastFighting rolls are PF2e's own Strikes, with their attack and damage cards in the chat; a critical Reactive Strike disrupts a manipulate action, and the player and GM are told.
-
-A creature that dies leaves its corpse with its gear: a **Fresh Corpse** (equipment, a creature's Bulk; food for the hungry, 1 to 32 portions by size), a **Rotten Corpse** for the undead, or a **Scrap Corpse** for one with the metal, clockwork or robot trait. Incorporeal creatures, oozes, plants, fungi, swarms, elementals and other constructs leave none.
-
-A creature that wants to avoid killing (its answer to Foes who fall) makes its Strikes nonlethal: a lethal weapon at −2, shown on PF2e's own roll as Nonlethal; fists and nonlethal weapons, which it reaches for first, at no cost. A foe it drops is knocked out. A spell without the nonlethal trait kills as usual.
+Each turn writes to the sheets: HP, conditions, persistent damage, afflictions, spent slots and uses, Hero Points, buffs, side changes, and items handed over or stolen. PF2e rolls the Strikes, saves and checks, with its own cards. A player's damage at a creature FastFighting runs goes through PF2e's Apply Damage. The dead leave a lootable corpse: Fresh, Rotten for the undead, Scrap for metal, clockwork or robot creatures.
 
 ## Settings
 
-PF2e has no settings of its own. It sets two of the core's: **Max rounds** (6 to 16, 12 at first) and **Lore-Collector advantage** (2× at first, since Recall Knowledge costs one action of three).
+PF2e sets two core settings: **Max rounds** (6 to 16, 12 at first) and **Lore-Collector advantage** (2×).
 
 ## What isn't played
 
-- A hazard doesn't move or think, nobody attacks or disables it, and it doesn't keep its side in the fight.
+- Disabling or attacking a hazard; a hazard keeping its side in the fight.
 - Abilities whose Requirements line FastFighting can't read.
-- Swallow Whole and Engulf: holding one's breath, the engulfer's own move, a successful save's push aside, and several friends' actions added up at a corpse.
-- Grab and its kin: the body part holding a foe is still free to strike.
-- Skill actions: a critically failed Feint, a weapon's shove, trip or disarm trait standing in for a free hand, the Stride after a Shove, and a retort to a Bon Mot.
-- Monster abilities: Rend and Draconic Frenzy from a reaction, Pounce staying hidden until its Strike, Light Blindness's blinded on first exposure, Camouflage only in natural surroundings, and Slow's no reactions.
-- A character's Surprise Attack, and a creature's Deception or Stealth initiative (played as if it had).
-- Tumble Through: the foe's space as difficult terrain, and a failure's reactions drawn as if from where the mover started.
-- Gear: a missed poisoned Strike keeping its poison, cover's bonus to Stealth when Hiding, a repeating weapon's magazine change, and a capacity weapon's turn to its next chamber.
-- Saves that some effects change by degree or roll twice (Bravery and the like).
+- Swallow Whole and Engulf: holding one's breath, the engulfer's move, a save's push aside.
+- A grabbing body part still striking.
+- A critically failed Feint, a weapon trait standing in for a free hand, the Stride after a Shove, a retort to a Bon Mot.
+- Rend or Draconic Frenzy as a reaction, Pounce staying hidden, Light Blindness on first exposure, Camouflage only in natural surroundings, Slow's no reactions.
+- A character's Surprise Attack, and Deception or Stealth initiative.
+- Tumble Through's difficult terrain, and a failure's reactions from the starting square.
+- A missed poisoned Strike keeping its poison, cover's bonus to Hide, magazine changes, a capacity weapon's next chamber.
+- Saves that some effects change by degree or roll twice (Bravery).
 
 ## Installation
 
-Install **FastFighting Core** first, then this module, with this manifest URL:
+Install **FastFighting Core** first, then this module:
 
 ```
 https://github.com/galaara98/FastFighting-PF2e/releases/latest/download/module.json
 ```
 
-Enable both in a PF2e world.
-
-## Note
-
-PF2e ties token disposition to the actor's *alliance*. To make a creature Neutral for FastFighting, set its alliance to Neutral on the actor sheet.
+PF2e ties token disposition to the actor's *alliance*: set it to Neutral on the actor sheet to make a creature Neutral.
 
 ---
 
-Developers: [CODING_README.md](CODING_README.md). FastFighting itself: [FastFighting Core](https://github.com/galaara98/FastFighting) and its [developer docs](https://github.com/galaara98/FastFighting/blob/main/CODING_README.md). The numbers behind it all: [STATS_AND_FORMULAS_README](https://github.com/galaara98/FastFighting/blob/main/STATS_AND_FORMULAS_README.md).
+Developers: [CODING_README.md](CODING_README.md), [FastFighting Core](https://github.com/galaara98/FastFighting) and its [developer docs](https://github.com/galaara98/FastFighting/blob/main/CODING_README.md). The numbers behind it all: [STATS_AND_FORMULAS_README](https://github.com/galaara98/FastFighting/blob/main/STATS_AND_FORMULAS_README.md).
