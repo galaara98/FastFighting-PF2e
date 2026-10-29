@@ -211,6 +211,27 @@ const FLEEING_AVOID = 90;
  */
 const STORY_TYPES = Object.freeze({ positive: "vitality", negative: "void", good: "radiant", evil: "unholy", lawful: "spirit", chaotic: "spirit", precision: "untyped" });
 
+/** A grip a Disarm loosened (maneuvers.js): its -2 to attacks, the weapon still in hand. */
+const loosened = e => typeof e?.key === "string" && e.key.endsWith(".disarm") && Number(e.mods?.attack) < 0 && !e.conditions?.disarmed;
+
+/** How much a loosened grip bothers it (the core's remedy annoyance, 0 to 100). */
+const REGRIP_ANNOYANCE = 40;
+
+/**
+ * Does `target` understand what `unit` says (Demoralize's words)? A language they share (either speaking any, a
+ * constant tongues), or the GM setting languages aside (the core's ignoreLanguages). One that speaks none is never
+ * understood.
+ */
+function understood(unit, target, run) {
+  const mine = unit.spec?.social?.languages ?? [];
+  const theirs = target.spec?.social?.languages ?? [];
+  if ( !mine.length && !unit.spec?.social?.anyLanguage ) return false;
+  if ( run?.prep?.options?.ignoreLanguages ) return theirs.length > 0 || !!target.spec?.social?.anyLanguage;
+  if ( unit.spec?.social?.anyLanguage ) return theirs.length > 0;
+  if ( target.spec?.social?.anyLanguage ) return true;
+  return mine.some(l => theirs.includes(l));
+}
+
 export const pf2eRules = {
   id: "pf2e",
   actionsPerTurn: 3,
@@ -323,6 +344,14 @@ export const pf2eRules = {
   },
   /** Tumble Through gets it past one enemy: a second in the way stops the move short of it (the core's passing). */
   tumblesPerMove: 1,
+  /** A grab lasts until the grabber's next turn ends "unless you move": it ends as the grabber moves off (the core's). */
+  grabEndsOnMove: true,
+  /**
+   * Escape has the attack trait: it counts toward the multiple attack penalty of the Strikes after it; a critical
+   * success, a Stride of 5 feet (the core's step clear of the holder, where it draws no strike).
+   */
+  escapeIsAttack: true,
+  escapeStep: 5,
   /**
    * Tumble Through: Acrobatics against the foe's Reflex DC. Through its space on a success; on a failure the move ends
    * short of it (the core's). Not played: its space as difficult terrain on the way through (the core charges a tumble
@@ -463,6 +492,8 @@ export const pf2eRules = {
    */
   usable(run, u, action, t) {
     if ( action?.swallow && t ) return t.grabbedBy === u.id && !holderOf(run, t) && !full(run, u);
+    // (Hunt Prey: never at the prey it hunts already.)
+    if ( action?.huntsPrey && t && u.preyId === t.id ) return false;
     // (Vitality healing mends no one with void healing, Harm's void healing no one without: iwr.js healsIt.)
     if ( action?.kind === "heal" && t && !healsIt(action, t) ) return false;
     // (Sickened: it can't willingly drink a potion or an elixir.)
@@ -614,10 +645,14 @@ export const pf2eRules = {
     return { natural, total: natural + modifier, degree: this.degreeOfSuccess(natural, natural + modifier, dc) };
   },
 
-  /** Multiple attack penalty for the nth attack this turn (0-based). */
-  attackPenalty(action, attacksMade) {
+  /**
+   * Multiple attack penalty for the nth attack this turn (0-based). Against the hunted prey, Flurry's (preyMaps); the
+   * Strike that hunts it counts as against it.
+   */
+  attackPenalty(action, attacksMade, { attacker = null, target = null } = {}) {
     if ( action.subjectToMAP === false ) return 0;
-    const maps = action.maps ?? [0, -5, -10];
+    const prey = action.preyMaps && (action.huntsPrey || (!!target && attacker?.preyId === target.id));
+    const maps = (prey ? action.preyMaps : action.maps) ?? [0, -5, -10];
     return maps[Math.min(attacksMade, maps.length - 1)] ?? 0;
   },
 
@@ -781,7 +816,10 @@ export const pf2eRules = {
       bonus -= statusPenalty(attacker, action?.spellId ? "mind" : action?.melee ? "str" : "dex");
       if ( action?.melee && attacker.spec.environment?.aquatic && !(attacker.spec.speeds?.swim > 0) ) bonus -= 2;
       if ( action?.range && !action.range.noPenalty && ctx.positioning ) {
-        bonus -= 2 * Math.max(0, Math.ceil(ctx.distance / action.range.increment) - 1);
+        // (Hunt Prey: no penalty in the second range increment against the prey.)
+        const beyond = Math.max(0, Math.ceil(ctx.distance / action.range.increment) - 1);
+        const prey = action.huntsPrey || (!!ctx.target && attacker.preyId === ctx.target.id);
+        bonus -= 2 * (prey && beyond === 1 ? 0 : beyond);
       }
       return { bonus, advantage: 0 };
     },
@@ -796,11 +834,13 @@ export const pf2eRules = {
      * A skill check: frightened, sickened and fascinated, the worst; and what it's based on, by what it's for (checkOn:
      * clumsy on Thievery, enfeebled on Athletics, stupefied on words, Medicine and Recall Knowledge).
      */
-    check({ unit, purpose, action } = {}) {
+    check({ unit, target = null, purpose, action, run = null } = {}) {
       const on = checkOn(purpose, action);
       // (Noticing a fight from afar, against hearDC's simple DCs: Perception without its level.)
       const level = purpose === "notice" ? Math.max(0, Number(unit?.spec?.level) || 0) : 0;
-      return { bonus: (unit ? 0 - statusPenalty(unit, "skill", ...(on ? [on] : [])) : 0) - level, advantage: 0 };
+      // (Demoralize at one that doesn't understand its words: -4, unless the GM sets languages aside.)
+      const words = action?.maneuver === "demoralize" && unit && target && !understood(unit, target, run) ? -4 : 0;
+      return { bonus: (unit ? 0 - statusPenalty(unit, "skill", ...(on ? [on] : [])) : 0) - level + words, advantage: 0 };
     },
     /** Steal in combat: -5 to the Thievery check. */
     steal() {
@@ -980,7 +1020,7 @@ export const pf2eRules = {
   /**
    * Administer First Aid on a friend's bleed: Medicine (less what frightens or sickens the healer) against the bleed's
    * DC; a success lets the friend try an assisted recovery at once, at the lower DC for particularly appropriate help,
-   * and the bleed ends on that.
+   * and the bleed ends on that. A critical failure: the friend takes its persistent bleed damage at once (harmHeld).
    */
   stopBleeding(run, who, held, hold) {
     const base = Number(who.spec?.firstAid?.mod);
@@ -993,17 +1033,36 @@ export const pf2eRules = {
     const flat = degree >= 2 ? flatRoll(run, held, APPROPRIATE_DC, persistentLabel("bleed")) : null;
     const success = !!flat?.success;
     if ( success ) held.persistent = (held.persistent ?? []).filter(e => e.part?.type !== "bleed");
-    return { success, degree, natural, mod, total, dc: hold.dc, ...(flat ? { said: { text: t("Remedy.Flat", { natural: flat.natural, dc: APPROPRIATE_DC }) } } : {}) };
+    // (A critical failure: it takes its persistent bleed damage at once, bleed damage as PF2e has it: the core rolls and
+    // shows it, harmFreed.)
+    const bleeds = degree === 0 ? (held.persistent ?? []).filter(e => e.part?.type === "bleed").map(e => ({ ...e.part, persistent: false })) : [];
+    return { success, degree, natural, mod, total, dc: hold.dc, ...(bleeds.length ? { harmHeld: { parts: bleeds } } : {}),
+      ...(flat ? { said: { text: t("Remedy.Flat", { natural: flat.natural, dc: APPROPRIATE_DC }) } } : {}) };
   },
 
-  /** Retching while sickened (remedies.js): one action, a Fortitude save against what sickened it. */
+  /**
+   * Retching while sickened (remedies.js): one action, a Fortitude save against what sickened it. A grip loosened by a
+   * Disarm: an Interact changing its grip ends it.
+   */
   remedies(run, u) {
+    const out = [];
     const sick = Number(u.conds?.sickened) || 0;
-    if ( !(sick > 0) ) return [];
-    return [{
-      key: "retch", condition: "sickened", label: t("Remedy.Retch"), cost: { actions: 1 }, annoyance: SICK_ANNOYANCE.base + SICK_ANNOYANCE.step * sick,
-      try: (r, w) => this.retch(r, w)
-    }];
+    if ( sick > 0 ) {
+      out.push({
+        key: "retch", condition: "sickened", label: t("Remedy.Retch"), cost: { actions: 1 }, annoyance: SICK_ANNOYANCE.base + SICK_ANNOYANCE.step * sick,
+        try: (r, w) => this.retch(r, w)
+      });
+    }
+    if ( (u.effects ?? []).some(loosened) ) {
+      out.push({
+        key: "regrip", label: t("Remedy.Regrip"), cost: { actions: 1 }, annoyance: REGRIP_ANNOYANCE,
+        try: (r, w) => {
+          w.effects = (w.effects ?? []).filter(e => !loosened(e));
+          return { success: true };
+        }
+      });
+    }
+    return out;
   },
 
   /** A retch: a Fortitude save against the DC of what sickened it; sickened 1 lower on a success, 2 on a critical success. */

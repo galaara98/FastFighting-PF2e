@@ -10,8 +10,45 @@
  * crossbow loaded); PF2e's Strike then spends it, and the undo record of both goes back with the roll (`records`).
  */
 import { listOf, naturalOf } from "./read-turn.js";
+import { undoRecord } from "./core.js";
 import { cardIds, damageCardSince, madeHere, markRolled } from "./cards.js";
 import { ammoOf, ammoState, ammoUndo, readyAmmo } from "./ammo.js";
+
+/** PF2e's mark of a ranger's prey (its Hunt Prey's effect: a TokenMark). */
+export const PREY_MARK = "hunted-prey";
+
+/** The effect Hunt Prey lays on the ranger, its TokenMark on the prey's token. */
+export const PREY_EFFECT = "Compendium.pf2e.feat-effects.Item.MeXyXqWY9qN42bSQ";
+
+/** The token id of the creature an actor hunts, as PF2e marks it (synthetics.tokenMarks: token uuid -> slugs), or null. */
+export function preyOf(actor) {
+  for ( const [uuid, slugs] of actor?.synthetics?.tokenMarks ?? [] ) {
+    if ( [].concat(slugs ?? []).includes(PREY_MARK) ) return String(uuid).split(".").pop() || null;
+  }
+  return null;
+}
+
+/**
+ * Hunt Prey, before the Strike that hunts (the engine's huntsPrey action, its id's `.hunt-prey`): PF2e's own effect laid
+ * on the ranger, its TokenMark on the target's token, in place of any it had, so PF2e's Strike rolls Hunter's Edge
+ * against it. The undo record of both, or null where it hunts that one already or can't.
+ */
+async function huntPrey(token, actor, target) {
+  if ( !actor || !target?.uuid || preyOf(actor) === target.id ) return null;
+  const source = await fromUuid(PREY_EFFECT).catch(() => null);
+  if ( !source ) return null;
+  const record = undoRecord(token, actor, { statusesBefore: false });
+  const old = actor.itemTypes?.effect?.filter(e => e.slug === "effect-hunt-prey") ?? [];
+  if ( old.length ) {
+    record.deletedItems.push(...old.map(e => e.toObject()));
+    await actor.deleteEmbeddedDocuments("Item", old.map(e => e.id));
+  }
+  const data = source.toObject();
+  data.system.rules = [{ key: "TokenMark", slug: PREY_MARK, uuid: target.uuid }];
+  const [made] = await actor.createEmbeddedDocuments("Item", [data]);
+  if ( made ) record.createdItems.push(made.id);
+  return record;
+}
 
 /** A character's or creature's weapon Strikes, as the system lists them (the ones it shows). */
 export const strikesOf = actor => (actor.system?.actions ?? []).filter(s => s.type === "strike" && s.visible !== false);
@@ -152,6 +189,8 @@ export async function rollPf2eStrike(token, { action, target, attackNumber = 0, 
   let strike = strikeFor(actor, action?.id);
   const variantOf = s => s?.variants?.[map] ?? s?.variants?.[0];
   if ( !strike || !target || typeof variantOf(strike)?.roll !== "function" ) return null;
+  // (Hunt Prey first, where this Strike hunts: PF2e's own mark, so its roll has Hunter's Edge.)
+  const hunted = String(action?.id ?? "").endsWith(".hunt-prey") ? await huntPrey(token, actor, target) : null;
   // (Its ammunition, as the sheet had it: readied as a player would, and spent by PF2e's Strike as it rolls.)
   const before = ammoOf(actor, strike.item) ? ammoState(actor, strike.item) : null;
   if ( before && await readyAmmo(actor, strike.item) ) strike = strikeFor(actor, action?.id) ?? strike;
@@ -159,9 +198,10 @@ export async function rollPf2eStrike(token, { action, target, attackNumber = 0, 
   const modifiers = pulled && !(strike.item?.system?.traits?.value ?? []).includes("nonlethal") ? [nonlethalPenalty()] : [];
   const rolled = await variantOf(strike)?.roll?.({ event: click("showCheckDialogs", secret), target: asTarget(target), ...(modifiers.length ? { modifiers } : {}) });
   const undo = before ? ammoUndo(token, actor, before) : null;
-  const records = undo ? { records: [undo] } : {};
+  const kept = [hunted, undo].filter(Boolean);
+  const records = kept.length ? { records: kept } : {};
   const attack = attackOf(rolled);
-  if ( !attack ) return undo ? records : null;
+  if ( !attack ) return kept.length ? records : null;
   const kind = attack.degree === 3 ? "critical" : "damage";
   if ( attack.degree < 2 || typeof strike[kind] !== "function" ) return { attack, damage: null, ...records };
   const checkContext = attackContext(actor, target);

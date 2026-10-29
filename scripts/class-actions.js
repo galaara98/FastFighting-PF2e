@@ -74,13 +74,14 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
   // (What the character calls it: a translated compendium's name, else the English.)
   const named = slug => featureName(names, slug);
   let changed = strikes;
-  // Hunter's Edge: Flurry (a smaller multiple attack penalty) or Precision (extra precision damage once a turn).
+  // Hunter's Edge, against the hunted prey alone (the core's preyId): Flurry (a smaller multiple attack penalty,
+  // preyMaps) or Precision (extra precision damage, the first hit on it in a round: bonusDamage "prey").
   if ( has("hunt-prey") && has("flurry") ) {
-    changed = changed.map(s => ({ ...s, maps: s.traits?.includes("agile") ? [0, -2, -4] : [0, -3, -6] }));
+    changed = changed.map(s => ({ ...s, preyMaps: s.traits?.includes("agile") ? [0, -2, -4] : [0, -3, -6] }));
   }
   if ( has("hunt-prey") && has("precision") ) {
     const n = level >= 19 ? 3 : level >= 11 ? 2 : 1;
-    changed = changed.map(s => ({ ...s, bonusDamage: [...(s.bonusDamage ?? []), { id: "hunters-precision", when: "always", oncePerTurn: true,
+    changed = changed.map(s => ({ ...s, bonusDamage: [...(s.bonusDamage ?? []), { id: "hunters-precision", when: "prey", oncePerTurn: true,
       parts: [part([{ n, faces: 8 }], 0, s.damage?.[0]?.type ?? "untyped", { category: "precision" })] }] }));
   }
   const melee = changed.filter(s => s.kind === "strike" && s.melee && s.damage?.length && !s.sequence);
@@ -116,6 +117,15 @@ export function classActions({ actorId, slugs, level, strikes, names = {} }) {
     const s = bestStrike(unarmed.length ? unarmed : melee);
     if ( s ) out.push({ ...s, id: `${s.id}.flurry-of-blows`, name: named("flurry-of-blows"), cost: 1, oncePerTurn: FLOURISH,
       sequence: [0, 1].map(i => ({ ...s, id: `${s.id}.flurry-of-blows.${i}` })), classAction: "flurry-of-blows" });
+  }
+  // Hunt Prey (one action): a foe its prey, and then a Strike at it, as one move of the engine's (huntsPrey: the core
+  // makes the foe its prey as it strikes). With its best melee Strike and its best ranged one; never at the prey it
+  // has already (rules.js usable).
+  if ( has("hunt-prey") ) {
+    const plain = changed.filter(s => s.kind === "strike" && s.damage?.length && !s.sequence);
+    for ( const s of [bestStrike(plain.filter(x => x.melee)), bestStrike(plain.filter(x => !x.melee))] ) {
+      if ( s ) out.push({ ...s, id: `${s.id}.hunt-prey`, name: `${named("hunt-prey")} (${s.name})`, cost: (Number(s.cost) || 1) + 1, huntsPrey: true, classAction: "hunt-prey" });
+    }
   }
   return { actions: out, strikes: changed };
 }

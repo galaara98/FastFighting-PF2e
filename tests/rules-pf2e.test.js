@@ -220,3 +220,50 @@ describe("what kind of creature (for grouping neutrals)", () => {
     expect(creatureKindOf(["mindless"], ancestries)).toBeNull();
   });
 });
+
+describe("Demoralize at one that doesn't understand its words", () => {
+  const speaker = (languages, more = {}) => ({ id: "a", conds: {}, effects: [], spec: { level: 3, social: { languages, ...more } } });
+  const demoralize = { id: "a.demoralize", maneuver: "demoralize" };
+  const check = (u, t, run = null) => pf2eRules.modifiers.check({ unit: u, target: t, purpose: "control", action: demoralize, run }).bonus;
+  test("-4 without a shared language, or speaking none; none with one shared, a tongue for any, or languages set aside", () => {
+    expect(check(speaker(["common"]), speaker(["common", "goblin"]))).toBe(0);
+    expect(check(speaker(["common"]), speaker(["goblin"]))).toBe(-4);
+    expect(check(speaker(["common"]), speaker([]))).toBe(-4);
+    expect(check(speaker([]), speaker(["common"]))).toBe(-4);
+    expect(check(speaker(["common"], { anyLanguage: true }), speaker(["goblin"]))).toBe(0);
+    expect(check(speaker(["common"]), speaker(["goblin"]), { prep: { options: { ignoreLanguages: true } } })).toBe(0);
+    // (Any other check: no such penalty.)
+    expect(pf2eRules.modifiers.check({ unit: speaker(["common"]), target: speaker(["goblin"]), purpose: "control", action: { id: "a.trip", maneuver: "trip" } }).bonus).toBe(0);
+  });
+});
+
+describe("Hunt Prey and Hunter's Edge, against the prey", () => {
+  const flurry = { id: "bow", kind: "strike", maps: [0, -5, -10], preyMaps: [0, -3, -6] };
+  const ranger = { id: "r", preyId: "orc" };
+  test("Flurry's penalty against the prey alone; the Strike that hunts counts as against it", () => {
+    expect(pf2eRules.attackPenalty(flurry, 1, { attacker: ranger, target: { id: "orc" } })).toBe(-3);
+    expect(pf2eRules.attackPenalty(flurry, 2, { attacker: ranger, target: { id: "goblin" } })).toBe(-10);
+    expect(pf2eRules.attackPenalty({ ...flurry, huntsPrey: true }, 1, { attacker: { id: "r" }, target: { id: "goblin" } })).toBe(-3);
+    expect(pf2eRules.attackPenalty(flurry, 1)).toBe(-5);
+  });
+
+  test("no penalty in the second range increment against the prey; the third as ever", () => {
+    const bow = { id: "bow", kind: "strike", range: { increment: 60, max: 360 } };
+    const attack = (distance, target) => pf2eRules.modifiers.attack({ attacker: { id: "r", preyId: "orc", conds: {}, spec: {} }, target, action: bow, distance, positioning: true }).bonus;
+    expect(attack(90, { id: "orc" })).toBe(0);
+    expect(attack(90, { id: "goblin" })).toBe(-2);
+    expect(attack(150, { id: "orc" })).toBe(-4);
+  });
+
+  test("never hunting the prey it hunts already", () => {
+    const hunt = { id: "bow.hunt-prey", kind: "strike", huntsPrey: true };
+    expect(pf2eRules.usable({}, { id: "r", preyId: "orc", conds: {} }, hunt, { id: "orc" })).toBe(false);
+    expect(pf2eRules.usable({}, { id: "r", preyId: "orc", conds: {} }, hunt, { id: "goblin" })).not.toBe(false);
+  });
+});
+
+describe("grabs and escapes, the PF2e way", () => {
+  test("a grab ends as the grabber moves; an Escape is an attack; a critical one a 5-foot Stride", () => {
+    expect(pf2eRules).toMatchObject({ grabEndsOnMove: true, escapeIsAttack: true, escapeStep: 5 });
+  });
+});

@@ -17,7 +17,7 @@ import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { followUpWorth, freshTurn } from "../../fast-fighting/scripts/engine/behavior/requires.js";
 import { Turn } from "../../fast-fighting/scripts/engine/turn.js";
-import { skillManeuvers, attackEffectOf, effectManeuver, keepHold } from "../scripts/maneuvers.js";
+import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, LOOSENED_ROUNDS } from "../scripts/maneuvers.js";
 import { attackEffects, effectFollowUps } from "../scripts/adapter.js";
 
 const all = (over = {}) => Object.fromEntries(skillManeuvers({ actorId: "a", maxSize: 3, athletics: 10, deception: 8, intimidation: 6, ...over }).map(a => [a.maneuver, a]));
@@ -64,7 +64,9 @@ describe("PF2e's maneuvers, by degree (critical failure, failure, success, criti
   });
 
   test("Grapple: grabbed, restrained on a critical success, for a round; a critical failure, the foe grabs you", () => {
-    const { onHit } = all().grapple;
+    const { onHit, failLetsGo } = all().grapple;
+    // (Failed at a foe it holds already: it lets go, the core's failLetsGo.)
+    expect(failLetsGo).toBe(true);
     expect(onHit[2]).toMatchObject({ grab: true, conditions: { grabbed: 1 }, rounds: 1 });
     expect(onHit[3]).toMatchObject({ grab: true, conditions: { restrained: 1 }, rounds: 1 });
     expect(onHit[0]).toMatchObject({ self: true, grab: true });
@@ -75,7 +77,8 @@ describe("PF2e's maneuvers, by degree (critical failure, failure, success, criti
   test("Disarm: -2 to its attacks with it; knocked out of its hand on a critical success; a critical failure, you're off-guard", () => {
     const { onHit, disarm } = all().disarm;
     expect(disarm).toBe(true);
-    expect(onHit[2]).toMatchObject({ mods: { attack: -2 }, rounds: 1 });
+    // (For as long as it keeps the weapon, until it changes its grip: rules.js remedies.)
+    expect(onHit[2]).toMatchObject({ mods: { attack: -2 }, rounds: LOOSENED_ROUNDS });
     expect(onHit[2].conditions).toBeUndefined();
     expect(onHit[3]).toMatchObject({ conditions: { disarmed: 1 }, mods: { actions: -1 } });
     expect(onHit[0]).toMatchObject({ self: true, conditions: { offGuard: 1 } });

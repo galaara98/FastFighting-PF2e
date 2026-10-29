@@ -35,11 +35,17 @@ describe("martial class actions", () => {
     expect(flurry.sequence.map(s => s.name)).toEqual(["Fist", "Fist"]);
   });
 
-  test("Hunter's Edge: Flurry eases the penalty, Precision adds precision damage once a turn", () => {
+  test("Hunter's Edge, against the hunted prey alone: Flurry eases the penalty, Precision adds precision damage once a turn", () => {
     const flurry = build(["hunt-prey", "flurry"], [greataxe, shortsword]).strikes;
-    expect(flurry.map(s => s.maps)).toEqual([[0, -3, -6], [0, -2, -4]]);
+    expect(flurry.map(s => s.preyMaps)).toEqual([[0, -3, -6], [0, -2, -4]]);
+    expect(flurry.map(s => s.maps)).toEqual([greataxe.maps, shortsword.maps]);
     const precision = build(["hunt-prey", "precision"], [greataxe], 11).strikes[0].bonusDamage[0];
-    expect(precision).toMatchObject({ oncePerTurn: true, parts: [{ dice: [{ n: 2, faces: 8 }], category: "precision" }] });
+    expect(precision).toMatchObject({ when: "prey", oncePerTurn: true, parts: [{ dice: [{ n: 2, faces: 8 }], category: "precision" }] });
+  });
+
+  test("Hunt Prey: an action more on its best Strike, the foe its prey as it strikes", () => {
+    const [hunt] = build(["hunt-prey"], [greataxe]).actions;
+    expect(hunt).toMatchObject({ huntsPrey: true, classAction: "hunt-prey", cost: (greataxe.cost ?? 1) + 1, name: `${text("FFPF2E.Feature.hunt-prey")} (Greataxe)` });
   });
 });
 

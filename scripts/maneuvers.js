@@ -32,13 +32,18 @@
  * the hit, but an attack like any Trip. In a live battle the ability's own card shows first (`card`).
  *  - Bon Mot (Diplomacy against Will, within 30 feet; with the feat): a -2 status penalty to Will saves and Perception
  *    (the core's bySave and byCheck) for a minute, -3 on a critical success; a critical failure, you take the -2.
- * Not played: a failed Grapple letting go of a foe you already held, a critically failed Feint (off-guard to that
- * foe alone, which the core can't lay on the one acting), Disarm's -2 only until the foe's turn, retorting to a Bon
- * Mot, a weapon's shove, trip or disarm trait standing in for the free hand, the Stride after a
- * Shove, Demoralize's -4 against a foe that doesn't share a language, and a body part holding a foe still striking.
+ * A failed Grapple at a foe it holds already lets it go (the core's failLetsGo). Disarm's -2 lasts as long as the foe
+ * keeps the weapon, until it spends an Interact changing its grip (rules.js remedies). Demoralize takes -4 against a
+ * foe that doesn't share a language with it (rules.js check), unless the GM ignores languages.
+ * Not played: a critically failed Feint (off-guard to that foe alone, which the core can't lay on the one acting),
+ * retorting to a Bon Mot, a weapon's shove, trip or disarm trait standing in for the free hand, the Stride after a
+ * Shove, and a body part holding a foe still striking.
  */
 import { parseFormula } from "./core.js";
 import { t, actionName, conditionLabel } from "./words.js";
+
+/** How long a loosened grip lasts, in rounds, where nothing ends it sooner: a fight's whole length (a minute). */
+export const LOOSENED_ROUNDS = 10;
 
 /** Demoralize's reach: 30 feet, no penalty for distance (its own, each time). */
 const near = () => ({ melee: false, range: { increment: 30, max: 30, noPenalty: true } });
@@ -87,10 +92,12 @@ export function skillManeuvers({ actorId, maxSize, athletics = null, deception =
     const grip = { kind: "control", cost: 1, traits: ["attack"], hands: 1, melee: true, reach: 5, maxSize };
     const vs = against => ({ check: { mod: athletics, against, attack: true } });
     out.push({ id: `${actorId}.trip`, name: actionName("Trip"), maneuver: "trip", ...grip, ...vs("reflex"), onHit: DEGREES.trip() });
-    out.push({ id: `${actorId}.grapple`, name: actionName("Grapple"), maneuver: "grapple", ...grip, ...vs("fortitude"), onHit: DEGREES.grapple() });
-    // (Its grip loosened until its turn; knocked out of its hand, an action picking it up.)
+    // (Failed, it lets go of a foe it held already: failLetsGo, the core's.)
+    out.push({ id: `${actorId}.grapple`, name: actionName("Grapple"), maneuver: "grapple", ...grip, ...vs("fortitude"), failLetsGo: true, onHit: DEGREES.grapple() });
+    // (Its grip loosened for as long as it holds the weapon, until it changes its grip: an Interact, rules.js remedies;
+    // knocked out of its hand, an action picking it up.)
     out.push({ id: `${actorId}.disarm`, name: actionName("Disarm"), maneuver: "disarm", ...grip, disarm: true, ...vs("reflex"),
-      onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, { mods: { attack: -2 }, rounds: 1, label: t("Loosened") },
+      onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, { mods: { attack: -2 }, rounds: LOOSENED_ROUNDS, label: t("Loosened") },
         { conditions: { disarmed: 1 }, mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }] });
     out.push({ id: `${actorId}.shove`, name: actionName("Shove"), maneuver: "shove", ...grip, ...vs("fortitude"), onHit: DEGREES.shove() });
     out.push({ id: `${actorId}.reposition`, name: actionName("Reposition"), maneuver: "reposition", ...grip, ...vs("fortitude"), onHit: DEGREES.reposition() });

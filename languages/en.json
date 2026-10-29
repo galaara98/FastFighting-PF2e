@@ -95,7 +95,8 @@
       "power-attack": "Power Attack",
       "double-slice": "Double Slice",
       "sudden-charge": "Sudden Charge",
-      "flurry-of-blows": "Flurry of Blows"
+      "flurry-of-blows": "Flurry of Blows",
+      "hunt-prey": "Hunt Prey"
     },
     "Affliction": {
       "Name": "{name} (Stage {stage})",
@@ -134,6 +135,7 @@
     "Poisoned": "{strike} with {poison}",
     "Remedy": {
       "Retch": "Retch",
+      "Regrip": "Change Grip",
       "RetchRoll": "Fortitude save {total} against DC {dc}",
       "Flat": "flat check {natural} against DC {dc}"
     }

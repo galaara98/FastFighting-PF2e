@@ -14,7 +14,7 @@ import { commitPf2eChanges, describePf2eOutcome, commitPf2eConcession, commitPf2
 import { takePf2eGoods, putPf2eGoods, pf2eGoodsOf, dropPf2eValuables, pf2eSkillsOf, pf2eGiveables, pf2ePileContents } from "./goods.js";
 import { pf2eAppetite, pf2eMeatFor, pf2eIsFood } from "./food.js";
 import { readPf2eTurn, pf2eOpening, pf2eDamageCard, pf2eDisrupts } from "./read-turn.js";
-import { strikesOf, strikeId, rollPf2eStrike, castAt } from "./strike-roll.js";
+import { strikesOf, strikeId, rollPf2eStrike, castAt, preyOf } from "./strike-roll.js";
 import { rollPf2eSave, rollPf2eCheck } from "./check-roll.js";
 import { usePf2eAction, rollPf2eDamage } from "./action-roll.js";
 import { showPf2eTableRoll } from "./table-cards.js";
@@ -610,6 +610,8 @@ export class Pf2eAdapter extends SystemAdapter {
       ...(hazard ? {} : escapeOf(actor)),
       // Getting past a foe on the way: Tumble Through, for those trained in Acrobatics (rules.passThrough).
       acrobatics: hazard ? undefined : acrobaticsOf(actor),
+      // (The prey it hunts already, as its sheet has it: the token its Hunt Prey marked, strike-roll.js preyOf.)
+      ...(preyOf(actor) ? { preyId: preyOf(actor) } : {}),
       // What its Swallow Whole or Engulf does to whoever is inside it (gullet.js; rules.conditionHarm and cutFree).
       gullet: gulletsOf(actions),
       creatureTraits: traits,

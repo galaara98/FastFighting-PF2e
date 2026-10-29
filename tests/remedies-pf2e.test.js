@@ -236,3 +236,45 @@ describe("fear, as PF2e has it (the core's conditionWishes)", () => {
     }
   });
 });
+
+describe("Administer First Aid, critically failed", () => {
+  test("the friend takes its persistent bleed damage at once, as bleed damage, told as the bleed", () => {
+    const run = fight([creature("hero", "friendly", 0, { hp: { value: 30, max: 40 } }), creature("medic", "friendly", 5, { firstAid: { mod: -30 } }), creature("orc", "hostile", 120)]);
+    const [hero, medic] = ["hero", "medic"].map(id => run.byId.get(id));
+    hero.persistent = [bleed("4")];
+    const hold = freeable(run, hero);
+    run.rng.d20 = () => 1;
+    const got = tryHold(run, medic, hold, { freeing: true, held: hero });
+    expect(got).toMatchObject({ success: false, degree: 0, harmHeld: { parts: [{ type: "bleed", flat: 4, persistent: false }] } });
+    // (On its turn: tended, botched, and bleeding the more for it.)
+    turnUpkeep(run, medic);
+    takeTurn(run, medic);
+    expect(run.log.find(e => e.actorId === "medic" && e.type === "free")).toMatchObject({ targetId: "hero", success: false });
+    expect(run.log.find(e => e.actorId === "hero" && e.type === "persistent")).toMatchObject({ damageType: "bleed", amount: 4 });
+    expect(hero.hp).toBe(26);
+  });
+
+  test("a plain failure: no harm", () => {
+    const run = fight([creature("hero", "friendly", 0), creature("medic", "friendly", 5, { firstAid: { mod: 5 } }), creature("orc", "hostile", 40)]);
+    const [hero, medic] = ["hero", "medic"].map(id => run.byId.get(id));
+    hero.persistent = [bleed("4")];
+    run.rng.d20 = () => 10;
+    expect(tryHold(run, medic, freeable(run, hero), { freeing: true, held: hero }).harmHeld).toBeUndefined();
+  });
+});
+
+describe("a grip a Disarm loosened", () => {
+  test("a remedy of its own: an Interact changing its grip ends the -2", () => {
+    const u = { conds: {}, effects: [{ key: "orc.disarm", sourceId: "orc", mods: { attack: -2 }, rounds: 10, label: "loosened" }, { key: "x.feint", mods: { attack: -1 } }] };
+    const [regrip] = pf2eRules.remedies({}, u);
+    expect(regrip).toMatchObject({ key: "regrip", cost: { actions: 1 } });
+    expect(regrip.try({}, u)).toEqual({ success: true });
+    expect(u.effects.map(e => e.key)).toEqual(["x.feint"]);
+    expect(pf2eRules.remedies({}, u)).toEqual([]);
+  });
+
+  test("knocked out of its hand: no regrip, an action picking it up", () => {
+    const u = { conds: {}, effects: [{ key: "orc.disarm", mods: { attack: -2, actions: -1 }, conditions: { disarmed: 1 } }] };
+    expect(pf2eRules.remedies({}, u)).toEqual([]);
+  });
+});

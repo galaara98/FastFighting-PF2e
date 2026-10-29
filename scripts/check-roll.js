@@ -205,22 +205,43 @@ async function rollDeal(token, { purpose, value, target, wordless, skill = null,
   const own = typeof skill === "string" && skill !== how.skill ? token.actor.skills?.[skill] ?? null : null;
   const statistic = own ?? token.actor.skills?.[how.skill] ?? null;
   if ( wordless ) {
-    const Modifier = game.pf2e?.Modifier;
-    if ( !statistic || typeof Modifier !== "function" ) return null;
-    const penalty = new Modifier({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" });
+    const penalty = unintelligible();
+    if ( !statistic || !penalty ) return null;
     return rolled(await statistic.roll({ dc, skipDialog: true, ...mode(secret), ...(at ? { target: at.actor } : {}), modifiers: [penalty] }));
   }
   if ( at && !own && pf2eAction(how.action) ) return useAction(token, { action: how.action }, { dc, at, attacks: null, secret });
   return statistic ? rollStatistic(token, { statistic }, { dc, at, attacks: null, secret }) : null;
 }
 
+/**
+ * Does `target` understand what `actor` says (Demoralize's words: rules.js understood, from the sheets here)? A language
+ * both have; or, with the GM setting languages aside (FastFighting's setting), any at all. One that speaks none isn't.
+ */
+export function understands(actor, target) {
+  const mine = actor?.system?.details?.languages?.value ?? [];
+  const theirs = target?.system?.details?.languages?.value ?? [];
+  if ( !mine.length ) return false;
+  let aside = false;
+  try { aside = game.settings.get("fast-fighting", "ignoreLanguages") === true; } catch ( err ) { aside = false; }
+  return aside ? theirs.length > 0 : mine.some(l => theirs.includes(l));
+}
+
+/** PF2e's -4 for words the target doesn't understand (its own label for it), or null where it has no Modifier. */
+function unintelligible() {
+  const Modifier = game.pf2e?.Modifier;
+  return typeof Modifier === "function" ? new Modifier({ label: "PF2E.Actions.Demoralize.Unintelligible", modifier: -4, type: "circumstance" }) : null;
+}
+
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
 async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, attacks, secret }) {
   const pf2e = pf2eAction(slug);
   if ( !pf2e ) return null;
+  // (Demoralize at one that doesn't understand it: PF2e's own -4, which its action takes by a roll option.)
+  const words = slug === "demoralize" && at?.actor && !understands(token.actor, at.actor);
   const results = await pf2e.use({
     actors: [token.actor], event: click("showCheckDialogs", secret), difficultyClass: dc,
     ...(variant ? { variant } : {}), ...(statistic ? { statistic } : {}), ...(at ? { target: at.object } : {}),
+    ...(words ? { rollOptions: ["action:demoralize:unintelligible"] } : {}),
     // (PF2e's -5 an attack before it, no further than -10, as the engine's maneuvers take it.)
     ...(attacks > 0 ? { multipleAttackPenalty: attacks } : {})
   });
