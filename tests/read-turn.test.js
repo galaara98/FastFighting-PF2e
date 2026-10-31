@@ -30,6 +30,12 @@ describe("a player's turn read from PF2e's cards", () => {
     expect(events[2]).toMatchObject({ targetId: "B", degree: 1 });
   });
 
+  test("Recall Knowledge at a creature is a size-up, as it went (a critical success's hints the GM may share)", () => {
+    const [study] = readPf2eTurn([card({ type: "skill-check", outcome: "criticalSuccess", options: ["action:recall-knowledge"], title: "Recall Knowledge", total: 35, natural: 18, dc: 20 })], context);
+    expect(study).toMatchObject({ type: "study", targetId: "B", degree: 3, total: 35, natural: 18, dc: 20, sure: true });
+    expect(readPf2eTurn([card({ type: "skill-check", options: ["action:recall-knowledge"], target: null })], context)).toEqual([]);
+  });
+
   test("a skill action at a creature is its maneuver; a Diplomacy roll is words for the GM", () => {
     const [trip] = readPf2eTurn([card({ type: "skill-check", options: ["action:trip"], title: "Trip" })], context);
     expect(trip).toMatchObject({ type: "control", maneuver: "trip", took: true, degree: 2, sure: true });

@@ -183,6 +183,11 @@ export function readPf2eTurn(messages, { tokenId, ids = {} } = {}) {
           if ( pitch ) events.push(words(pitch, true));
           continue;
         }
+        // (Recall Knowledge at someone, as it went: the core's size-up, a critical success's hints the GM may share.)
+        if ( slug === "recall-knowledge" && target && degree !== null ) {
+          events.push({ type: "study", targetId: target, action: name ?? slug, degree, natural: naturalOf(roll), total: roll?.total ?? null, dc: c.dc?.value ?? null, sure: true });
+          continue;
+        }
         // (A social action at someone, its DC met or missed: what it was, at whom and how it went, all on the card.)
         if ( pitch && target && degree !== null ) {
           events.push(words(pitch, true));
