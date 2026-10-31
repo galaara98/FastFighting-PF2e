@@ -26,9 +26,9 @@ import { modsFromRules, spellRounds, spellReach, helps, effectRounds, effectThis
 import { aidAction, AID_SKILLS } from "./edges.js";
 import { escapeOf, IMPLIES } from "./holds.js";
 import { strikeHands, traitHands } from "./hands.js";
-import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, bonMot } from "./maneuvers.js";
+import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, bonMot, strikeManeuvers } from "./maneuvers.js";
 import { GULLETS, gulletAction, lightStrike } from "./gullet.js";
-import { linkedEffect, theirsToOpen } from "./granted.js";
+import { linkedEffect, theirsToOpen, linksIn } from "./granted.js";
 import { AURA_REACTIONS, championReaction } from "./champion.js";
 import { auraOf } from "./auras.js";
 import { saveVsFrom } from "./save-vs.js";
@@ -1306,6 +1306,18 @@ export class Pf2eAdapter extends SystemAdapter {
           size: sizeOf(actor.size ?? actor.system.traits?.size?.value), speed, reach
         });
         if ( gulp ) out.push({ ...gulp.action, gullet: gulp.gullet, itemId: item.id });
+        continue;
+      }
+      // Maneuvers it tries with a Strike instead of Athletics (a ghostly guard's Ectoplasmic Maneuver): maneuvers.js.
+      const english = englishDescription(item);
+      const byStrike = item.type === "action" ? strikeManeuvers({
+        id: `${actor.id}.${item.id}`, name: item.name, text: plainText(english), links: linksIn(english), checks: /@Check\[/i.test(english),
+        strikes: actions, cost: item.system.actions?.value, traits: item.system.traits?.value ?? [],
+        maxSize: sizeOf(actor.size ?? actor.system.traits?.size?.value) + 1,
+        maneuverName: m => actionName(m.charAt(0).toUpperCase() + m.slice(1)), named: (effect, maneuver) => t("EffectManeuver", { effect, maneuver })
+      }) : [];
+      if ( byStrike.length ) {
+        out.push(...byStrike.map(a => ({ ...a, itemId: item.id })));
         continue;
       }
       if ( item.type === "feat" && !/@Check\[/i.test(item.system.description?.value ?? "") ) continue;

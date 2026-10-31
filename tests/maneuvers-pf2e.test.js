@@ -17,7 +17,7 @@ import { parseFormula } from "../scripts/core.js";
 import { pf2eRules } from "../scripts/rules.js";
 import { followUpWorth, freshTurn } from "../../fast-fighting/scripts/engine/behavior/requires.js";
 import { Turn } from "../../fast-fighting/scripts/engine/turn.js";
-import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, LOOSENED_ROUNDS } from "../scripts/maneuvers.js";
+import { skillManeuvers, attackEffectOf, effectManeuver, keepHold, strikeManeuvers, LOOSENED_ROUNDS } from "../scripts/maneuvers.js";
 import { attackEffects, effectFollowUps } from "../scripts/adapter.js";
 
 const all = (over = {}) => Object.fromEntries(skillManeuvers({ actorId: "a", maxSize: 3, athletics: 10, deception: 8, intimidation: 6, ...over }).map(a => [a.maneuver, a]));
@@ -437,5 +437,47 @@ describe("Grab, Knockdown and Push, as the remaster's glossary has them", () => 
     takeTurn(run, croc);
     expect(doings(run, "croc").find(x => x.type === "control")).toMatchObject({ action: keep.name, roll: "auto", took: true });
     expect([hero.conds.grabbed, hero.grabbedBy]).toEqual([1, "croc"]);
+  });
+});
+
+describe("maneuvers tried with a Strike (a ghostly guard's Ectoplasmic Maneuver)", () => {
+  // (Its text as the Bestiary has it: links to PF2e's Disarm, Shove and Trip, and its ghostly rapier Strike for the roll.)
+  const text = "The ghostly guard lashes out with a whipping strand of solid ectoplasm against a target within 15 feet, in an attempt to Disarm, Shove, or Trip the foe. It uses its ghostly rapier Strike rather than an Athletics check to determine the results of this attempt.";
+  const links = ["Compendium.pf2e.actionspf2e.Item.Dt6B1slsBy8ipJu9", "Compendium.pf2e.actionspf2e.Item.7blmbDrQFNfdT731", "Compendium.pf2e.actionspf2e.Item.ge56Lu1xXVFYUnLP"];
+  const strikes = [
+    { id: "g.strike.fist", name: "Fist", kind: "strike", bonus: 30, reach: 5, melee: true },
+    { id: "g.strike.ghostly-rapier", name: "Ghostly Rapier", kind: "strike", bonus: 27, reach: 5, melee: true }
+  ];
+  const read = extra => strikeManeuvers({
+    id: "g.ecto", name: "Ectoplasmic Maneuver", text, links, strikes, cost: 1, traits: ["attack"], maxSize: 3,
+    maneuverName: m => m, named: (effect, maneuver) => `${effect} (${maneuver})`, ...extra
+  });
+
+  test("one for each maneuver it links, with the Strike it names, as far as it says, an attack", () => {
+    const out = read();
+    expect(out.map(a => [a.id, a.name, a.maneuver])).toEqual([
+      ["g.ecto.disarm-strike", "Ectoplasmic Maneuver (disarm)", "disarm"],
+      ["g.ecto.shove-strike", "Ectoplasmic Maneuver (shove)", "shove"],
+      ["g.ecto.trip-strike", "Ectoplasmic Maneuver (trip)", "trip"]
+    ]);
+    for ( const a of out ) expect(a).toMatchObject({ kind: "control", cost: 1, hands: 0, melee: true, reach: 15, maxSize: 3, card: true, traits: ["attack"] });
+    expect(out.map(a => a.check)).toEqual([{ mod: 27, against: "reflex", attack: true }, { mod: 27, against: "fortitude", attack: true }, { mod: 27, against: "reflex", attack: true }]);
+    expect(out[0].disarm).toBe(true);
+    // (By degree as the maneuver's own.)
+    const own = skillManeuvers({ actorId: "g", maxSize: 3, athletics: 20 });
+    for ( const a of out ) expect(a.onHit).toEqual(own.find(o => o.maneuver === a.maneuver).onHit);
+  });
+
+  test("its best melee Strike when the text names none; the Strike's reach when it says no distance", () => {
+    const out = read({ text: "It tries to Trip the foe, using a Strike rather than an Athletics check.", links: [links[2]] });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ name: "Ectoplasmic Maneuver", reach: 5, check: { mod: 30 } });
+  });
+
+  test("not one with a check of its own, nor one that says nothing of a Strike, nor one that links no maneuver", () => {
+    expect(read({ checks: true })).toEqual([]);
+    expect(read({ text: "It attempts to Trip the foe with an Athletics check." })).toEqual([]);
+    expect(read({ links: ["Compendium.pf2e.conditionitems.Item.j91X7x0XSomq8d60"] })).toEqual([]);
+    expect(read({ strikes: [] })).toEqual([]);
   });
 });

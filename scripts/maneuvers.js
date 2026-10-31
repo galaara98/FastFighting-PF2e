@@ -30,6 +30,10 @@
  * Pull, its choice of either. The plain ones are an action straight after the hit (the core's requires.lastHit); the
  * Improved ones free, at once (a blow's maneuver rider). A Trip a Strike lists is PF2e's Trip action: the same after
  * the hit, but an attack like any Trip. In a live battle the ability's own card shows first (`card`).
+ *  - An ability that tries maneuvers with a Strike instead of Athletics (strikeManeuvers: a ghostly guard's
+ *    Ectoplasmic Maneuver, Disarm, Shove or Trip a foe within 15 feet with its ghostly rapier Strike): each maneuver its
+ *    text links to PF2e's action for, the Strike's attack modifier against the maneuver's defense, an attack (the
+ *    multiple attack penalty), as far as its text says ("within 15 feet"; else the Strike's reach), no hand needed.
  *  - Bon Mot (Diplomacy against Will, within 30 feet; with the feat): a -2 status penalty to Will saves and Perception
  *    (the core's bySave and byCheck) for a minute, -3 on a critical success; a critical failure, you take the -2.
  * A failed Grapple at a foe it holds already lets it go (the core's failLetsGo). Disarm's -2 lasts as long as the foe
@@ -67,7 +71,11 @@ const DEGREES = Object.freeze({
   // (Botched, the foe moves you: 5 feet, within its reach.)
   reposition: () => [placed(5, { self: true }), null, placed(5), placed(10)],
   // (Toward it: a Reposition that brings the foe in, PF2e's Pull.)
-  drag: (feet = 5) => [placed(5, { self: true }), null, pulled(feet), pulled(Math.max(10, feet))]
+  drag: (feet = 5) => [placed(5, { self: true }), null, pulled(feet), pulled(Math.max(10, feet))],
+  // (Its grip loosened for as long as it holds the weapon, until it changes its grip: an Interact, rules.js remedies;
+  // knocked out of its hand, an action picking it up.)
+  disarm: () => [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, { mods: { attack: -2 }, rounds: LOOSENED_ROUNDS, label: t("Loosened") },
+    { conditions: { disarmed: 1 }, mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }]
 });
 
 /**
@@ -94,11 +102,7 @@ export function skillManeuvers({ actorId, maxSize, athletics = null, deception =
     out.push({ id: `${actorId}.trip`, name: actionName("Trip"), maneuver: "trip", ...grip, ...vs("reflex"), onHit: DEGREES.trip() });
     // (Failed, it lets go of a foe it held already: failLetsGo, the core's.)
     out.push({ id: `${actorId}.grapple`, name: actionName("Grapple"), maneuver: "grapple", ...grip, ...vs("fortitude"), failLetsGo: true, onHit: DEGREES.grapple() });
-    // (Its grip loosened for as long as it holds the weapon, until it changes its grip: an Interact, rules.js remedies;
-    // knocked out of its hand, an action picking it up.)
-    out.push({ id: `${actorId}.disarm`, name: actionName("Disarm"), maneuver: "disarm", ...grip, disarm: true, ...vs("reflex"),
-      onHit: [{ conditions: { offGuard: 1 }, rounds: 1, self: true, label: conditionLabel("off-guard") }, null, { mods: { attack: -2 }, rounds: LOOSENED_ROUNDS, label: t("Loosened") },
-        { conditions: { disarmed: 1 }, mods: { attack: -2, actions: -1 }, rounds: 1, label: t("Dropped") }] });
+    out.push({ id: `${actorId}.disarm`, name: actionName("Disarm"), maneuver: "disarm", ...grip, disarm: true, ...vs("reflex"), onHit: DEGREES.disarm() });
     out.push({ id: `${actorId}.shove`, name: actionName("Shove"), maneuver: "shove", ...grip, ...vs("fortitude"), onHit: DEGREES.shove() });
     out.push({ id: `${actorId}.reposition`, name: actionName("Reposition"), maneuver: "reposition", ...grip, ...vs("fortitude"), onHit: DEGREES.reposition() });
   }
@@ -206,4 +210,66 @@ export function keepHold({ id, name, reach = 5 }) {
     id: `${id}.keep`, name, kind: "control", maneuver: "grapple", cost: 1, auto: true, traits: [], hands: 0, melee: true, reach,
     requires: { holding: true }, outcome: { renew: true, rounds: 1, label: t("HoldKept") }, card: true
   };
+}
+
+/** PF2e's maneuver actions by their id in its actions compendium (pf2e.actionspf2e): what an ability's text links. */
+const LINKED_MANEUVERS = Object.freeze({
+  __proto__: null,
+  ge56Lu1xXVFYUnLP: { maneuver: "trip", against: "reflex" },
+  Dt6B1slsBy8ipJu9: { maneuver: "disarm", against: "reflex" },
+  "7blmbDrQFNfdT731": { maneuver: "shove", against: "fortitude" },
+  PMbdMWc2QroouFGD: { maneuver: "grapple", against: "fortitude" },
+  lOE4yjUnETTdaf2T: { maneuver: "reposition", against: "fortitude" }
+});
+
+/** The maneuver a link names (a uuid to PF2e's action, by its compendium id), or null. */
+const linkedManeuver = uuid => {
+  const m = /^Compendium\.pf2e\.actionspf2e\.(?:Item\.)?([A-Za-z0-9]{16})$/.exec(String(uuid ?? ""));
+  return m ? LINKED_MANEUVERS[m[1]] ?? null : null;
+};
+
+/**
+ * An ability that tries maneuvers with one of its Strikes instead of Athletics, as engine control actions: one for each
+ * maneuver its text links to PF2e's action for (in order, each once), when its text (in English) says a Strike makes the
+ * roll and asks for no check of its own. The Strike its text names (its name in the text), else its best melee one.
+ * Each: the Strike's attack modifier against the maneuver's defense, an attack (the multiple attack penalty), as far as
+ * the text says ("within 15 feet"), else the Strike's reach; no hand needed (it tries it with what the ability says);
+ * a target no more than one size larger, as the maneuver's; by degree as the maneuver's. Named for the ability, and the
+ * maneuver too where it links more than one. Its id doesn't end in PF2e's action (check-roll.js would roll PF2e's own,
+ * with Athletics): the engine rolls it, shown as the table roll it is, after the ability's own card (`card`).
+ * @param {object} d
+ * @param {string} d.id          `<actor id>.<the ability's item id>`
+ * @param {string} d.name        the ability's
+ * @param {string} d.text        its description in English, as plain text
+ * @param {string[]} d.links     the uuids its description links (granted.js linksIn)
+ * @param {boolean} [d.checks]   its description asks for a check of its own (an @Check): not this
+ * @param {object[]} d.strikes   its Strikes, as engine actions (name, bonus, reach, melee)
+ * @param {number} d.cost        its actions
+ * @param {string[]} [d.traits]  its traits
+ * @param {number} d.maxSize     the largest size it can try them on (its own, one up)
+ * @param {(maneuver: string) => string} d.maneuverName   PF2e's name for a maneuver
+ * @param {(effect: string, maneuver: string) => string} d.named   the ability and the maneuver, as one name
+ * @returns {object[]}
+ */
+export function strikeManeuvers({ id, name, text, links, checks = false, strikes, cost, traits = [], maxSize, maneuverName, named }) {
+  if ( checks || !/\bStrike\b/.test(String(text ?? "")) ) return [];
+  const tries = [];
+  for ( const uuid of links ?? [] ) {
+    const how = linkedManeuver(uuid);
+    if ( how && !tries.some(x => x.maneuver === how.maneuver) ) tries.push(how);
+  }
+  if ( !tries.length ) return [];
+  const lower = String(text).toLowerCase();
+  const melee = (strikes ?? []).filter(s => s.kind === "strike" && s.melee !== false && Number.isFinite(Number(s.bonus)));
+  const strike = melee.find(s => s.name && lower.includes(String(s.name).toLowerCase()))
+    ?? [...melee].sort((a, b) => Number(b.bonus) - Number(a.bonus))[0];
+  if ( !strike ) return [];
+  const within = /\bwithin\s+(\d+)\s*(?:feet|foot|ft)\b/i.exec(String(text));
+  const reach = Number(within?.[1]) || Number(strike.reach) || 5;
+  return tries.map(how => ({
+    id: `${id}.${how.maneuver}-strike`, name: tries.length > 1 ? named(name, maneuverName(how.maneuver)) : name, kind: "control", maneuver: how.maneuver,
+    cost: Number(cost) || 1, traits: traits.includes("attack") ? [...traits] : [...traits, "attack"], hands: 0, melee: true, reach, maxSize,
+    ...(how.maneuver === "disarm" ? { disarm: true } : {}), ...(how.maneuver === "grapple" ? { failLetsGo: true } : {}),
+    check: { mod: Number(strike.bonus), against: how.against, attack: true }, onHit: DEGREES[how.maneuver](), card: true
+  }));
 }
