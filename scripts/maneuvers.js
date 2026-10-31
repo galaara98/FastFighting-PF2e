@@ -235,8 +235,9 @@ const linkedManeuver = uuid => {
  * Each: the Strike's attack modifier against the maneuver's defense, an attack (the multiple attack penalty), as far as
  * the text says ("within 15 feet"), else the Strike's reach; no hand needed (it tries it with what the ability says);
  * a target no more than one size larger, as the maneuver's; by degree as the maneuver's. Named for the ability, and the
- * maneuver too where it links more than one. Its id doesn't end in PF2e's action (check-roll.js would roll PF2e's own,
- * with Athletics): the engine rolls it, shown as the table roll it is, after the ability's own card (`card`).
+ * maneuver too where it links more than one. Its id ends in `<maneuver>-strike`, and `strike` names the Strike (its
+ * slug): in a live battle check-roll.js rolls PF2e's own action, with the Strike's modifier in place of Athletics, after
+ * the ability's own card (`card`).
  * @param {object} d
  * @param {string} d.id          `<actor id>.<the ability's item id>`
  * @param {string} d.name        the ability's
@@ -270,6 +271,6 @@ export function strikeManeuvers({ id, name, text, links, checks = false, strikes
     id: `${id}.${how.maneuver}-strike`, name: tries.length > 1 ? named(name, maneuverName(how.maneuver)) : name, kind: "control", maneuver: how.maneuver,
     cost: Number(cost) || 1, traits: traits.includes("attack") ? [...traits] : [...traits, "attack"], hands: 0, melee: true, reach, maxSize,
     ...(how.maneuver === "disarm" ? { disarm: true } : {}), ...(how.maneuver === "grapple" ? { failLetsGo: true } : {}),
-    check: { mod: Number(strike.bonus), against: how.against, attack: true }, onHit: DEGREES[how.maneuver](), card: true
+    check: { mod: Number(strike.bonus), against: how.against, attack: true }, strike: strike.slug ?? null, onHit: DEGREES[how.maneuver](), card: true
   }));
 }

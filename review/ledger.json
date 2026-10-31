@@ -326,6 +326,7 @@
     "stop-bleeding",
     "strike-attack-roll",
     "strike-damage",
+    "strike-instead",
     "target-dc",
     "target-dc-result",
     "turn-end",

@@ -254,6 +254,24 @@ describe("the multiple attack penalty on a check with the attack trait", () => {
     expect(asked.trip.map(a => a.multipleAttackPenalty)).toEqual([undefined, 1, 2, 5, undefined, undefined, undefined]);
   });
 
+  test("a maneuver tried with a Strike (Ectoplasmic Maneuver): PF2e's own action, the Strike's modifier for Athletics", async () => {
+    game.pf2e.Modifier = class { constructor(data) { Object.assign(this, data); } };
+    const guard = creature("gh1");
+    guard.actor.system.actions = [{ type: "strike", slug: "ghostly-rapier", label: "Ghostly Rapier", totalModifier: 27 }];
+    const hero = creature("pc1");
+    const out = await adapter.rollCheck(guard, { purpose: "control", against: "reflex", attackNumber: 1, dc: 30,
+      action: { id: "gh1.ecto.trip-strike", name: "Ectoplasmic Maneuver (Trip)", strike: "ghostly-rapier", check: { mod: 27, against: "reflex", attack: true } }, target: hero });
+    expect(out).toMatchObject({ degree: 2 });
+    expect(asked.trip).toHaveLength(1);
+    // (Athletics +7 on the guard's sheet: +20 more, as the Strike's own, comes to its +27.)
+    expect(asked.trip[0]).toMatchObject({ multipleAttackPenalty: 1, modifiers: [{ label: "Ghostly Rapier", modifier: 20, type: "untyped" }] });
+    // (No such Strike on its sheet now: the engine's modifier for it.)
+    guard.actor.system.actions = [];
+    await adapter.rollCheck(guard, { purpose: "control", against: "reflex", dc: 30, action: { id: "gh1.ecto.trip-strike", strike: "ghostly-rapier", check: { mod: 25 } }, target: hero });
+    expect(asked.trip[1].modifiers[0].modifier).toBe(18);
+    delete game.pf2e.Modifier;
+  });
+
   test("an ability's check (Swallow Whole): PF2e's own penalty for that item, by its attack number", async () => {
     const gulp = item("sw1", "swallow-whole", ["attack"]);
     const toad = creature("toad1", { items: [gulp] });

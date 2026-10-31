@@ -153,6 +153,9 @@ function checkFor(actor, { purpose, skill, action }) {
   const id = typeof action?.id === "string" ? action.id : "";
   const last = id.split(".").pop();
   if ( (purpose === "control" || purpose === "aid") && ACTIONS.has(last) ) return { action: last };
+  // (A maneuver tried with a Strike, maneuvers.js strikeManeuvers: PF2e's own action, its Strike's modifier for Athletics.)
+  const viaStrike = /^([a-z]+)-strike$/.exec(last);
+  if ( purpose === "control" && viaStrike && ACTIONS.has(viaStrike[1]) ) return { action: viaStrike[1], strike: { slug: action.strike ?? null, mod: Number(action.check?.mod) } };
   if ( purpose === "aid" && last === "aid" ) return aidWay(actor);
   // (A Seek: PF2e's own, its card and its secret trait; without the action, Perception as the sheet rolls it.)
   if ( purpose === "seek" ) return pf2eAction("seek") ? { action: "seek" } : statisticOf(actor, "perception") ? { statistic: statisticOf(actor, "perception") } : null;
@@ -233,20 +236,37 @@ function unintelligible() {
 }
 
 /** PF2e's own action (game.pf2e.actions), as its sheet button rolls it: its card, notes and traits. */
-async function useAction(token, { action: slug, variant = null, statistic = null }, { dc, at, attacks, secret }) {
+async function useAction(token, { action: slug, variant = null, statistic = null, strike = null }, { dc, at, attacks, secret }) {
   const pf2e = pf2eAction(slug);
   if ( !pf2e ) return null;
+  const instead = strike ? strikeInstead(token.actor, strike) : null;
   // (Demoralize at one that doesn't understand it: PF2e's own -4, which its action takes by a roll option.)
   const words = slug === "demoralize" && at?.actor && !understands(token.actor, at.actor);
   const results = await pf2e.use({
     actors: [token.actor], event: click("showCheckDialogs", secret), difficultyClass: dc,
     ...(variant ? { variant } : {}), ...(statistic ? { statistic } : {}), ...(at ? { target: at.object } : {}),
     ...(words ? { rollOptions: ["action:demoralize:unintelligible"] } : {}),
+    ...(instead ? { modifiers: [instead] } : {}),
     // (PF2e's -5 an attack before it, no further than -10, as the engine's maneuvers take it.)
     ...(attacks > 0 ? { multipleAttackPenalty: attacks } : {})
   });
   const done = (Array.isArray(results) ? results : []).find(r => r?.actor === token.actor) ?? null;
   return rolled(done?.roll);
+}
+
+/**
+ * A maneuver rolled with a Strike instead of Athletics (a ghostly guard's Ectoplasmic Maneuver): the difference, as
+ * the Strike's own modifier on PF2e's card (named for the Strike), so the roll comes to the Strike's. The Strike's and
+ * Athletics' as the sheet has them now (a status penalty on both, the same); the engine's where the sheet has no such
+ * Strike. Null when they're the same.
+ */
+function strikeInstead(actor, { slug, mod }) {
+  const Modifier = game.pf2e?.Modifier;
+  const own = (actor?.system?.actions ?? []).find(a => a?.slug === slug && a?.type === "strike");
+  const bonus = Number.isFinite(Number(own?.totalModifier)) ? Number(own.totalModifier) : mod;
+  const athletics = Number(actor?.skills?.athletics?.mod) || 0;
+  if ( typeof Modifier !== "function" || !Number.isFinite(bonus) || bonus === athletics ) return null;
+  return new Modifier({ slug: "strike-instead", label: own?.label ?? actor?.items?.find?.(i => i.system?.slug === slug)?.name ?? slug ?? "", modifier: bonus - athletics, type: "untyped" });
 }
 
 /** A skill or Perception, as its sheet rolls it; a feat's or an ability's with that item (its name, traits and action). */
