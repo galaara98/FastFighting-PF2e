@@ -391,10 +391,18 @@ async function effectLink(action) {
   return "";
 }
 
-/** A buff or debuff the engine ended (its time up, its caster's concentration broken): the effect it laid comes off. */
+/**
+ * A buff or debuff the engine ended (its time up, its caster's concentration broken): the effect it laid comes off. One
+ * PF2e takes off itself (expired, its Remove expired effects on) is left to it, kept for Rewind all the same: PF2e does
+ * it in its primary updater's browser (a player who owns it, or the active GM), maybe not this one, and the one of the
+ * two that came second would find it gone.
+ */
 async function liftSpellEffect(actor, e, undo) {
   const ours = i => { const laid = i.getFlag(MODULE_ID, "laid"); return laid?.key === e.key && (laid.sourceId ?? null) === (e.sourceId ?? null); };
-  await dropItems(actor, actor.itemTypes.effect.filter(ours), undo);
+  const items = actor.itemTypes.effect.filter(ours);
+  const pf2eLifts = i => !!game.pf2e?.settings?.automation?.removeEffects && !!i.isExpired;
+  for ( const item of items.filter(pf2eLifts) ) undo.deletedItems.push(item.toObject());
+  await dropItems(actor, items.filter(i => !pf2eLifts(i)), undo);
 }
 
 /** A slot's prepared spells, as a list: pf2e keeps them as an array, or (as saved in some worlds) an object by index. */
