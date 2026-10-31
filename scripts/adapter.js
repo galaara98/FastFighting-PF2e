@@ -1832,6 +1832,14 @@ export class Pf2eAdapter extends SystemAdapter {
   }
 
   /**
+   * API 40. PF2e's own card as a creature's turn begins: its Current Conditions (its participant-conditions template),
+   * posted from the browser PF2e chose, maybe not the one playing the battle.
+   */
+  systemTurnCard(message) {
+    return /class="participant-conditions"/.test(String(message?.content ?? ""));
+  }
+
+  /**
    * API 19. None: PF2e applies no one's damage by itself (its automation settings are rules-based vision, IWR, removing
    * expired effects, flanking, encumbrance, lootable NPCs, reach and NPCs dead at 0 HP; its Apply Damage buttons are
    * clicked by hand). A module's setting is named here only once its key and meaning are read from the module's own
